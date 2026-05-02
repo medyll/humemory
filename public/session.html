@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>humemory — Session Mnésique</title>
+  <style>
+    :root {
+      --bg: #0f0f14;
+      --surface: #1a1a24;
+      --surface-2: #252532;
+      --text: #e4e4e7;
+      --text-muted: #a1a1aa;
+      --border: #3f3f4e;
+      --primary: #8b5cf6;
+      --primary-hover: #7c3aed;
+      --encoding: #22c55e;
+      --consolidating: #eab308;
+      --consolidated: #f97316;
+      --fragile: #ef4444;
+      --dormant: #6b7280;
+      --accent: #06b6d4;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo { font-size: 2rem; }
+
+    .back-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .back-link:hover { color: var(--text); }
+
+    /* Session Form */
+    .session-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .form-group { margin-bottom: 1.5rem; }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    /* Retrieved Memories */
+    .mnemonic-context {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .context-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .context-header h2 {
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .memory-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .memory-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .memory-card .type-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .memory-card .content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .memory-card .content p {
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .memory-card .meta {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+
+    .memory-card .meta span {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .memory-card .actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .memory-card .actions button {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .memory-card .actions button:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .memory-card .actions button.remove {
+      background: transparent;
+      border-color: var(--fragile);
+      color: var(--fragile);
+    }
+
+    .memory-card .actions button.remove:hover {
+      background: var(--fragile);
+      color: var(--text);
+    }
+
+    /* Context Editor */
+    .context-editor {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .context-editor textarea {
+      min-height: 150px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.9rem;
+    }
+
+    .context-stats {
+      display: flex;
+      gap: 1rem;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Action Buttons */
+    .actions-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    button.primary {
+      padding: 0.75rem 1.5rem;
+      background: var(--primary);
+      border: none;
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    button.primary:hover {
+      background: var(--primary-hover);
+    }
+
+    button.secondary {
+      padding: 0.75rem 1.5rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    button.secondary:hover {
+      background: var(--surface);
+      border-color: var(--primary);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 2rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    /* Loading */
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+    }
+
+    /* Toast notifications */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      display: none;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .toast.show { display: flex; }
+    .toast.success { border-color: var(--encoding); }
+    .toast.error { border-color: var(--fragile); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { padding: 1rem; }
+      .actions-row { flex-direction: column; }
+      .memory-card { flex-direction: column; }
+      .memory-card .actions { width: 100%; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="/" class="back-link">← Palais de Mémoire</a>
+      <h1><span class="logo">🧠</span> Session Mnésique</h1>
+      <div style="width: 100px;"></div>
+    </header>
+
+    <!-- Intention Form -->
+    <div class="session-panel">
+      <div class="form-group">
+        <label for="projectDir">📍 Lieu mental (projet)</label>
+        <select id="projectDir">
+          <option value="">Tous les projets</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="intentionInput">💭 Ton intention</label>
+        <textarea 
+          id="intentionInput" 
+          placeholder="Décris ce que tu veux accomplir, explorer ou comprendre..."
+          rows="3"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="memoryTypeFilter">🏷️ Types de mémoire à inclure</label>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; text-transform: none; font-weight: normal;">
+            <input type="checkbox" value="episodic" checked style="width: auto;">
+            📅 Episodique
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; text-transform: none; font-weight: normal;">
+            <input type="checkbox" value="semantic" checked style="width: auto;">
+            📖 Sémantique
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; text-transform: none; font-weight: normal;">
+            <input type="checkbox" value="procedural" checked style="width: auto;">
+            ⚡ Procédurale
+          </label>
+        </div>
+      </div>
+
+      <button class="primary" onclick="buildMnemonicContext()">
+        🔍 Construire le contexte mnésique
+      </button>
+    </div>
+
+    <!-- Retrieved Memories -->
+    <div class="mnemonic-context" id="mnemonicContext" style="display: none;">
+      <div class="context-header">
+        <h2>🧠 Contexte mnésique récupéré</h2>
+        <span id="memoryCount" style="color: var(--text-muted); font-size: 0.9rem;">0 traces</span>
+      </div>
+      <div class="memory-cards" id="memoryCards"></div>
+    </div>
+
+    <!-- Context Editor -->
+    <div class="context-editor" id="contextEditor" style="display: none;">
+      <div class="form-group">
+        <label for="contextOutput">📝 Contexte pour l'agent</label>
+        <textarea 
+          id="contextOutput" 
+          placeholder="Le contexte mnésique sera généré ici..."
+          readonly
+        ></textarea>
+        <div class="context-stats">
+          <span id="charCount">0 caractères</span>
+          <span id="tokenEstimate">~0 tokens</span>
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button class="primary" onclick="copyContext()">
+          📋 Copier le contexte
+        </button>
+        <button class="secondary" onclick="exportToAgent()">
+          🚀 Envoyer à l'agent
+        </button>
+        <button class="secondary" onclick="saveAsMemory()">
+          💾 Sauvegarder comme trace
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span id="toastIcon">✓</span>
+    <span id="toastMessage">Action réussie</span>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let allMemories = [];
+    let selectedMemories = [];
+
+    // Load projects
+    async function loadProjects() {
+      try {
+        const response = await fetch(`${API_BASE}/memories`);
+        const data = await response.json();
+        allMemories = data.memories || [];
+        
+        const projects = [...new Set(allMemories.map(m => m.directory))];
+        const select = document.getElementById('projectDir');
+        select.innerHTML = '<option value="">Tous les projets</option>' +
+          projects.map(p => `<option value="${p}">${p}</option>`).join('');
+      } catch (error) {
+        console.error('Error loading memories:', error);
+      }
+    }
+
+    // Build mnemonic context from intention
+    async function buildMnemonicContext() {
+      const intention = document.getElementById('intentionInput').value.trim();
+      const projectDir = document.getElementById('projectDir').value;
+      
+      const selectedTypes = Array.from(document.querySelectorAll('input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+
+      if (!intention) {
+        showToast('⚠️', 'Décris ton intention d\'abord');
+        return;
+      }
+
+      // Extract keywords from intention
+      const keywords = extractKeywords(intention);
+      
+      // Search memories
+      let memories = allMemories;
+      
+      // Filter by project
+      if (projectDir) {
+        memories = memories.filter(m => m.directory === projectDir);
+      }
+      
+      // Filter by type
+      if (selectedTypes.length > 0) {
+        memories = memories.filter(m => selectedTypes.includes(m.memoryType));
+      }
+
+      // Score memories by relevance to intention
+      const scored = memories.map(m => ({
+        memory: m,
+        score: calculateRelevance(m, keywords, intention)
+      })).filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+
+      if (scored.length === 0) {
+        showToast('⚠️', 'Aucune trace pertinente trouvée');
+        document.getElementById('mnemonicContext').style.display = 'none';
+        document.getElementById('contextEditor').style.display = 'none';
+        return;
+      }
+
+      selectedMemories = scored.map(s => s.memory);
+      renderMemoryCards(scored);
+      buildContextOutput(scored, intention);
+
+      document.getElementById('mnemonicContext').style.display = 'block';
+      document.getElementById('contextEditor').style.display = 'block';
+    }
+
+    // Extract keywords from text
+    function extractKeywords(text) {
+      return text.toLowerCase()
+        .split(/[\s,.;:!?()]+/)
+        .filter(w => w.length > 3)
+        .filter(w => !['pour', 'dans', 'avec', 'sans', 'sous', 'sur', 'vers', 'chez', 'donc', 'mais', 'nous', 'vous', 'leur', 'leurs', 'cette', 'ces', 'des', 'une', 'tout', 'tous'].includes(w));
+    }
+
+    // Calculate relevance score
+    function calculateRelevance(memory, keywords, intention) {
+      let score = 0;
+      
+      const content = (memory.content + ' ' + (memory.keywords || []).join(' ') + ' ' + (memory.level3Keywords || '')).toLowerCase();
+      
+      // Keyword matches
+      keywords.forEach(kw => {
+        if (content.includes(kw)) score += 2;
+      });
+      
+      // Intention words in content
+      const intentionWords = extractKeywords(intention);
+      intentionWords.forEach(w => {
+        if (content.includes(w)) score += 1;
+      });
+      
+      // Recent recall boost
+      if (memory.recallCount > 0) score += memory.recallCount * 0.5;
+      
+      // Saillance boost
+      score += memory.saillance / 50;
+      
+      return score;
+    }
+
+    // Render memory cards
+    function renderMemoryCards(scored) {
+      const container = document.getElementById('memoryCards');
+      const typeIcons = { episodic: '📅', semantic: '📖', procedural: '⚡' };
+      const typeLabels = { episodic: 'Episodique', semantic: 'Sémantique', procedural: 'Procédurale' };
+
+      container.innerHTML = scored.map(({ memory, score }) => `
+        <div class="memory-card" data-id="${memory.id}">
+          <div class="type-icon">${typeIcons[memory.memoryType] || '📄'}</div>
+          <div class="content">
+            <p>${escapeHtml(memory.content)}</p>
+            <div class="meta">
+              <span>📍 ${memory.directory.split('/').pop()}</span>
+              <span>🏷️ ${typeLabels[memory.memoryType]}</span>
+              <span>💪 ${memory.saillance}/100</span>
+              <span>🔁 ${memory.recallCount}</span>
+              <span>📊 Score: ${Math.round(score)}</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button onclick="recallMemory('${memory.id}')">🔄</button>
+            <button class="remove" onclick="removeMemory('${memory.id}')">✕</button>
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('memoryCount').textContent = `${scored.length} traces`;
+    }
+
+    // Build context output
+    function buildContextOutput(scored, intention) {
+      const typeLabels = { episodic: 'Episodique', semantic: 'Sémantique', procedural: 'Procédurale' };
+      
+      let context = `# Contexte Mnésique\n\n`;
+      context += `## Intention\n${intention}\n\n`;
+      context += `## Traces pertinentes (${scored.length})\n\n`;
+
+      scored.forEach(({ memory }, i) => {
+        context += `### ${i + 1}. [${typeLabels[memory.memoryType]}] ${memory.directory.split('/').pop()}\n`;
+        context += `${memory.content}\n\n`;
+        
+        if (memory.keywords && memory.keywords.length > 0) {
+          context += `**Indices:** ${memory.keywords.join(', ')}\n\n`;
+        }
+      });
+
+      context += `---\n*Généré par humemory le ${new Date().toLocaleString('fr-FR')}*\n`;
+
+      const textarea = document.getElementById('contextOutput');
+      textarea.value = context;
+      updateStats(context);
+    }
+
+    function updateStats(text) {
+      document.getElementById('charCount').textContent = `${text.length} caractères`;
+      // Rough token estimate (1 token ≈ 4 chars in French)
+      document.getElementById('tokenEstimate').textContent = `~${Math.round(text.length / 4)} tokens`;
+    }
+
+    // Actions
+    function copyContext() {
+      const text = document.getElementById('contextOutput').value;
+      navigator.clipboard.writeText(text);
+      showToast('✓', 'Contexte copié !');
+    }
+
+    function exportToAgent() {
+      const text = document.getElementById('contextOutput').value;
+      // For now, just copy - could integrate with OpenCode/Claude CLI
+      navigator.clipboard.writeText(text);
+      showToast('✓', 'Contexte copié ! Colle-le dans ton agent LLM.');
+    }
+
+    function saveAsMemory() {
+      const intention = document.getElementById('intentionInput').value;
+      const context = document.getElementById('contextOutput').value;
+      
+      // Navigate to main dashboard with pre-filled form
+      const params = new URLSearchParams({
+        content: `Session: ${intention}`,
+        context: context
+      });
+      window.location.href = `/?${params.toString()}`;
+    }
+
+    async function recallMemory(id) {
+      try {
+        await fetch(`${API_BASE}/memories/${id}/recall`, { method: 'POST' });
+        showToast('✓', 'Trace réactivée !');
+        // Refresh
+        loadProjects();
+      } catch (error) {
+        showToast('✕', 'Erreur: ' + error.message);
+      }
+    }
+
+    function removeMemory(id) {
+      selectedMemories = selectedMemories.filter(m => m.id !== id);
+      const card = document.querySelector(`.memory-card[data-id="${id}"]`);
+      if (card) card.remove();
+      
+      // Rebuild context
+      const scored = selectedMemories.map(m => ({ memory: m, score: 0 }));
+      const intention = document.getElementById('intentionInput').value;
+      buildContextOutput(scored, intention);
+      
+      document.getElementById('memoryCount').textContent = `${selectedMemories.length} traces`;
+    }
+
+    function showToast(icon, message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Initialize
+    loadProjects();
+  </script>
+</body>
+</html>
