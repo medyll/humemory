@@ -1,0 +1,122 @@
+project: "humemory"
+phase: development
+progress: 60
+last_updated: "2026-05-03"
+
+next_action: "Implémenter auto-génération niveaux N1/N2/N3 via LLM (story S2-01)"
+next_command: "bmad-dev-story S2-01"
+next_role: "dev"
+active_role: "dev"
+
+dependencies: []
+
+phases:
+  - name: planning
+    status: done
+  - name: development
+    status: in_progress
+  - name: testing
+    status: in_progress
+  - name: release
+    status: upcoming
+
+marketing:
+  - "Système mémoire humain-like: dégradation progressive en 5 niveaux"
+  - "Recherche inversée: trouve avec indices flous, remonte au détail si match"
+  - "Dashboard web 'Palais de Mémoire' avec visualisation consolidation"
+  - "API HTTP + CLI + lib importable — intègre dans tout projet"
+
+product:
+  - "Core complet: decay, search inversée, SQLite (bun:sqlite), CLI, API, dashboard"
+  - "12 tests passent, build OK avec tsc local 5.9.3 + bun:sqlite"
+  - "Blockers: N1/N2/N3 non auto-générés, fusion L4 absente, no DB lock multi-process"
+  - "Next: LLM auto-génération niveaux → fusion similaires → hook agent Claude Code"
+
+far_vision:
+  - "Hook temps réel Claude Code/OpenCode: parse sessions, extrait apprentissages auto"
+  - "Photographic mode: désactiver dégradation pour traces critiques"
+  - "Search enrichie: par type, période, associations sémantiques"
+  - "DB partagée multi-projet avec verrou concurrence"
+
+artifacts:
+  prd: missing
+  architecture: missing
+  tech-spec: missing
+
+sprints:
+  - id: 1
+    goal: "Foundation — core architecture, store, CLI, API, tests"
+    status: completed
+    stories:
+      - id: S1-01
+        title: "Core decay algorithm + types"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 12/12 pass"
+        test_result: pass
+      - id: S1-02
+        title: "SQLite store (migré bun:sqlite)"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 12/12 pass"
+        test_result: pass
+      - id: S1-03
+        title: "CLI commander (encode/search/recall/list/decay/status/delete)"
+        status: complete
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S1-04
+        title: "API HTTP Hono + dashboard web"
+        status: complete
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S1-05
+        title: "Cron consolidation + session mnésique"
+        status: complete
+        tests_executed: false
+        test_output: null
+        test_result: null
+
+  - id: 2
+    goal: "LLM integration — auto-génération niveaux, fusion, hook agent"
+    status: upcoming
+    stories:
+      - id: S2-01
+        title: "Auto-génération N1/N2/N3 via LLM (résumé, essentiel, mots-clés)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S2-02
+        title: "Détection et fusion de souvenirs similaires (niveau 4)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S2-03
+        title: "Hook agent Claude Code: parse sessions, extraction apprentissages"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S2-04
+        title: "Search enrichie: filtres type/période/associations"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S2-05
+        title: "Photographic mode: désactiver dégradation pour traces critiques"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+
+qa:
+  bugs:
+    - "N1/N2/N3 non auto-générés — saisis manuellement via CLI, pas via LLM (bloque utilité réelle)"
+    - "Fusion L4 absente — pas de détection/merge de souvenirs similaires"
+    - "SQLite partagée sans verrou — race condition si multi-process simultané"
+    - "tsc global (ancienne version) écrase tsc local — build via pnpm build nécessite tsc local 5.9.3"
