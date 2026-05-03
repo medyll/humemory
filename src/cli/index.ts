@@ -38,12 +38,17 @@ program
   .option('-l2, --level2 <essential>', 'Essentiel pour consolidation N2')
   .option('-l3, --level3 <keywords>', 'Trace pour recherche rapide N3')
   .option('-t, --type <type>', 'Type de mémoire (episodic/semantic/procedural)', 'semantic')
+  .option('--auto', 'Auto-générer N1/N2/N3 via LLM (nécessite ANTHROPIC_API_KEY)')
   .action(async (content, options) => {
     const s = getStore();
-    
+
     const validTypes = ['episodic', 'semantic', 'procedural'];
     const memoryType = validTypes.includes(options.type) ? options.type : 'semantic';
-    
+
+    if (options.auto) {
+      console.log('⏳ Génération des niveaux de consolidation via LLM...');
+    }
+
     const memory = await s.add({
       content,
       directory: options.directory,
@@ -54,7 +59,7 @@ program
       level2Essential: options.level2,
       level3Keywords: options.level3,
       memoryType: memoryType as 'episodic' | 'semantic' | 'procedural',
-    });
+    }, { autoGenerate: options.auto });
 
     const typeLabels = { episodic: 'Épisodique', semantic: 'Sémantique', procedural: 'Procédurale' };
     const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];

@@ -59,7 +59,7 @@ export interface SearchResult {
 }
 
 export interface MemoryStore {
-  add(memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>): Promise<Memory>;
+  add(memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>, options?: { autoGenerate?: boolean }): Promise<Memory>;
   getById(id: string): Promise<Memory | null>;
   search(query: SearchQuery): Promise<SearchResult[]>;
   recall(id: string): Promise<Memory>;

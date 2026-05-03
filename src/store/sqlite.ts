@@ -5,6 +5,7 @@ import { dirname } from 'path';
 import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType } from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
+import { generateMemoryLevels } from '../core/llm-generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,13 +110,23 @@ export class SQLiteStore implements MemoryStore {
     };
   }
 
-  async add(memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>): Promise<Memory> {
+  async add(
+    memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>,
+    options: { autoGenerate?: boolean } = {}
+  ): Promise<Memory> {
     const id = crypto.randomUUID();
     const now = new Date();
 
+    let generatedLevels = {};
+    if (options.autoGenerate && !memory.level1Summary) {
+      const memType = (memory.memoryType || 'semantic') as MemoryType;
+      generatedLevels = await generateMemoryLevels(memory.content, memType);
+    }
+
     const fullMemory: Memory = {
-      memoryType: 'semantic',
+      ...{ memoryType: 'semantic' as MemoryType },
       ...memory,
+      ...generatedLevels,
       id,
       createdAt: now,
       recallCount: 0,
