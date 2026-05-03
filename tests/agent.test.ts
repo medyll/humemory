@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, test, expect } from 'bun:test';
 import { parseClaudeHookPayload } from '../src/agent/session-parser.js';
 import { extractLearnings } from '../src/agent/learning-extractor.js';
 import { processSession } from '../src/agent/claude-hook.js';
@@ -40,7 +40,7 @@ function makeMockClient(responseText: string): LLMClient {
 }
 
 describe('session-parser', () => {
-  it('parse Claude Code hook JSON payload', () => {
+  test('parse Claude Code hook JSON payload', () => {
     const session = parseClaudeHookPayload(SAMPLE_PAYLOAD, '/fallback');
     expect(session.sessionId).toBe('test-session-001');
     expect(session.directory).toBe('/test/project');
@@ -48,7 +48,7 @@ describe('session-parser', () => {
     expect(session.messages[0].role).toBe('user');
   });
 
-  it('parse JSONL format', () => {
+  test('parse JSONL format', () => {
     const jsonl = [
       JSON.stringify({ role: 'user', content: 'hello' }),
       JSON.stringify({ role: 'assistant', content: 'world' }),
@@ -59,13 +59,13 @@ describe('session-parser', () => {
     expect(session.messages[1].content).toBe('world');
   });
 
-  it('fallback: plain text', () => {
+  test('fallback: plain text', () => {
     const session = parseClaudeHookPayload('some plain text transcript', '/test');
     expect(session.messages).toHaveLength(1);
     expect(session.rawText).toContain('plain text');
   });
 
-  it('extrait le cwd depuis le payload', () => {
+  test('extrait le cwd depuis le payload', () => {
     const payload = JSON.stringify({ session_id: 'x', cwd: '/my/project', transcript: [] });
     const session = parseClaudeHookPayload(payload, '/fallback');
     expect(session.directory).toBe('/my/project');
@@ -73,7 +73,7 @@ describe('session-parser', () => {
 });
 
 describe('learning-extractor', () => {
-  it('extrait les apprentissages depuis un transcript', async () => {
+  test('extrait les apprentissages depuis un transcript', async () => {
     const session = parseClaudeHookPayload(SAMPLE_PAYLOAD, '/test');
     const client = makeMockClient(MOCK_LEARNINGS);
     const learnings = await extractLearnings(session, client, 5);
@@ -84,7 +84,7 @@ describe('learning-extractor', () => {
     expect(learnings[1].memoryType).toBe('semantic');
   });
 
-  it('fallback si JSON invalide — retourne dernier message assistant', async () => {
+  test('fallback si JSON invalide — retourne dernier message assistant', async () => {
     const session = parseClaudeHookPayload(SAMPLE_PAYLOAD, '/test');
     const client = makeMockClient('not json');
     const learnings = await extractLearnings(session, client, 5);
@@ -94,7 +94,7 @@ describe('learning-extractor', () => {
     expect(learnings[0].content.length).toBeGreaterThan(0);
   });
 
-  it('respecte maxLearnings', async () => {
+  test('respecte maxLearnings', async () => {
     const session = parseClaudeHookPayload(SAMPLE_PAYLOAD, '/test');
     const client = makeMockClient(MOCK_LEARNINGS);
     const learnings = await extractLearnings(session, client, 1);
@@ -105,7 +105,7 @@ describe('learning-extractor', () => {
 describe('processSession (integration)', () => {
   const DB = 'tests/test-hook.db';
 
-  it('stocke les apprentissages extraits en DB', async () => {
+  test('stocke les apprentissages extraits en DB', async () => {
     try { rmSync(DB); } catch {}
     const client = makeMockClient(MOCK_LEARNINGS);
 
@@ -123,7 +123,7 @@ describe('processSession (integration)', () => {
     try { rmSync(DB); } catch {}
   });
 
-  it('retourne 0 si transcript vide', async () => {
+  test('retourne 0 si transcript vide', async () => {
     try { rmSync(DB); } catch {}
     const emptyPayload = JSON.stringify({ session_id: 'empty', transcript: [] });
     const client = makeMockClient('[]');

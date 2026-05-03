@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach } from 'bun:test';
 import { generateMemoryLevels, type LLMClient } from '../src/core/llm-generator.js';
 
 function makeMockClient(responseText: string): LLMClient {
@@ -18,7 +18,7 @@ const VALID_RESPONSE = JSON.stringify({
 });
 
 describe('generateMemoryLevels', () => {
-  it('génère 3 niveaux depuis le contenu', async () => {
+  test('génère 3 niveaux depuis le contenu', async () => {
     const client = makeMockClient(VALID_RESPONSE);
     const result = await generateMemoryLevels(
       'I implemented an authentication system using OAuth2 with JWT tokens and refresh rotation.',
@@ -31,7 +31,7 @@ describe('generateMemoryLevels', () => {
     expect(result.level3Keywords).toContain('oauth2');
   });
 
-  it('fallback si JSON invalide', async () => {
+  test('fallback si JSON invalide', async () => {
     const client = makeMockClient('not valid json at all');
     const content = 'Some memory content about CSS grid layouts and flexbox';
     const result = await generateMemoryLevels(content, 'procedural', client);
@@ -43,7 +43,7 @@ describe('generateMemoryLevels', () => {
     expect(result.level1Summary.length).toBeGreaterThan(0);
   });
 
-  it('passe le type episodic dans le prompt', async () => {
+  test('passe le type episodic dans le prompt', async () => {
     let capturedParams: any;
     const client: LLMClient = {
       messages: {
@@ -58,7 +58,7 @@ describe('generateMemoryLevels', () => {
     expect(capturedParams.messages[0].content).toContain('événement vécu');
   });
 
-  it('passe le type procedural dans le prompt', async () => {
+  test('passe le type procedural dans le prompt', async () => {
     let capturedParams: any;
     const client: LLMClient = {
       messages: {
@@ -75,7 +75,7 @@ describe('generateMemoryLevels', () => {
 });
 
 describe('SQLiteStore + autoGenerate', () => {
-  it('auto-génère les niveaux si option activée', async () => {
+  test('auto-génère les niveaux si option activée', async () => {
     const { setLLMClient } = await import('../src/core/llm-generator.js');
     setLLMClient(makeMockClient(VALID_RESPONSE));
 
@@ -105,7 +105,7 @@ describe('SQLiteStore + autoGenerate', () => {
     try { rmSync(db); } catch {}
   });
 
-  it('ne génère pas si level1Summary déjà fourni', async () => {
+  test('ne génère pas si level1Summary déjà fourni', async () => {
     const { setLLMClient } = await import('../src/core/llm-generator.js');
     let called = false;
     setLLMClient({

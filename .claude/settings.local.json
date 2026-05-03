@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git rm *)",
+      "Bash(pnpm build *)",
+      "Bash(./node_modules/.bin/tsc --version)",
+      "Bash(./node_modules/.bin/tsc)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(pnpm test *)",
+      "Bash(./node_modules/.bin/vitest run *)",
+      "Bash(bun test *)",
+      "Bash(pnpm approve-builds *)",
+      "Bash(npm run *)",
+      "Bash(pnpm remove *)",
+      "Bash(node \"C:\\\\Users\\\\Mydde\\\\.claude\\\\skills\\\\bmad-method\\\\scripts\\\\engine.mjs\" init)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}

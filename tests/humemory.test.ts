@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { SQLiteStore } from '../src/store/sqlite.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate } from '../src/core/decay.js';
 import type { Memory, DecayLevel } from '../src/core/types.js';
@@ -32,7 +32,7 @@ describe('humemory', () => {
   });
 
   describe('add & get', () => {
-    it('ajoute et récupère un souvenir', async () => {
+    test('ajoute et récupère un souvenir', async () => {
       const memory = await store.add({
         content: 'Test memory content',
         directory: '/test/project',
@@ -51,7 +51,7 @@ describe('humemory', () => {
       expect(retrieved?.content).toBe('Test memory content');
     });
 
-    it('crée les niveaux de dégradation', async () => {
+    test('crée les niveaux de dégradation', async () => {
       const memory = await store.add({
         content: 'Long content for testing degradation levels',
         directory: '/test',
@@ -70,7 +70,7 @@ describe('humemory', () => {
   });
 
   describe('search', () => {
-    it('trouve un souvenir par contenu', async () => {
+    test('trouve un souvenir par contenu', async () => {
       const memory = await store.add({
         content: 'Implementation of the authentication system with OAuth2',
         directory: '/project-a',
@@ -91,7 +91,7 @@ describe('humemory', () => {
       expect(results[0].memory.id).toBe(memory.id);
     });
 
-    it('recherche inversée : match sur niveau dégradé', async () => {
+    test('recherche inversée : match sur niveau dégradé', async () => {
       const memory = await store.add({
         content: 'Detailed notes about the CSS grid system and flexbox layouts',
         directory: '/css-project',
@@ -112,7 +112,7 @@ describe('humemory', () => {
       expect(results[0].memory.id).toBe(memory.id);
     });
 
-    it('filtre par directory', async () => {
+    test('filtre par directory', async () => {
       const memoryA = await store.add({
         content: 'Project A memory about testing',
         directory: '/project-a',
@@ -141,7 +141,7 @@ describe('humemory', () => {
   });
 
   describe('recall', () => {
-    it('renforce un souvenir', async () => {
+    test('renforce un souvenir', async () => {
       const memory = await store.add({
         content: 'Important memory to reinforce',
         directory: '/test',
@@ -162,7 +162,7 @@ describe('humemory', () => {
   });
 
   describe('decay', () => {
-    it('calcule le niveau de dégradation', () => {
+    test('calcule le niveau de dégradation', () => {
       const now = new Date();
       
       // Souvenir frais (créé maintenant)
@@ -183,7 +183,7 @@ describe('humemory', () => {
       expect(calculateDecayLevel(fresh, now)).toBe(0);
     });
 
-    it('calcule la saillance', () => {
+    test('calcule la saillance', () => {
       const memory: Memory = {
         id: '1',
         content: 'This is IMPORTANT and urgent!',
@@ -203,7 +203,7 @@ describe('humemory', () => {
       expect(saillance).toBeGreaterThan(50); // Bonus pour rappels + émotion
     });
 
-    it('calcule le decay rate', () => {
+    test('calcule le decay rate', () => {
       // Contenu long = decay plus lent
       const longRate = calculateDecayRate('x'.repeat(600), ['a', 'b', 'c', 'd', 'e', 'f']);
       expect(longRate).toBeLessThan(0.5);
@@ -215,7 +215,7 @@ describe('humemory', () => {
   });
 
   describe('list', () => {
-    it('liste les souvenirs', async () => {
+    test('liste les souvenirs', async () => {
       await store.add({
         content: 'Memory 1',
         directory: '/test',
@@ -238,7 +238,7 @@ describe('humemory', () => {
       expect(memories.some(m => m.content.includes('Memory 2'))).toBe(true);
     });
 
-    it('filtre par niveau', async () => {
+    test('filtre par niveau', async () => {
       await store.add({
         content: 'Fresh memory',
         directory: '/test',
@@ -256,7 +256,7 @@ describe('humemory', () => {
   });
 
   describe('delete', () => {
-    it('supprime un souvenir', async () => {
+    test('supprime un souvenir', async () => {
       const memory = await store.add({
         content: 'To delete',
         directory: '/test',
@@ -273,7 +273,7 @@ describe('humemory', () => {
   });
 
   describe('photographic mode', () => {
-    it('encode --photographic désactive la dégradation', async () => {
+    test('encode --photographic désactive la dégradation', async () => {
       const memory = await store.add({
         content: 'Critical architecture decision: use event sourcing',
         directory: '/arch',
@@ -290,7 +290,7 @@ describe('humemory', () => {
       expect(calculateDecayLevel(memory, futureDate)).toBe(0);
     });
 
-    it('setPhotographic bascule le flag', async () => {
+    test('setPhotographic bascule le flag', async () => {
       const memory = await store.add({
         content: 'Important note about DB schema',
         directory: '/test',
@@ -307,7 +307,7 @@ describe('humemory', () => {
       expect(disabled.photographic).toBe(false);
     });
 
-    it('mode photographic protège contre updateDecay', async () => {
+    test('mode photographic protège contre updateDecay', async () => {
       const memory = await store.add({
         content: 'Photographic memory must never decay',
         directory: '/test',
@@ -324,7 +324,7 @@ describe('humemory', () => {
   });
 
   describe('search enrichie', () => {
-    it('filtre par memoryType', async () => {
+    test('filtre par memoryType', async () => {
       await store.add({ content: 'Event: fixed bug', directory: '/p', day: '2026-05-01', keywords: ['bug'], sessionId: 's1', memoryType: 'episodic' });
       await store.add({ content: 'Fact about CSS grid', directory: '/p', day: '2026-05-01', keywords: ['css'], sessionId: 's1', memoryType: 'semantic' });
 
@@ -332,7 +332,7 @@ describe('humemory', () => {
       expect(results.every(r => r.memory.memoryType === 'semantic')).toBe(true);
     });
 
-    it('filtre par dateFrom / dateTo', async () => {
+    test('filtre par dateFrom / dateTo', async () => {
       const old = await store.add({ content: 'Old memory about auth', directory: '/p', day: '2026-01-01', keywords: ['auth'], sessionId: 's1' });
       const recent = await store.add({ content: 'Recent memory about auth', directory: '/p', day: '2026-05-01', keywords: ['auth'], sessionId: 's1' });
 
@@ -347,7 +347,7 @@ describe('humemory', () => {
       expect(ids).not.toContain(old.id);
     });
 
-    it('filtre par minSaillance', async () => {
+    test('filtre par minSaillance', async () => {
       const m = await store.add({ content: 'High saillance memory about React', directory: '/p', day: '2026-05-01', keywords: ['react'], sessionId: 's1' });
       await store.recall(m.id); // boost saillance to 100
 
@@ -360,7 +360,7 @@ describe('humemory', () => {
   });
 
   describe('findSimilar + merge', () => {
-    it('trouve des souvenirs similaires', async () => {
+    test('trouve des souvenirs similaires', async () => {
       const m1 = await store.add({
         content: 'OAuth2 authentication implementation with JWT tokens',
         directory: '/auth-project',
@@ -384,7 +384,7 @@ describe('humemory', () => {
       expect(similar[0].memory.id).not.toBe(m1.id);
     });
 
-    it('merge: source passe en niveau 4 avec mergedIntoId', async () => {
+    test('merge: source passe en niveau 4 avec mergedIntoId', async () => {
       const source = await store.add({
         content: 'Old note about React hooks useState useEffect',
         directory: '/react-project',
@@ -410,7 +410,7 @@ describe('humemory', () => {
       expect(result.target.id).toBe(target.id);
     });
 
-    it('merge: target absorbe le recallCount de la source', async () => {
+    test('merge: target absorbe le recallCount de la source', async () => {
       const source = await store.add({
         content: 'CSS grid system documentation',
         directory: '/css',
@@ -437,7 +437,7 @@ describe('humemory', () => {
       expect(updatedTarget!.recallCount).toBeGreaterThan(beforeRecalls);
     });
 
-    it('findSimilar exclut la trace source', async () => {
+    test('findSimilar exclut la trace source', async () => {
       const m = await store.add({
         content: 'TypeScript generics and type inference',
         directory: '/ts',

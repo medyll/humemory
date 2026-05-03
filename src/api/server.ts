@@ -26,8 +26,20 @@ const DB_PATH = join(__dirname, '../../data/humemory.db');
 const store = new SQLiteStore(DB_PATH);
 const PUBLIC_DIR = join(__dirname, '../../public');
 
+// Configure CORS securely (allow localhost for development, restrict in production)
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? (process.env.CORS_ORIGINS || 'http://localhost:3456').split(',')
+  : ['http://localhost:3456', 'http://localhost:3000', 'http://127.0.0.1:3456'];
+
 const app = new Hono();
-app.use('*', cors());
+app.use('*', cors({
+  origin: (origin) => {
+    if (!origin) return '*'; // Allow requests without origin (like mobile apps, curl, etc)
+    return allowedOrigins.some(allowed => origin.includes(allowed.trim())) ? origin : undefined;
+  },
+  credentials: true,
+  maxAge: 600,
+}));
 
 // Static files (dashboard)
 app.get('/', (c) => {
