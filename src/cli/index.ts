@@ -290,6 +290,36 @@ program
     console.log(`  Réactivations par trace: ${avgRecalls.toFixed(1)}`);
   });
 
+// === IMPORT SESSION ===
+program
+  .command('import-session <file>')
+  .description('Importer une session Claude Code et extraire les apprentissages')
+  .option('-d, --directory <dir>', 'Lieu mental du projet', process.cwd())
+  .option('-n, --max <n>', 'Max apprentissages à extraire', '5')
+  .action(async (file, options) => {
+    const { readFileSync } = await import('fs');
+    const { processSession } = await import('../agent/claude-hook.js');
+
+    const raw = readFileSync(file, 'utf-8');
+    console.log('⏳ Analyse de la session et extraction des apprentissages...');
+
+    const result = await processSession(raw, {
+      dbPath: DB_PATH,
+      directory: options.directory,
+      maxLearnings: parseInt(options.max),
+    });
+
+    if (result.memoriesStored === 0) {
+      console.log('Aucun apprentissage trouvé dans cette session.');
+      return;
+    }
+
+    console.log(`\n✓ ${result.memoriesStored} apprentissage(s) mémorisé(s):\n`);
+    for (const l of result.learnings) {
+      console.log(`  • ${l}`);
+    }
+  });
+
 // Parse et exécution
 program.parse();
 
