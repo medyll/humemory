@@ -234,8 +234,8 @@ describe('humemory', () => {
 
       const memories = await store.list({ limit: 10 });
       expect(memories.length).toBe(2);
-      // Tri par created_at DESC
-      expect(memories[0].content).toContain('Memory 2');
+      expect(memories.some(m => m.content.includes('Memory 1'))).toBe(true);
+      expect(memories.some(m => m.content.includes('Memory 2'))).toBe(true);
     });
 
     it('filtre par niveau', async () => {

@@ -13,9 +13,19 @@ const __dirname = dirname(__filename);
 export class SQLiteStore implements MemoryStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
+  private writeQueue: Promise<any> = Promise.resolve();
+
+  private enqueueWrite<T>(fn: () => T | Promise<T>): Promise<T> {
+    this.writeQueue = this.writeQueue.then(() => fn(), () => fn());
+    return this.writeQueue as Promise<T>;
+  }
 
   constructor(dbPath: string = join(__dirname, '../../data/humemory.db')) {
     this.db = new Database(dbPath);
+    this.db.exec('PRAGMA journal_mode=WAL');
+    this.db.exec('PRAGMA busy_timeout=5000');
+    this.db.exec('PRAGMA synchronous=NORMAL');
+    this.db.exec('PRAGMA cache_size=-16000');
     this.searchEngine = new InverseSearchEngine();
     this.initSchema();
     this.loadIntoMemory();
@@ -144,19 +154,20 @@ export class SQLiteStore implements MemoryStore {
     };
 
     const row = this.memoryToRow(fullMemory);
-    this.db.query(`
-      INSERT INTO memories (
-        id, content, level1_summary, level2_essential, level3_keywords,
-        directory, day, keywords, session_id, memory_type, created_at, last_recalled,
-        recall_count, decay_rate, current_level, saillance, merged_into_id, photographic
-      ) VALUES (
-        $id, $content, $level1_summary, $level2_essential, $level3_keywords,
-        $directory, $day, $keywords, $session_id, $memory_type, $created_at, $last_recalled,
-        $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id, $photographic
-      )
-    `).run(row);
-
-    this.searchEngine.add(fullMemory);
+    await this.enqueueWrite(() => {
+      this.db.query(`
+        INSERT INTO memories (
+          id, content, level1_summary, level2_essential, level3_keywords,
+          directory, day, keywords, session_id, memory_type, created_at, last_recalled,
+          recall_count, decay_rate, current_level, saillance, merged_into_id, photographic
+        ) VALUES (
+          $id, $content, $level1_summary, $level2_essential, $level3_keywords,
+          $directory, $day, $keywords, $session_id, $memory_type, $created_at, $last_recalled,
+          $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id, $photographic
+        )
+      `).run(row);
+      this.searchEngine.add(fullMemory);
+    });
     return fullMemory;
   }
 
@@ -172,18 +183,17 @@ export class SQLiteStore implements MemoryStore {
 
   async recall(id: string): Promise<Memory> {
     const now = new Date();
-
-    this.db.query(`
-      UPDATE memories
-      SET last_recalled = $last_recalled,
-          recall_count = recall_count + 1,
-          saillance = $saillance
-      WHERE id = $id
-    `).run({ $id: id, $last_recalled: now.getTime(), $saillance: 100 });
-
+    await this.enqueueWrite(() => {
+      this.db.query(`
+        UPDATE memories
+        SET last_recalled = $last_recalled,
+            recall_count = recall_count + 1,
+            saillance = $saillance
+        WHERE id = $id
+      `).run({ $id: id, $last_recalled: now.getTime(), $saillance: 100 });
+    });
     const memory = await this.getById(id);
     if (!memory) throw new Error(`Memory ${id} not found`);
-
     this.searchEngine.update(memory);
     return memory;
   }
@@ -204,17 +214,20 @@ export class SQLiteStore implements MemoryStore {
       }
     });
 
-    updateMany(updated);
-
-    this.searchEngine.clear();
-    for (const memory of updated) {
-      this.searchEngine.add(memory);
-    }
+    await this.enqueueWrite(() => {
+      updateMany(updated);
+      this.searchEngine.clear();
+      for (const memory of updated) {
+        this.searchEngine.add(memory);
+      }
+    });
   }
 
   async delete(id: string): Promise<void> {
-    this.db.query('DELETE FROM memories WHERE id = $id').run({ $id: id });
-    this.searchEngine.remove(id);
+    await this.enqueueWrite(() => {
+      this.db.query('DELETE FROM memories WHERE id = $id').run({ $id: id });
+      this.searchEngine.remove(id);
+    });
   }
 
   async list(options?: { limit?: number; level?: DecayLevel; type?: MemoryType }): Promise<Memory[]> {
@@ -246,8 +259,10 @@ export class SQLiteStore implements MemoryStore {
   }
 
   async setPhotographic(id: string, value: boolean): Promise<Memory> {
-    this.db.query('UPDATE memories SET photographic = $val WHERE id = $id')
-      .run({ $val: value ? 1 : 0, $id: id });
+    await this.enqueueWrite(() => {
+      this.db.query('UPDATE memories SET photographic = $val WHERE id = $id')
+        .run({ $val: value ? 1 : 0, $id: id });
+    });
     const memory = await this.getById(id);
     if (!memory) throw new Error(`Memory ${id} not found`);
     this.searchEngine.update(memory);
@@ -290,46 +305,47 @@ export class SQLiteStore implements MemoryStore {
       const levels = await generateMemoryLevels(combinedContent, target.memoryType, options.client);
       mergedContent = levels.level1Summary;
 
-      // Update target with merged summary
-      this.db.query(`
-        UPDATE memories
-        SET level1_summary = $level1_summary,
-            level2_essential = $level2_essential,
-            level3_keywords = $level3_keywords,
-            saillance = MIN(100, saillance + $bonus),
-            recall_count = recall_count + $source_recalls
-        WHERE id = $id
-      `).run({
-        $id: targetId,
-        $level1_summary: levels.level1Summary,
-        $level2_essential: levels.level2Essential,
-        $level3_keywords: levels.level3Keywords,
-        $bonus: Math.floor(source.saillance * 0.3),
-        $source_recalls: source.recallCount,
+      await this.enqueueWrite(() => {
+        this.db.query(`
+          UPDATE memories
+          SET level1_summary = $level1_summary,
+              level2_essential = $level2_essential,
+              level3_keywords = $level3_keywords,
+              saillance = MIN(100, saillance + $bonus),
+              recall_count = recall_count + $source_recalls
+          WHERE id = $id
+        `).run({
+          $id: targetId,
+          $level1_summary: levels.level1Summary,
+          $level2_essential: levels.level2Essential,
+          $level3_keywords: levels.level3Keywords,
+          $bonus: Math.floor(source.saillance * 0.3),
+          $source_recalls: source.recallCount,
+        });
+        this.db.query(`
+          UPDATE memories SET current_level = 4, merged_into_id = $target_id WHERE id = $id
+        `).run({ $id: sourceId, $target_id: targetId });
+        this.searchEngine.remove(sourceId);
       });
     } else {
-      // Absorb source recall boost without LLM
-      this.db.query(`
-        UPDATE memories
-        SET saillance = MIN(100, saillance + $bonus),
-            recall_count = recall_count + $source_recalls
-        WHERE id = $id
-      `).run({
-        $id: targetId,
-        $bonus: Math.floor(source.saillance * 0.3),
-        $source_recalls: source.recallCount,
+      await this.enqueueWrite(() => {
+        this.db.query(`
+          UPDATE memories
+          SET saillance = MIN(100, saillance + $bonus),
+              recall_count = recall_count + $source_recalls
+          WHERE id = $id
+        `).run({
+          $id: targetId,
+          $bonus: Math.floor(source.saillance * 0.3),
+          $source_recalls: source.recallCount,
+        });
+        this.db.query(`
+          UPDATE memories SET current_level = 4, merged_into_id = $target_id WHERE id = $id
+        `).run({ $id: sourceId, $target_id: targetId });
+        this.searchEngine.remove(sourceId);
       });
     }
 
-    // Mark source as merged (level 4)
-    this.db.query(`
-      UPDATE memories
-      SET current_level = 4,
-          merged_into_id = $target_id
-      WHERE id = $id
-    `).run({ $id: sourceId, $target_id: targetId });
-
-    this.searchEngine.remove(sourceId);
     const updatedTarget = await this.getById(targetId);
     if (updatedTarget) this.searchEngine.update(updatedTarget);
 

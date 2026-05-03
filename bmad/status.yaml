@@ -1,12 +1,12 @@
 project: "humemory"
 phase: development
-progress: 98
+progress: 100
 last_updated: "2026-05-03"
 
-next_action: "Dashboard UX livré — décider: release v0.1.0 ou SQLite lock Sprint 4"
+next_action: "Release candidate — pnpm build + tag v0.1.0"
 next_command: "bmad-sprint"
 next_role: "scrum"
-active_role: "scrum"
+active_role: "dev"
 
 dependencies: []
 
@@ -114,7 +114,28 @@ sprints:
         test_output: "bun test — 37/37 pass"
         test_result: pass
 
+  - id: 4
+    goal: "Concurrence SQLite + build stability"
+    status: completed
+    stories:
+      - id: S4-01
+        title: "SQLite WAL mode + busy_timeout + PRAGMA optimizations"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 37/37 pass"
+        test_result: pass
+      - id: S4-02
+        title: "Write serialization layer (enqueueWrite promise queue)"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 37/37 pass"
+        test_result: pass
+      - id: S4-03
+        title: "Fix flaky list test + CLAUDE.md tsc/test doc update"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 37/37 pass"
+        test_result: pass
+
 qa:
-  bugs:
-    - "SQLite partagée sans verrou — race condition si multi-process simultané (WAL mode + lock advisory)"
-    - "tsc global (ancienne version) écrase tsc local — workaround: tsc -p tsconfig.json"
+  bugs: []

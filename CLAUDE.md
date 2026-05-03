@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm build          # TypeScript → dist/
 pnpm dev            # Watch mode (src/cli/index.ts)
 pnpm start:api      # HTTP API server on port 3456
-pnpm test           # Vitest single pass
-pnpm test:watch     # Vitest watch mode
+pnpm test           # bun test single pass
+pnpm test:watch     # bun test --watch
 pnpm cli <cmd>      # Run CLI directly
 pnpm consolidate    # Manual decay consolidation (cron-friendly)
 ```
