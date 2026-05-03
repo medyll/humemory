@@ -58,6 +58,12 @@ export interface SearchResult {
   score: number;             // Score de pertinence
 }
 
+export interface MergeResult {
+  source: Memory;
+  target: Memory;
+  mergedContent?: string;
+}
+
 export interface MemoryStore {
   add(memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>, options?: { autoGenerate?: boolean }): Promise<Memory>;
   getById(id: string): Promise<Memory | null>;
@@ -66,4 +72,6 @@ export interface MemoryStore {
   updateDecay(): Promise<void>;
   delete(id: string): Promise<void>;
   list(options?: { limit?: number; level?: DecayLevel; type?: MemoryType }): Promise<Memory[]>;
+  findSimilar(id: string, options?: { limit?: number; threshold?: number }): Promise<SearchResult[]>;
+  merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: import('./llm-generator.js').LLMClient }): Promise<MergeResult>;
 }

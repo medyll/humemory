@@ -271,4 +271,97 @@ describe('humemory', () => {
       expect(retrieved).toBeNull();
     });
   });
+
+  describe('findSimilar + merge', () => {
+    it('trouve des souvenirs similaires', async () => {
+      const m1 = await store.add({
+        content: 'OAuth2 authentication implementation with JWT tokens',
+        directory: '/auth-project',
+        day: '2026-04-25',
+        keywords: ['oauth', 'jwt', 'auth'],
+        sessionId: 's1',
+        level3Keywords: 'oauth jwt authentication tokens',
+      });
+
+      await store.add({
+        content: 'JWT token validation and refresh flow for OAuth2',
+        directory: '/auth-project',
+        day: '2026-04-25',
+        keywords: ['jwt', 'oauth', 'refresh'],
+        sessionId: 's1',
+        level3Keywords: 'jwt oauth refresh validation',
+      });
+
+      const similar = await store.findSimilar(m1.id, { limit: 5, threshold: 0 });
+      expect(similar.length).toBeGreaterThan(0);
+      expect(similar[0].memory.id).not.toBe(m1.id);
+    });
+
+    it('merge: source passe en niveau 4 avec mergedIntoId', async () => {
+      const source = await store.add({
+        content: 'Old note about React hooks useState useEffect',
+        directory: '/react-project',
+        day: '2026-04-20',
+        keywords: ['react', 'hooks'],
+        sessionId: 's1',
+        level3Keywords: 'react hooks state effect',
+      });
+
+      const target = await store.add({
+        content: 'React hooks guide: useState, useEffect, useCallback patterns',
+        directory: '/react-project',
+        day: '2026-04-25',
+        keywords: ['react', 'hooks', 'patterns'],
+        sessionId: 's1',
+        level3Keywords: 'react hooks patterns callback',
+      });
+
+      const result = await store.merge(source.id, target.id);
+
+      expect(result.source.currentLevel).toBe(4);
+      expect(result.source.mergedIntoId).toBe(target.id);
+      expect(result.target.id).toBe(target.id);
+    });
+
+    it('merge: target absorbe le recallCount de la source', async () => {
+      const source = await store.add({
+        content: 'CSS grid system documentation',
+        directory: '/css',
+        day: '2026-04-20',
+        keywords: ['css', 'grid'],
+        sessionId: 's1',
+      });
+      // Simulate recalls on source
+      await store.recall(source.id);
+      await store.recall(source.id);
+
+      const target = await store.add({
+        content: 'CSS grid and flexbox layout guide',
+        directory: '/css',
+        day: '2026-04-25',
+        keywords: ['css', 'grid', 'flex'],
+        sessionId: 's1',
+      });
+
+      const beforeRecalls = target.recallCount;
+      await store.merge(source.id, target.id);
+      const updatedTarget = await store.getById(target.id);
+
+      expect(updatedTarget!.recallCount).toBeGreaterThan(beforeRecalls);
+    });
+
+    it('findSimilar exclut la trace source', async () => {
+      const m = await store.add({
+        content: 'TypeScript generics and type inference',
+        directory: '/ts',
+        day: '2026-04-25',
+        keywords: ['typescript', 'generics'],
+        sessionId: 's1',
+        level3Keywords: 'typescript generics inference types',
+      });
+
+      const similar = await store.findSimilar(m.id, { limit: 10, threshold: 0 });
+      expect(similar.every(r => r.memory.id !== m.id)).toBe(true);
+    });
+  });
 });

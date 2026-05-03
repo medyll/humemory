@@ -141,6 +141,34 @@ app.get('/search', async (c) => {
   return c.json({ success: true, results });
 });
 
+// === SIMILAR ===
+app.get('/memories/:id/similar', async (c) => {
+  try {
+    const limit = parseInt(c.req.query('limit') || '5');
+    const threshold = parseInt(c.req.query('threshold') || '50');
+    const results = await store.findSimilar(c.req.param('id'), { limit, threshold });
+    return c.json({ success: true, results });
+  } catch (error) {
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// === MERGE ===
+app.post('/memories/:id/merge', async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.targetId) {
+      return c.json({ success: false, error: 'Missing targetId' }, 400);
+    }
+    const result = await store.merge(c.req.param('id'), body.targetId, {
+      autoMergeContent: body.autoMergeContent ?? false,
+    });
+    return c.json({ success: true, result });
+  } catch (error) {
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
 // === DECAY ===
 app.post('/decay', async (c) => {
   await store.updateDecay();

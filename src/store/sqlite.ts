@@ -2,10 +2,10 @@ import { Database } from 'bun:sqlite';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType } from '../core/types.js';
+import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult } from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
-import { generateMemoryLevels } from '../core/llm-generator.js';
+import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -235,6 +235,93 @@ export class SQLiteStore implements MemoryStore {
 
     const rows = this.db.query(sql).all(params) as any[];
     return rows.map(row => this.rowToMemory(row));
+  }
+
+  async findSimilar(id: string, options: { limit?: number; threshold?: number } = {}): Promise<SearchResult[]> {
+    const { limit = 5, threshold = 50 } = options;
+    const memory = await this.getById(id);
+    if (!memory) throw new Error(`Memory ${id} not found`);
+
+    // Use first keyword for FlexSearch (multi-word AND would be too restrictive)
+    const kwSource = memory.level3Keywords || memory.keywords.join(' ') || memory.content;
+    const query = kwSource.split(/\s+/)[0] || kwSource.slice(0, 50);
+    const results = await this.search({
+      query,
+      directory: memory.directory,
+      limit: limit + 1,
+    });
+
+    return results
+      .filter(r => r.memory.id !== id && r.score >= threshold)
+      .slice(0, limit);
+  }
+
+  async merge(
+    sourceId: string,
+    targetId: string,
+    options: { autoMergeContent?: boolean; client?: LLMClient } = {}
+  ): Promise<MergeResult> {
+    const source = await this.getById(sourceId);
+    const target = await this.getById(targetId);
+    if (!source) throw new Error(`Source memory ${sourceId} not found`);
+    if (!target) throw new Error(`Target memory ${targetId} not found`);
+
+    let mergedContent: string | undefined;
+
+    if (options.autoMergeContent) {
+      const combinedContent = `[Trace 1]\n${source.content}\n\n[Trace 2]\n${target.content}`;
+      const levels = await generateMemoryLevels(combinedContent, target.memoryType, options.client);
+      mergedContent = levels.level1Summary;
+
+      // Update target with merged summary
+      this.db.query(`
+        UPDATE memories
+        SET level1_summary = $level1_summary,
+            level2_essential = $level2_essential,
+            level3_keywords = $level3_keywords,
+            saillance = MIN(100, saillance + $bonus),
+            recall_count = recall_count + $source_recalls
+        WHERE id = $id
+      `).run({
+        $id: targetId,
+        $level1_summary: levels.level1Summary,
+        $level2_essential: levels.level2Essential,
+        $level3_keywords: levels.level3Keywords,
+        $bonus: Math.floor(source.saillance * 0.3),
+        $source_recalls: source.recallCount,
+      });
+    } else {
+      // Absorb source recall boost without LLM
+      this.db.query(`
+        UPDATE memories
+        SET saillance = MIN(100, saillance + $bonus),
+            recall_count = recall_count + $source_recalls
+        WHERE id = $id
+      `).run({
+        $id: targetId,
+        $bonus: Math.floor(source.saillance * 0.3),
+        $source_recalls: source.recallCount,
+      });
+    }
+
+    // Mark source as merged (level 4)
+    this.db.query(`
+      UPDATE memories
+      SET current_level = 4,
+          merged_into_id = $target_id
+      WHERE id = $id
+    `).run({ $id: sourceId, $target_id: targetId });
+
+    this.searchEngine.remove(sourceId);
+    const updatedTarget = await this.getById(targetId);
+    if (updatedTarget) this.searchEngine.update(updatedTarget);
+
+    const updatedSource = await this.getById(sourceId);
+    return {
+      source: updatedSource!,
+      target: updatedTarget!,
+      mergedContent,
+    };
   }
 
   close(): void {

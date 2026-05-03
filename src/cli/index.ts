@@ -198,6 +198,55 @@ program
     console.log(`  ⚫ ${states[4]}: ${byLevel[4]}`);
   });
 
+// === SIMILAR ===
+program
+  .command('similar <id>')
+  .description('Trouver des traces similaires à fusionner')
+  .option('-n, --limit <n>', 'Nombre de résultats', '5')
+  .option('-t, --threshold <n>', 'Score minimum (0-100)', '50')
+  .action(async (id, options) => {
+    const s = getStore();
+    const results = await s.findSimilar(id, {
+      limit: parseInt(options.limit),
+      threshold: parseInt(options.threshold),
+    });
+
+    if (results.length === 0) {
+      console.log('Aucune trace similaire trouvée.');
+      return;
+    }
+
+    console.log(`\n🔍 ${results.length} trace(s) similaire(s):\n`);
+    for (const r of results) {
+      console.log(`  ID: ${r.memory.id}`);
+      console.log(`  Score: ${Math.round(r.score)} | Lieu: ${r.memory.directory}`);
+      console.log(`  ${r.memory.content.slice(0, 120)}...`);
+      console.log();
+    }
+  });
+
+// === MERGE ===
+program
+  .command('merge <sourceId> <targetId>')
+  .description('Fusionner deux traces (source → target, source passe en niveau 4)')
+  .option('--auto', 'Fusionner le contenu via LLM')
+  .action(async (sourceId, targetId, options) => {
+    const s = getStore();
+
+    if (options.auto) {
+      console.log('⏳ Fusion via LLM...');
+    }
+
+    const result = await s.merge(sourceId, targetId, { autoMergeContent: options.auto });
+
+    console.log(`✓ Fusion effectuée`);
+    console.log(`  Source ${sourceId.slice(0, 8)}... → Niveau 4 (fusionné)`);
+    console.log(`  Target ${targetId.slice(0, 8)}... absorbé`);
+    if (result.mergedContent) {
+      console.log(`  Contenu fusionné: ${result.mergedContent.slice(0, 150)}...`);
+    }
+  });
+
 // === DELETE ===
 program
   .command('delete <id>')
