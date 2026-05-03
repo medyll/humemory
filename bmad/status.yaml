@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 95
+progress: 98
 last_updated: "2026-05-03"
 
-next_action: "Sprint 2 terminé — décider direction Sprint 3 (DB lock, perf, release)"
+next_action: "Dashboard UX livré — décider: release v0.1.0 ou SQLite lock Sprint 4"
 next_command: "bmad-sprint"
 next_role: "scrum"
 active_role: "scrum"
@@ -116,7 +116,5 @@ sprints:
 
 qa:
   bugs:
-    - "N1/N2/N3 non auto-générés — saisis manuellement via CLI, pas via LLM (bloque utilité réelle)"
-    - "Fusion L4 absente — pas de détection/merge de souvenirs similaires"
-    - "SQLite partagée sans verrou — race condition si multi-process simultané"
-    - "tsc global (ancienne version) écrase tsc local — build via pnpm build nécessite tsc local 5.9.3"
+    - "SQLite partagée sans verrou — race condition si multi-process simultané (WAL mode + lock advisory)"
+    - "tsc global (ancienne version) écrase tsc local — workaround: tsc -p tsconfig.json"
