@@ -39,6 +39,7 @@ program
   .option('-l3, --level3 <keywords>', 'Trace pour recherche rapide N3')
   .option('-t, --type <type>', 'Type de mémoire (episodic/semantic/procedural)', 'semantic')
   .option('--auto', 'Auto-générer N1/N2/N3 via LLM (nécessite ANTHROPIC_API_KEY)')
+  .option('--photographic', 'Mode photographique — désactiver la dégradation')
   .action(async (content, options) => {
     const s = getStore();
 
@@ -59,6 +60,7 @@ program
       level2Essential: options.level2,
       level3Keywords: options.level3,
       memoryType: memoryType as 'episodic' | 'semantic' | 'procedural',
+      photographic: options.photographic ?? false,
     }, { autoGenerate: options.auto });
 
     const typeLabels = { episodic: 'Épisodique', semantic: 'Sémantique', procedural: 'Procédurale' };
@@ -206,6 +208,18 @@ program
     console.log(`  🟠 ${states[2]}: ${byLevel[2]}`);
     console.log(`  🔴 ${states[3]}: ${byLevel[3]}`);
     console.log(`  ⚫ ${states[4]}: ${byLevel[4]}`);
+  });
+
+// === PHOTOGRAPHIC ===
+program
+  .command('photo <id>')
+  .description('Basculer le mode photographique (désactive la dégradation)')
+  .option('--off', 'Désactiver le mode photographique')
+  .action(async (id, options) => {
+    const s = getStore();
+    const memory = await s.setPhotographic(id, !options.off);
+    console.log(`✓ Mode photographique: ${memory.photographic ? '🔒 ACTIF' : '🔓 désactivé'}`);
+    console.log(`  ID: ${memory.id}`);
   });
 
 // === SIMILAR ===

@@ -272,6 +272,57 @@ describe('humemory', () => {
     });
   });
 
+  describe('photographic mode', () => {
+    it('encode --photographic désactive la dégradation', async () => {
+      const memory = await store.add({
+        content: 'Critical architecture decision: use event sourcing',
+        directory: '/arch',
+        day: '2026-05-01',
+        keywords: ['architecture', 'event-sourcing'],
+        sessionId: 's1',
+        photographic: true,
+      });
+
+      expect(memory.photographic).toBe(true);
+      // calculateDecayLevel doit retourner 0 même si ancienne
+      const { calculateDecayLevel } = await import('../src/core/decay.js');
+      const futureDate = new Date('2030-01-01');
+      expect(calculateDecayLevel(memory, futureDate)).toBe(0);
+    });
+
+    it('setPhotographic bascule le flag', async () => {
+      const memory = await store.add({
+        content: 'Important note about DB schema',
+        directory: '/test',
+        day: '2026-05-01',
+        keywords: ['db'],
+        sessionId: 's1',
+      });
+
+      expect(memory.photographic).toBe(false);
+      const updated = await store.setPhotographic(memory.id, true);
+      expect(updated.photographic).toBe(true);
+
+      const disabled = await store.setPhotographic(memory.id, false);
+      expect(disabled.photographic).toBe(false);
+    });
+
+    it('mode photographic protège contre updateDecay', async () => {
+      const memory = await store.add({
+        content: 'Photographic memory must never decay',
+        directory: '/test',
+        day: '2020-01-01', // very old
+        keywords: ['critical'],
+        sessionId: 's1',
+        photographic: true,
+      });
+
+      await store.updateDecay();
+      const after = await store.getById(memory.id);
+      expect(after!.currentLevel).toBe(0);
+    });
+  });
+
   describe('search enrichie', () => {
     it('filtre par memoryType', async () => {
       await store.add({ content: 'Event: fixed bug', directory: '/p', day: '2026-05-01', keywords: ['bug'], sessionId: 's1', memoryType: 'episodic' });

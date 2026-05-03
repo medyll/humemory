@@ -152,6 +152,18 @@ app.get('/search', async (c) => {
   return c.json({ success: true, results });
 });
 
+// === PHOTOGRAPHIC ===
+app.post('/memories/:id/photo', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const enable = body.enable !== false; // default true
+    const memory = await store.setPhotographic(c.req.param('id'), enable);
+    return c.json({ success: true, memory });
+  } catch (error) {
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
 // === SIMILAR ===
 app.get('/memories/:id/similar', async (c) => {
   try {

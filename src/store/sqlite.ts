@@ -40,13 +40,19 @@ export class SQLiteStore implements MemoryStore {
         decay_rate REAL DEFAULT 0.5,
         current_level INTEGER DEFAULT 0,
         saillance INTEGER DEFAULT 50,
-        merged_into_id TEXT
+        merged_into_id TEXT,
+        photographic INTEGER DEFAULT 0
       )
     `);
 
     try {
       this.db.exec("ALTER TABLE memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'semantic'");
-    } catch (e) {
+    } catch {
+      // column already exists
+    }
+    try {
+      this.db.exec("ALTER TABLE memories ADD COLUMN photographic INTEGER DEFAULT 0");
+    } catch {
       // column already exists
     }
 
@@ -85,6 +91,7 @@ export class SQLiteStore implements MemoryStore {
       currentLevel: row.current_level as DecayLevel,
       saillance: row.saillance,
       mergedIntoId: row.merged_into_id || undefined,
+      photographic: Boolean(row.photographic),
     };
   }
 
@@ -107,6 +114,7 @@ export class SQLiteStore implements MemoryStore {
       $current_level: memory.currentLevel,
       $saillance: memory.saillance,
       $merged_into_id: memory.mergedIntoId || null,
+      $photographic: memory.photographic ? 1 : 0,
     };
   }
 
@@ -124,7 +132,7 @@ export class SQLiteStore implements MemoryStore {
     }
 
     const fullMemory: Memory = {
-      ...{ memoryType: 'semantic' as MemoryType },
+      ...{ memoryType: 'semantic' as MemoryType, photographic: false },
       ...memory,
       ...generatedLevels,
       id,
@@ -140,11 +148,11 @@ export class SQLiteStore implements MemoryStore {
       INSERT INTO memories (
         id, content, level1_summary, level2_essential, level3_keywords,
         directory, day, keywords, session_id, memory_type, created_at, last_recalled,
-        recall_count, decay_rate, current_level, saillance, merged_into_id
+        recall_count, decay_rate, current_level, saillance, merged_into_id, photographic
       ) VALUES (
         $id, $content, $level1_summary, $level2_essential, $level3_keywords,
         $directory, $day, $keywords, $session_id, $memory_type, $created_at, $last_recalled,
-        $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id
+        $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id, $photographic
       )
     `).run(row);
 
@@ -235,6 +243,15 @@ export class SQLiteStore implements MemoryStore {
 
     const rows = this.db.query(sql).all(params) as any[];
     return rows.map(row => this.rowToMemory(row));
+  }
+
+  async setPhotographic(id: string, value: boolean): Promise<Memory> {
+    this.db.query('UPDATE memories SET photographic = $val WHERE id = $id')
+      .run({ $val: value ? 1 : 0, $id: id });
+    const memory = await this.getById(id);
+    if (!memory) throw new Error(`Memory ${id} not found`);
+    this.searchEngine.update(memory);
+    return memory;
   }
 
   async findSimilar(id: string, options: { limit?: number; threshold?: number } = {}): Promise<SearchResult[]> {

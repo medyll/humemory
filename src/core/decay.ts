@@ -21,6 +21,9 @@ export const DECAY_CONFIG = {
  * Calcule le niveau de dégradation actuel d'un souvenir
  */
 export function calculateDecayLevel(memory: Memory, now: Date = new Date()): DecayLevel {
+  if (memory.photographic) {
+    return 0; // Photographic mode — no decay
+  }
   if (memory.currentLevel === 4 || memory.mergedIntoId) {
     return 4; // Déjà perdu/fusionné
   }

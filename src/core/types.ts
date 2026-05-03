@@ -42,6 +42,9 @@ export interface Memory {
   
   // Fusion
   mergedIntoId?: string;     // ID du souvenir fusionné (si niveau 4)
+
+  // Photographic mode — désactive la dégradation
+  photographic?: boolean;
 }
 
 export interface SearchQuery {
@@ -80,4 +83,5 @@ export interface MemoryStore {
   list(options?: { limit?: number; level?: DecayLevel; type?: MemoryType }): Promise<Memory[]>;
   findSimilar(id: string, options?: { limit?: number; threshold?: number }): Promise<SearchResult[]>;
   merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: import('./llm-generator.js').LLMClient }): Promise<MergeResult>;
+  setPhotographic(id: string, value: boolean): Promise<Memory>;
 }
