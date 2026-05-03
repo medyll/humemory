@@ -10,22 +10,20 @@
   },
   "scripts": {
     "dev": "tsx watch src/cli/index.ts",
-    "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.json",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "start:api": "tsx src/api/server.ts",
     "cli": "tsx src/cli/index.ts",
     "consolidate": "node scripts/consolidate.js"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",
-    "better-sqlite3": "^11.0.0",
     "commander": "^12.0.0",
     "flexsearch": "^0.7.43",
     "hono": "^4.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
