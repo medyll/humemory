@@ -50,6 +50,12 @@ export interface SearchQuery {
   sessionId?: string;
   maxLevel?: DecayLevel;     // Niveau max de dégradation à inclure
   limit?: number;
+  // Enriched filters
+  memoryType?: MemoryType;
+  dateFrom?: Date;           // Filter: createdAt >= dateFrom
+  dateTo?: Date;             // Filter: createdAt <= dateTo
+  minSaillance?: number;     // Filter: saillance >= minSaillance
+  minRecalls?: number;       // Filter: recallCount >= minRecalls
 }
 
 export interface SearchResult {

@@ -107,6 +107,11 @@ export class InverseSearchEngine {
         // Filtres optionnels
         if (query.directory && memory.directory !== query.directory) continue;
         if (query.sessionId && memory.sessionId !== query.sessionId) continue;
+        if (query.memoryType && memory.memoryType !== query.memoryType) continue;
+        if (query.dateFrom && new Date(memory.day) < query.dateFrom) continue;
+        if (query.dateTo && new Date(memory.day) > query.dateTo) continue;
+        if (query.minSaillance !== undefined && memory.saillance < query.minSaillance) continue;
+        if (query.minRecalls !== undefined && memory.recallCount < query.minRecalls) continue;
 
         results.push({
           memory,

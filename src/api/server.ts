@@ -130,12 +130,23 @@ app.get('/search', async (c) => {
     return c.json({ success: false, error: 'Missing query parameter "q"' }, 400);
   }
 
+  const dateFrom = c.req.query('dateFrom') ? new Date(c.req.query('dateFrom')!) : undefined;
+  const dateTo = c.req.query('dateTo') ? new Date(c.req.query('dateTo')!) : undefined;
+  const minSaillance = c.req.query('minSaillance') ? parseInt(c.req.query('minSaillance')!) : undefined;
+  const minRecalls = c.req.query('minRecalls') ? parseInt(c.req.query('minRecalls')!) : undefined;
+  const memoryType = c.req.query('type') as any;
+
   const results = await store.search({
     query,
     directory: c.req.query('directory'),
     sessionId: c.req.query('sessionId'),
     maxLevel: parseInt(c.req.query('maxLevel') || '3') as any,
     limit: parseInt(c.req.query('limit') || '10'),
+    memoryType,
+    dateFrom,
+    dateTo,
+    minSaillance,
+    minRecalls,
   });
 
   return c.json({ success: true, results });

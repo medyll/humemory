@@ -272,6 +272,42 @@ describe('humemory', () => {
     });
   });
 
+  describe('search enrichie', () => {
+    it('filtre par memoryType', async () => {
+      await store.add({ content: 'Event: fixed bug', directory: '/p', day: '2026-05-01', keywords: ['bug'], sessionId: 's1', memoryType: 'episodic' });
+      await store.add({ content: 'Fact about CSS grid', directory: '/p', day: '2026-05-01', keywords: ['css'], sessionId: 's1', memoryType: 'semantic' });
+
+      const results = await store.search({ query: 'css', memoryType: 'semantic', limit: 10 });
+      expect(results.every(r => r.memory.memoryType === 'semantic')).toBe(true);
+    });
+
+    it('filtre par dateFrom / dateTo', async () => {
+      const old = await store.add({ content: 'Old memory about auth', directory: '/p', day: '2026-01-01', keywords: ['auth'], sessionId: 's1' });
+      const recent = await store.add({ content: 'Recent memory about auth', directory: '/p', day: '2026-05-01', keywords: ['auth'], sessionId: 's1' });
+
+      const results = await store.search({
+        query: 'auth',
+        dateFrom: new Date('2026-03-01'),
+        limit: 10,
+      });
+
+      const ids = results.map(r => r.memory.id);
+      expect(ids).toContain(recent.id);
+      expect(ids).not.toContain(old.id);
+    });
+
+    it('filtre par minSaillance', async () => {
+      const m = await store.add({ content: 'High saillance memory about React', directory: '/p', day: '2026-05-01', keywords: ['react'], sessionId: 's1' });
+      await store.recall(m.id); // boost saillance to 100
+
+      const results = await store.search({ query: 'React', minSaillance: 90, limit: 10 });
+      expect(results.some(r => r.memory.id === m.id)).toBe(true);
+
+      const strictResults = await store.search({ query: 'React', minSaillance: 101, limit: 10 });
+      expect(strictResults.some(r => r.memory.id === m.id)).toBe(false);
+    });
+  });
+
   describe('findSimilar + merge', () => {
     it('trouve des souvenirs similaires', async () => {
       const m1 = await store.add({

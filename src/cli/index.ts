@@ -78,15 +78,25 @@ program
   .option('-s, --session <id>', 'Filtrer par contexte')
   .option('-l, --level <max>', 'État max de consolidation (0-4)', '4')
   .option('-n, --limit <n>', 'Nombre de traces', '10')
+  .option('-t, --type <type>', 'Filtrer par type (episodic/semantic/procedural)')
+  .option('--from <date>', 'Date début YYYY-MM-DD')
+  .option('--to <date>', 'Date fin YYYY-MM-DD')
+  .option('--min-saillance <n>', 'Force mnésique minimum (0-100)')
+  .option('--min-recalls <n>', 'Réactivations minimum')
   .action(async (query, options) => {
     const s = getStore();
-    
+
     const results = await s.search({
       query,
       directory: options.directory,
       sessionId: options.session,
       maxLevel: parseInt(options.level) as 0 | 1 | 2 | 3 | 4,
       limit: parseInt(options.limit),
+      memoryType: options.type as any,
+      dateFrom: options.from ? new Date(options.from) : undefined,
+      dateTo: options.to ? new Date(options.to) : undefined,
+      minSaillance: options.minSaillance ? parseInt(options.minSaillance) : undefined,
+      minRecalls: options.minRecalls ? parseInt(options.minRecalls) : undefined,
     });
 
     if (results.length === 0) {
