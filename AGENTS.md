@@ -1,367 +1,168 @@
 # AGENTS.md — humemory
 
-**Human-like memory system with progressive degradation**
+**Memory for AI agents that forgets like a human — and resurfaces like one.**
+
+Canonical guide for any agent (Claude Code, OpenCode, …) working *on* this repo.
+For the project's identity and "why", read [README.md](./README.md) first.
 
 ---
 
-## 🎯 Vision
+## 🎯 Vision — two halves of a brain
 
-Système de mémoire qui **dégrade comme un cerveau humain** :
-- **5 niveaux** : détail complet → résumé → essentiel → mots-clés → perdu
-- **Recherche inversée** : on cherche d'abord dans les versions dégradées (rapide) puis on remonte vers le détail si match
-- **Renforcement** : rappeler un souvenir le préserve
-- **Persistance partagée** : une DB SQLite unique accessible par tous les projets
+humemory has two halves. The first is built. The second is the direction
+(**Direction 1**, chosen 2026-06-17) that gives the project its purpose.
+
+1. **Retrospective** ✅ — past learnings **decay** through 5 levels (detail → summary
+   → essential → keywords → lost/merged); recall reinforces; inverse search hits the
+   degraded layers first.
+2. **Prospective** 🎯 — intentions that fire on a **cue** (time/event), **Zeigarnik**
+   open loops that stay salient until a `commit` closes them, and context-triggered
+   **scripts**. A memory that resurfaces *before* it is queried. See **Phase 5**.
+
+The conceptual source for the prospective half is `SCRATCHPAD.md` (mémoire
+prospective, scripts cognitifs, effet Zeigarnik).
+
+---
+
+## ⚙️ Commands
+
+```bash
+pnpm install
+pnpm build          # tsc -p tsconfig.json → dist/
+pnpm dev            # watch src/cli/index.ts (bun)
+pnpm start:api      # HTTP API + dashboard on :3456
+pnpm cli <cmd>      # run CLI directly
+pnpm test           # bun test, single pass
+pnpm test:watch     # bun test --watch
+pnpm consolidate    # manual decay pass (cron-friendly)
+```
+
+Single test file: `bun test tests/humemory.test.ts`
 
 ---
 
 ## 📦 Structure
 
 ```
-humemory/
-├── src/
-│   ├── core/
-│   │   ├── types.ts       # Types Memory, DecayLevel, etc.
-│   │   ├── decay.ts       # Logique de dégradation
-│   │   └── search.ts      # Moteur de recherche inversée (BM25)
-│   ├── store/
-│   │   └── sqlite.ts      # Store SQLite + index en mémoire
-│   ├── cli/
-│   │   └── index.ts       # CLI commander
-│   ├── api/
-│   │   └── server.ts      # API HTTP (Hono)
-│   └── index.ts           # Exports library
-├── tests/
-│   └── humemory.test.ts   # Tests Vitest
-├── data/
-│   └── humemory.db        # DB partagée (créée au premier run)
-├── bin/
-│   └── humemory           # CLI executable
-├── package.json
-└── AGENTS.md
+src/
+├── core/
+│   ├── types.ts          # Memory, DecayLevel, SearchQuery, MemoryStore iface
+│   ├── decay.ts          # degradation curve + thresholds
+│   ├── search.ts         # inverse search (BM25, degraded-first)
+│   └── llm-generator.ts  # auto-generate L1/L2/L3 via Claude Haiku (prompt cache)
+├── store/
+│   └── sqlite.ts         # bun:sqlite store (WAL), findSimilar/merge/setPhotographic
+├── agent/
+│   ├── session-parser.ts     # parse Claude Code session transcripts
+│   ├── learning-extractor.ts # extract decisions/bugs/solutions
+│   └── claude-hook.ts        # Stop-hook → auto-encode session learnings
+├── api/server.ts         # Hono HTTP API + serves public/ dashboard
+├── cli/index.ts          # commander CLI
+└── index.ts              # library exports
+scripts/hook-session.ts   # bun script wired to Claude Code Stop hook
+tests/                    # bun test (agent / humemory / llm-generator)
+data/humemory.db          # shared DB (created on first run)
 ```
 
 ---
 
-## 🔧 Setup
+## 🧠 Concepts (cognitive-neuroscience naming)
 
-```bash
-cd /mnt/d/development/humemory
-pnpm install
-```
+| Field | Human term | Meaning |
+|-------|-----------|---------|
+| `createdAt` | Encodage | trace formation |
+| `lastRecalled` | Dernière réactivation | last conscious retrieval |
+| `recallCount` | Réactivations | recalls (reinforce) |
+| `saillance` | Force mnésique | trace strength 0–100 |
+| `decayRate` | Taux d'oubli | degradation speed |
+| `sessionId` | Contexte d'encodage | encoding context |
+| `directory` | Lieu mental | conceptual space (project) |
+| `currentLevel` | État de consolidation | decay stage 0–4 |
+| `keywords` | Indices de récupération | retrieval cues |
+| `memoryType` | Type | episodic / semantic / procedural |
 
----
+**Decay thresholds:** L0→L1 ~24h · L1→L2 ~1 week · L2→L3 ~1 month · L3→L4 beyond.
+Slowing factors: `recallCount * 0.3`, saillance >70 → 1.5× slower, content >500 chars,
+keywords >5. `photographic: true` disables decay entirely.
 
-## 🚀 Usage
-
-### Dashboard Web — Palais de Mémoire
-
-```bash
-# Démarrer le serveur (API + Dashboard)
-pnpm start:api
-# → http://localhost:3456
-```
-
-**Fonctionnalités du dashboard :**
-- 🧠 **Zones temporelles subjectives** : Encodage récent, En consolidation, Consolidé, Fragile, En sommeil
-- 📍 **Regroupement par lieu mental** (projet/contexte)
-- 📊 Stats en temps réel (répartition par état de consolidation)
-- 🔍 Recherche par indices de récupération
-- 🏷️ Filtres par contexte, tri par force mnésique/réactivations
-- 👁️ Détail d'une trace (état de consolidation, force mnésique, contexte d'encodage)
-- ➕ Encoder une nouvelle trace depuis l'UI
-- 🔄 Réactiver/oublier en un clic
-- 📈 Barre de consolidation visuelle (5 états)
-
-### 🧠 Session Mnésique
-
-**Nouveau :** `/session` — Interface pour interagir avec les LLM via la mémoire
-
-**Concept :** Au lieu d'une conversation avec transcript, tu exprimes une **intention** et humemory construit un **contexte mnésique** pertinent à envoyer au LLM.
-
-**Fonctionnalités :**
-- 💭 Exprime ton intention (pas une conversation)
-- 🔍 Recherche automatique des traces pertinentes
-- 📝 Contexte pré-construit avec les mémoires les plus relevantes
-- ✏️ Édition du contexte avant envoi
-- 📋 Copie ou export vers l'agent LLM
-- 💾 Sauvegarde de la session comme nouvelle trace
-
-**Accès :**
-- Bouton "🧠 Session Mnésique" dans le header du dashboard
-- URL directe : http://localhost:3456/session
-
-### CLI
-
-```bash
-# Encoder une nouvelle trace mnésique
-pnpm cli encode "J'ai implémenté le système d'auth avec OAuth2" \
-  -d "/mnt/d/development/sive" \
-  -s "auth-session-001" \
-  -k "auth,oauth,security" \
-  -l3 "auth oauth security implementation" \
-  -t semantic
-
-# Types: episodic (événement), semantic (fait), procedural (geste)
-# Alias: pnpm cli add ... (compatible)
-
-# Rechercher par indices de récupération (recherche inversée)
-pnpm cli search "t'as pas un truc sur l'auth ?"
-pnpm cli find "oauth"   # alias
-
-# Réactiver une trace (renforcement mnésique)
-pnpm cli recall <id>
-pnpm cli reactivate <id>   # alias
-
-# Lister les traces mnésiques
-pnpm cli list
-pnpm cli traces            # alias
-pnpm cli list -l 0         # Seulement en encodage
-pnpm cli list -t procedural # Seulement les mémoires procédurales
-
-# Mettre à jour la consolidation
-pnpm cli decay
-pnpm cli consolidate       # alias
-
-# État du palais de mémoire
-pnpm cli status
-
-# Oublier une trace
-pnpm cli delete <id>
-pnpm cli forget <id>       # alias
-```
-
-### API HTTP
-
-```bash
-# Démarrer le serveur
-pnpm start:api
-# → http://localhost:3456
-```
-
-**Endpoints :**
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/memories` | Ajouter un souvenir |
-| GET | `/memories` | Lister les souvenirs |
-| GET | `/memories/:id` | Récupérer un souvenir |
-| POST | `/memories/:id/recall` | Rappeler (renforcer) |
-| DELETE | `/memories/:id` | Supprimer |
-| GET | `/search?q=...` | Rechercher |
-| POST | `/decay` | Mettre à jour dégradation |
-| GET | `/status` | État de la mémoire |
-| GET | `/health` | Health check |
-
-**Exemple :**
-
-```bash
-curl -X POST http://localhost:3456/memories \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Test memory",
-    "directory": "/test",
-    "keywords": ["test"],
-    "sessionId": "s1"
-  }'
-```
-
-### Library (import dans d'autres projets)
-
-```typescript
-import { SQLiteStore, calculateDecayLevel } from 'humemory';
-
-const store = new SQLiteStore('/path/to/humemory.db');
-
-// Ajouter
-const memory = await store.add({
-  content: '...',
-  directory: '/project',
-  day: '2026-04-25',
-  keywords: ['tag1', 'tag2'],
-  sessionId: 'session-123',
-});
-
-// Rechercher
-const results = await store.search({
-  query: 'auth',
-  maxLevel: 3,
-  limit: 10,
-});
-
-// Rappeler
-await store.recall(memory.id);
-```
+**Memory types:** `episodic` (events), `semantic` (facts), `procedural` (skills).
 
 ---
 
-## 🧠 Concepts (Neuroscience Cognitive)
+## 🌐 API (`:3456`, `PORT` env to override)
 
-**Terminologie humaine :**
-
-| Technique | Humain | Description |
-|-----------|--------|-------------|
-| `createdAt` | **Encodage** | Moment de formation de la trace |
-| `lastRecalled` | **Dernière réactivation** | Dernière récupération consciente |
-| `recallCount` | **Réactivations** | Nombre de rappels (renforce) |
-| `saillance` | **Force mnésique** | Intensité de la trace (0-100) |
-| `decayRate` | **Taux d'oubli** | Vitesse de dégradation |
-| `sessionId` | **Contexte d'encodage** | État mental + activité |
-| `directory` | **Lieu mental** | Espace conceptuel (projet) |
-| `currentLevel` | **État de consolidation** | Stade de stabilisation |
-| `keywords` | **Indices de récupération** | Déclencheurs de rappel |
-| `memoryType` | **Type de mémoire** | Episodic (événement), Semantic (fait), Procedural (geste) |
-
-**Types de mémoire :**
-
-- **Episodic** — Souvenirs d'événements vécus (contexte temporel/spatial). Ex: "J'ai débogué tel bug hier"
-- **Semantic** — Connaissances factuelles, concepts. Ex: "Les tokens CSS sont des variables"
-- **Procedural** — Savoir-faire, gestes, routines. Ex: "Raccourci VSCode: Ctrl+D"
-
-**Zones temporelles subjectives :**
-
-- **Encodage récent** (< 24h) — Mémoire fraîche, détails vivaces
-- **En consolidation** (< 7j) — Stabilisation en cours
-- **Consolidé** (< 30j) — Mémoire stable
-- **Fragile** (< 90j) — Risque d'oubli accru
-- **En sommeil** (> 90j) — Mémoire lointaine, difficile d'accès
-
-**États de consolidation :**
-1. **Encodage** — Formation initiale
-2. **Consolidation** — Stabilisation progressive
-3. **Stable** — Mémoire consolidée
-4. **Fragile** — Dégradation avancée
-5. **Sommeil** — Trace dormante (quasi-oubli)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/memories` | add |
+| GET | `/memories` | list (limit, level, type) |
+| GET | `/memories/:id` | fetch one |
+| POST | `/memories/:id/recall` | bump recall + saillance |
+| POST | `/memories/:id/similar` | find similar |
+| POST | `/memories/:id/merge` | merge (L4) |
+| POST | `/memories/:id/photo` | toggle photographic |
+| DELETE | `/memories/:id` | forget |
+| GET | `/search?query=X` | inverse search |
+| POST | `/decay` | run consolidation |
+| GET | `/status` | pool stats |
 
 ---
 
-## 🕐 Consolidation Automatique (Cron)
+## 🧪 Autonomous test environment — REQUIRED
 
-Un job cron exécute la consolidation toutes les nuits à **3h du matin**.
+**Non-negotiable design constraint** (set 2026-06-17). Every test run MUST be
+hermetic, deterministic, and network-free. Full spec: **[docs/TESTING.md](./docs/TESTING.md)**.
 
-**Schedule:** `0 3 * * *` (tous les jours à 03:00)
+Core rules:
+- **Isolated DB per run** — never touch `data/humemory.db`; use an in-memory or
+  temp-file `bun:sqlite` instance, torn down after each suite.
+- **Injectable clock** — decay is time-driven, so time must be a parameter, not
+  `Date.now()`. Tests fast-forward a fake clock to assert L0→L4 transitions.
+- **Mocked LLM** — no calls to Anthropic in tests; `LLMClient` is stubbed with
+  deterministic fixtures. CI runs with no `ANTHROPIC_API_KEY`.
+- **Fixtures, not live data** — seed memories from `tests/fixtures/`.
+- **Deterministic** — same input ⇒ same output; no wall-clock, no randomness, no
+  ordering by `Date.now()`.
 
-**Manuellement :**
-```bash
-# Via le script dédié
-pnpm consolidate
-
-# Ou via la CLI
-pnpm cli decay
-pnpm cli consolidate   # alias
-```
-
-**Ce que fait la consolidation :**
-- Calcule le nouveau niveau de dégradation pour chaque trace
-- Met à jour la force mnésique (saillance)
-- Applique les seuils temporels :
-  - Encodage → Consolidation : 24h
-  - Consolidation → Stable : 7 jours
-  - Stable → Fragile : 30 jours
-  - Fragile → Sommeil : 90 jours
-
-**Job cron :** `humemory-consolidation` (ID: `6e690888ce33`)
-
----
-
-## 🧪 Tests
-
-```bash
-# Run tests
-pnpm test
-
-# Watch mode
-pnpm test:watch
-```
-
----
-
-## 🔌 Intégration Agent LLM
-
-Pour intégrer humemory dans un agent (OpenCode, Claude, etc.) :
-
-```typescript
-import { SQLiteStore } from 'humemory';
-
-const store = new SQLiteStore('/mnt/d/development/humemory/data/humemory.db');
-
-// Avant de répondre à une question, chercher dans la mémoire
-async function getContextForQuestion(question: string, projectDir: string) {
-  const results = await store.search({
-    query: question,
-    directory: projectDir,
-    maxLevel: 2, // Remonter jusqu'au résumé
-    limit: 5,
-  });
-  
-  return results.map(r => ({
-    content: r.memory.content,
-    relevance: r.score,
-    recalled: r.memory.lastRecalled,
-  }));
-}
-
-// Après une réponse importante, stocker le souvenir
-async function rememberInteraction(question: string, answer: string, projectDir: string) {
-  await store.add({
-    content: `Q: ${question}\nA: ${answer}`,
-    directory: projectDir,
-    day: new Date().toISOString().split('T')[0],
-    keywords: extractKeywords(question),
-    sessionId: generateSessionId(),
-  });
-}
-```
+This environment is the precondition for Phase 5: prospective/Zeigarnik logic is
+clock- and event-driven and cannot be trusted without it.
 
 ---
 
 ## 📊 Roadmap
 
-### ✅ Terminé
+### ✅ Done — Sprints 1–4
+- Core decay + inverse search; `bun:sqlite` store (WAL, write-queue serialization)
+- CLI + Hono API + web dashboard ("palais de mémoire")
+- Nightly cron consolidation (`0 3 * * *`)
+- LLM auto-generation of L1/L2/L3 (Claude Haiku + prompt caching)
+- Similar-detection + merge (L4); enriched search (type/period/saillance/recalls)
+- Photographic mode; Claude Code `Stop` hook → session learning capture
 
-- [x] **Core** : dégradation + recherche inversée
-- [x] **Store** : SQLite + index BM25 (FlexSearch)
-- [x] **CLI** : encode/search/recall/list/decay + aliases
-- [x] **API** : Endpoints HTTP + Dashboard web
-- [x] **Tests** : Vitest (12 tests)
-- [x] **Types de mémoire** : episodic / semantic / procedural
-- [x] **Dashboard** : zones temporelles, filtres, type, search
-- [x] **Cron** : consolidation auto toutes les nuits à 3h
-- [x] **Session Mnésique** : interface intention → contexte → LLM
+### 🎯 Phase 5 — Prospective memory (the destiny)
+> Code later. This section is the spec, not yet built.
 
-### 🚧 À venir
+- [ ] **`intention` memory type** — a trace that holds a *to-do-on-cue*, not a fact.
+- [ ] **Cue table** — `{ kind: 'time' | 'event', trigger, intentionId }`. Time cues
+      ("Wednesday 9am"), event cues (open file X, branch Y, error pattern Z).
+- [ ] **`SessionStart` hook** — on session open, resolve cues for the current
+      dir/branch + decayed-but-relevant traces, inject as session context
+      ("yesterday you left *refactor fn X* open").
+- [ ] **Zeigarnik open loops** — an unclosed loop stays salient (decay paused/boosted)
+      until closed; **`git commit` closes linked loops** and purges them.
+- [ ] **Cognitive scripts** — context-triggered routine bundles, pre-loaded on cue.
 
-- [ ] **LLM** : auto-génération des niveaux (N0 → N1/N2/N3)
-- [ ] **Fusion** : détection et fusion de souvenirs similaires
-- [ ] **Agent hook** : intégration OpenCode/Claude Code
-  - [ ] Parser les sessions existantes
-  - [ ] Extraire les apprentissages (décisions, bugs, solutions)
-  - [ ] Hook temps réel pendant les sessions
-  - [ ] Encodage auto avec validation optionnelle
-- [ ] **Search enrichie** : par type, par période, par associations
-- [ ] **Photographic mode** : désactiver dégradation pour traces critiques
-
----
-
-### 🛣️ Phases futures
-
-**Phase 4 — Intégration Agents LLM** (à venir)
-- Parser les sessions OpenCode/Claude Code existantes
-- Extraire automatiquement les apprentissages
-- Hook temps réel pendant les sessions
-- Encodage auto avec validation optionnelle
+### 🛣️ Beyond
+- Shared multi-project DB with concurrency lock (WAL + advisory) — in progress
+- OpenCode / other-agent integration; export/import memories between projects
 
 ---
 
-## 🐛 Known Issues
-
-- Les niveaux N1/N2/N3 ne sont pas auto-générés (à faire manuellement via CLI options)
-- Pas de détection de fusion automatique (niveau 4)
-- La DB est partagée mais pas verrouillée (risque de race condition si multi-process)
-
----
+## 🐛 Known issues
+- SQLite multi-process: WAL + write-queue added (Sprint 4); advisory lock still open.
+- `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## 📝 Notes
-
-- **DB partagée** : `/mnt/d/development/humemory/data/humemory.db`
-- **Port API** : 3456 (configurable via `PORT` env var)
-- **Stack** : TypeScript, better-sqlite3, flexsearch, Hono, Commander
+- Shared DB: `data/humemory.db` · API port `3456` (`PORT` env)
+- Stack: TypeScript · `bun:sqlite` · `flexsearch` · `hono` · `commander` · `@anthropic-ai/sdk`
+- `CLAUDE.md` (Claude Code guidance) was removed from the tree; restore from git
+  history if needed — this AGENTS.md is now the single source of truth.
