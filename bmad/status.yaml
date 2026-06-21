@@ -3,10 +3,10 @@ phase: development
 progress: 100
 last_updated: "2026-06-21"
 
-next_action: "Verify test suite (install bun — absent from PATH) then tag v0.1.0"
-next_command: "bmad-test-unit"
-next_role: "tester"
-active_role: "reviewer"
+next_action: "Release candidate — tag v0.1.0 (build clean, 37/37 tests pass)"
+next_command: "bmad-sprint"
+next_role: "scrum"
+active_role: "tester"
 
 dependencies: []
 
@@ -157,8 +157,8 @@ qa:
           status: open
         - severity: minor
           id: QA-02
-          title: "Test suite unverified — bun not on PATH in this env; 37/37 pass claim not reproduced. Build (tsc) clean."
-          status: open
+          title: "Test suite was unverified — bun not installed. Installed bun 1.3.14; ran suite: 37 pass / 0 fail / 81 expect (3 files). Claim confirmed."
+          status: fixed
       verified:
         - "SQL fully parameterized (sqlite.ts dynamic WHERE uses static conditions + bound params) — no injection"
         - "CORS locked to localhost dev / CORS_ORIGINS prod; credentials gated"
