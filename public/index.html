@@ -4,566 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>humemory — Palais de Mémoire</title>
-  <style>
-    :root {
-      --bg: #0f0f14;
-      --surface: #1a1a24;
-      --surface-2: #252532;
-      --text: #e4e4e7;
-      --text-muted: #a1a1aa;
-      --border: #3f3f4e;
-      --primary: #8b5cf6;
-      --primary-hover: #7c3aed;
-      --encoding: #22c55e;    /* Encodage récent */
-      --consolidating: #eab308; /* En consolidation */
-      --consolidated: #f97316;  /* Consolidé */
-      --fragile: #ef4444;       /* Fragile/oubli */
-      --dormant: #6b7280;       /* En sommeil */
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .logo { font-size: 2rem; }
-
-    /* Temporal Zones */
-    .temporal-zones {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-
-    .zone-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .zone-card:hover {
-      transform: translateY(-2px);
-      border-color: var(--primary);
-    }
-
-    .zone-card.active {
-      border-color: var(--primary);
-      background: rgba(139, 92, 246, 0.1);
-    }
-
-    .zone-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: var(--encoding);
-    }
-
-    .zone-card.zone-consolidating::before { background: var(--consolidating); }
-    .zone-card.zone-consolidated::before { background: var(--consolidated); }
-    .zone-card.zone-fragile::before { background: var(--fragile); }
-    .zone-card.zone-dormant::before { background: var(--dormant); }
-
-    .zone-card h3 {
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.5rem;
-    }
-
-    .zone-card .count {
-      font-size: 2rem;
-      font-weight: 700;
-    }
-
-    .zone-card .description {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
-    }
-
-    /* Context Clusters */
-    .context-section {
-      margin-bottom: 2rem;
-    }
-
-    .context-header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .context-header h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-
-    .context-icon {
-      font-size: 1.25rem;
-    }
-
-    .memory-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .memory-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem 1.25rem;
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-      cursor: pointer;
-      transition: transform 0.15s, border-color 0.15s;
-    }
-
-    .memory-item:hover {
-      transform: translateX(4px);
-      border-color: var(--primary);
-    }
-
-    .memory-state {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      margin-top: 0.5rem;
-      position: relative;
-    }
-
-    .memory-state::after {
-      content: '';
-      position: absolute;
-      inset: -4px;
-      border-radius: 50%;
-      opacity: 0.3;
-    }
-
-    .memory-state.encoding::after { background: var(--encoding); }
-    .memory-state.consolidating::after { background: var(--consolidating); }
-    .memory-state.consolidated::after { background: var(--consolidated); }
-    .memory-state.fragile::after { background: var(--fragile); }
-    .memory-state.dormant::after { background: var(--dormant); }
-
-    .memory-state.encoding { background: var(--encoding); }
-    .memory-state.consolidating { background: var(--consolidating); }
-    .memory-state.consolidated { background: var(--consolidated); }
-    .memory-state.fragile { background: var(--fragile); }
-    .memory-state.dormant { background: var(--dormant); }
-
-    .memory-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .memory-content p {
-      font-size: 0.95rem;
-      margin-bottom: 0.5rem;
-      word-wrap: break-word;
-    }
-
-    .memory-meta {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      flex-wrap: wrap;
-    }
-
-    .memory-meta span {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-
-    .memory-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-shrink: 0;
-    }
-
-    .memory-actions button {
-      padding: 0.4rem 0.75rem;
-      font-size: 0.8rem;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      cursor: pointer;
-    }
-
-    .memory-actions button:hover {
-      background: var(--primary);
-      border-color: var(--primary);
-    }
-
-    /* Search & Filters */
-    .filters {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .search-box {
-      flex: 1;
-      min-width: 250px;
-      position: relative;
-    }
-
-    .search-box input {
-      width: 100%;
-      padding: 0.75rem 1rem 0.75rem 2.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.95rem;
-    }
-
-    .search-box input:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-
-    .search-box::before {
-      content: "🔍";
-      position: absolute;
-      left: 0.75rem;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 0.875rem;
-    }
-
-    select, button {
-      padding: 0.75rem 1rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 0.95rem;
-      cursor: pointer;
-    }
-
-    button.primary {
-      background: var(--primary);
-      border-color: var(--primary);
-    }
-
-    button.primary:hover {
-      background: var(--primary-hover);
-    }
-
-    /* Modal */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(4px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .modal-overlay.active {
-      display: flex;
-    }
-
-    .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      max-width: 700px;
-      width: 90%;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.25rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .modal-header h2 {
-      font-size: 1.25rem;
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      font-size: 1.5rem;
-      cursor: pointer;
-      color: var(--text-muted);
-    }
-
-    .modal-body {
-      padding: 1.25rem;
-    }
-
-    .memory-detail {
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-
-    .detail-row {
-      display: flex;
-      gap: 1rem;
-    }
-
-    .detail-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      min-width: 140px;
-      font-weight: 600;
-    }
-
-    .detail-value {
-      flex: 1;
-    }
-
-    /* Consolidation Bar */
-    .consolidation-track {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-    }
-
-    .consolidation-bar {
-      flex: 1;
-      display: flex;
-      gap: 2px;
-      height: 10px;
-      border-radius: 5px;
-      overflow: hidden;
-      background: var(--surface-2);
-    }
-
-    .consolidation-segment {
-      flex: 1;
-      height: 100%;
-      background: var(--encoding);
-      opacity: 0.3;
-    }
-
-    .consolidation-segment.active {
-      opacity: 1;
-    }
-
-    .consolidation-segment.stage-1 { background: var(--encoding); }
-    .consolidation-segment.stage-2 { background: var(--consolidating); }
-    .consolidation-segment.stage-3 { background: var(--consolidated); }
-    .consolidation-segment.stage-4 { background: var(--fragile); }
-    .consolidation-segment.stage-5 { background: var(--dormant); }
-
-    .consolidation-labels {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
-    }
-
-    /* Memory Strength Indicator */
-    .strength-indicator {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.4rem 0.75rem;
-      background: var(--surface-2);
-      border-radius: 999px;
-      font-size: 0.85rem;
-    }
-
-    .strength-dots {
-      display: flex;
-      gap: 2px;
-    }
-
-    .strength-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--dormant);
-    }
-
-    .strength-dot.active {
-      background: var(--encoding);
-    }
-
-    /* Tags / Retrieval Cues */
-    .cues-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    .cue-tag {
-      background: var(--surface-2);
-      padding: 0.35rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      border: 1px solid var(--border);
-    }
-
-    .cue-tag::before {
-      content: "🔗 ";
-    }
-
-    /* Photographic badge */
-    .photo-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.2rem 0.5rem;
-      background: rgba(139, 92, 246, 0.15);
-      border: 1px solid var(--primary);
-      border-radius: 999px;
-      font-size: 0.72rem;
-      color: var(--primary);
-      font-weight: 600;
-    }
-
-    .memory-item.is-photographic {
-      border-left: 3px solid var(--primary);
-    }
-
-    /* Advanced filters toggle */
-    .filters-advanced {
-      display: none;
-      gap: 1rem;
-      margin-top: 0.75rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .filters-advanced.open { display: flex; }
-
-    .filter-group {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.85rem;
-    }
-    .filter-group label { color: var(--text-muted); white-space: nowrap; }
-    .filter-group input[type="date"],
-    .filter-group input[type="number"] {
-      padding: 0.4rem 0.6rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-size: 0.85rem;
-      width: 140px;
-    }
-    .filter-group input[type="number"] { width: 70px; }
-
-    /* Similar memories panel */
-    .similar-panel {
-      margin-top: 1rem;
-      padding: 1rem;
-      background: var(--surface-2);
-      border-radius: 8px;
-      border: 1px solid var(--border);
-    }
-    .similar-panel h4 {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.75rem;
-    }
-    .similar-item {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0.6rem 0;
-      border-top: 1px solid var(--border);
-      font-size: 0.875rem;
-    }
-    .similar-item:first-of-type { border-top: none; }
-    .similar-item p { flex: 1; color: var(--text); }
-    .similar-item .score { color: var(--text-muted); font-size: 0.75rem; white-space: nowrap; }
-
-    /* Empty state */
-    .empty-state {
-      text-align: center;
-      padding: 4rem 2rem;
-      color: var(--text-muted);
-    }
-
-    .empty-state h3 {
-      font-size: 1.25rem;
-      margin-bottom: 0.5rem;
-      color: var(--text);
-    }
-
-    /* Loading */
-    .loading {
-      text-align: center;
-      padding: 2rem;
-      color: var(--text-muted);
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .container { padding: 1rem; }
-      .filters { flex-direction: column; }
-      .search-box { min-width: 100%; }
-      .memory-item { flex-direction: column; }
-      .memory-actions { width: 100%; justify-content: flex-end; }
-    }
-  </style>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -579,89 +22,113 @@
       </div>
     </header>
 
-    <!-- Temporal Zones -->
-    <div class="temporal-zones" id="temporalZones">
-      <div class="zone-card zone-encoding" onclick="filterByZone('encoding')">
-        <h3>Encodage récent</h3>
-        <div class="count" id="countEncoding">0</div>
-        <div class="description">Formé aujourd'hui</div>
-      </div>
-      <div class="zone-card zone-consolidating" onclick="filterByZone('consolidating')">
-        <h3>En consolidation</h3>
-        <div class="count" id="countConsolidating">0</div>
-        <div class="description">Cette semaine</div>
-      </div>
-      <div class="zone-card zone-consolidated" onclick="filterByZone('consolidated')">
-        <h3>Consolidé</h3>
-        <div class="count" id="countConsolidated">0</div>
-        <div class="description">Ce mois</div>
-      </div>
-      <div class="zone-card zone-fragile" onclick="filterByZone('fragile')">
-        <h3>Fragile</h3>
-        <div class="count" id="countFragile">0</div>
-        <div class="description">Risque d'oubli</div>
-      </div>
-      <div class="zone-card zone-dormant" onclick="filterByZone('dormant')">
-        <h3>En sommeil</h3>
-        <div class="count" id="countDormant">0</div>
-        <div class="description">Mémoire lointaine</div>
-      </div>
-    </div>
+    <nav class="tab-nav">
+      <button class="tab active" data-tab="dashboard">📊 Dashboard</button>
+      <button class="tab" data-tab="river">🌊 River</button>
+      <button class="tab" data-tab="galaxy">🌌 Galaxy</button>
+      <button class="tab" data-tab="replay">🔄 Replay</button>
+      <button class="tab" data-tab="promenade">🚶 Promenade</button>
+    </nav>
 
-    <!-- Search & Filters -->
-    <div class="filters">
-      <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Recherche par indice de récupération..." oninput="debouncedSearch()">
-      </div>
-      <select id="typeFilter" onchange="loadMemories()">
-        <option value="">Tous les types</option>
-        <option value="episodic">📅 Episodique</option>
-        <option value="semantic">📖 Sémantique</option>
-        <option value="procedural">⚡ Procédurale</option>
-      </select>
-      <select id="contextFilter" onchange="loadMemories()">
-        <option value="">Tous les contextes</option>
-      </select>
-      <select id="sortBy" onchange="loadMemories()">
-        <option value="encodage">Date d'encodage</option>
-        <option value="force">Force mnésique</option>
-        <option value="reactivations">Réactivations</option>
-      </select>
-      <button onclick="toggleAdvancedFilters()" id="btnAdvanced" title="Filtres avancés" style="padding: 0.75rem; font-size: 1rem; background: var(--surface); border: 1px solid var(--border);">⚙️</button>
-    </div>
-    <div class="filters-advanced" id="advancedFilters">
-      <div class="filter-group">
-        <label>De</label>
-        <input type="date" id="filterFrom" onchange="loadMemories()">
-      </div>
-      <div class="filter-group">
-        <label>À</label>
-        <input type="date" id="filterTo" onchange="loadMemories()">
-      </div>
-      <div class="filter-group">
-        <label>Force min</label>
-        <input type="number" id="filterMinSaillance" min="0" max="100" placeholder="0" onchange="loadMemories()">
-      </div>
-      <div class="filter-group">
-        <label>Réactivations min</label>
-        <input type="number" id="filterMinRecalls" min="0" placeholder="0" onchange="loadMemories()">
-      </div>
-      <div class="filter-group">
-        <label>
-          <input type="checkbox" id="filterPhotographic" onchange="loadMemories()" style="margin-right: 0.3rem;">
-          🔒 Photographique seulement
-        </label>
-      </div>
-      <button onclick="clearAdvancedFilters()" style="font-size: 0.8rem; padding: 0.4rem 0.75rem; background: var(--surface-2);">Réinitialiser</button>
-    </div>
+    <main class="tab-content">
+      <section id="tab-dashboard" class="tab-pane active">
+        <div class="temporal-zones" id="temporalZones">
+          <div class="zone-card zone-encoding" onclick="filterByZone('encoding')">
+            <h3>Encodage récent</h3>
+            <div class="count" id="countEncoding">0</div>
+            <div class="description">Formé aujourd'hui</div>
+          </div>
+          <div class="zone-card zone-consolidating" onclick="filterByZone('consolidating')">
+            <h3>En consolidation</h3>
+            <div class="count" id="countConsolidating">0</div>
+            <div class="description">Cette semaine</div>
+          </div>
+          <div class="zone-card zone-consolidated" onclick="filterByZone('consolidated')">
+            <h3>Consolidé</h3>
+            <div class="count" id="countConsolidated">0</div>
+            <div class="description">Ce mois</div>
+          </div>
+          <div class="zone-card zone-fragile" onclick="filterByZone('fragile')">
+            <h3>Fragile</h3>
+            <div class="count" id="countFragile">0</div>
+            <div class="description">Risque d'oubli</div>
+          </div>
+          <div class="zone-card zone-dormant" onclick="filterByZone('dormant')">
+            <h3>En sommeil</h3>
+            <div class="count" id="countDormant">0</div>
+            <div class="description">Mémoire lointaine</div>
+          </div>
+        </div>
 
-    <!-- Memory by Context -->
-    <div id="memoryContainer">
-      <div class="loading">Chargement des traces mnésiques...</div>
-    </div>
+        <div class="filters">
+          <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Recherche par indice de récupération..." oninput="debouncedSearch()">
+          </div>
+          <select id="typeFilter" onchange="loadMemories()">
+            <option value="">Tous les types</option>
+            <option value="episodic">📅 Episodique</option>
+            <option value="semantic">📖 Sémantique</option>
+            <option value="procedural">⚡ Procédurale</option>
+          </select>
+          <select id="contextFilter" onchange="loadMemories()">
+            <option value="">Tous les contextes</option>
+          </select>
+          <select id="sortBy" onchange="loadMemories()">
+            <option value="encodage">Date d'encodage</option>
+            <option value="force">Force mnésique</option>
+            <option value="reactivations">Réactivations</option>
+          </select>
+          <button onclick="toggleAdvancedFilters()" id="btnAdvanced" title="Filtres avancés" style="padding: 0.75rem; font-size: 1rem; background: var(--surface); border: 1px solid var(--border);">⚙️</button>
+        </div>
+        <div class="filters-advanced" id="advancedFilters">
+          <div class="filter-group">
+            <label>De</label>
+            <input type="date" id="filterFrom" onchange="loadMemories()">
+          </div>
+          <div class="filter-group">
+            <label>À</label>
+            <input type="date" id="filterTo" onchange="loadMemories()">
+          </div>
+          <div class="filter-group">
+            <label>Force min</label>
+            <input type="number" id="filterMinSaillance" min="0" max="100" placeholder="0" onchange="loadMemories()">
+          </div>
+          <div class="filter-group">
+            <label>Réactivations min</label>
+            <input type="number" id="filterMinRecalls" min="0" placeholder="0" onchange="loadMemories()">
+          </div>
+          <div class="filter-group">
+            <label>
+              <input type="checkbox" id="filterPhotographic" onchange="loadMemories()" style="margin-right: 0.3rem;">
+              🔒 Photographique seulement
+            </label>
+          </div>
+          <button onclick="clearAdvancedFilters()" style="font-size: 0.8rem; padding: 0.4rem 0.75rem; background: var(--surface-2);">Réinitialiser</button>
+        </div>
+
+        <div id="memoryContainer">
+          <div class="loading">Chargement des traces mnésiques...</div>
+        </div>
+      </section>
+
+      <section id="tab-river" class="tab-pane">
+        <div class="river-container" id="riverCanvas"></div>
+      </section>
+
+      <section id="tab-galaxy" class="tab-pane">
+        <div class="galaxy-container" id="galaxyCanvas"></div>
+      </section>
+
+      <section id="tab-replay" class="tab-pane">
+        <div id="replayContainer"></div>
+      </section>
+
+      <section id="tab-promenade" class="tab-pane">
+        <div class="promenade-container" id="promenadeCanvas"></div>
+      </section>
+    </main>
   </div>
 
-  <!-- Detail Modal -->
   <div class="modal-overlay" id="detailModal">
     <div class="modal">
       <div class="modal-header">
@@ -672,7 +139,6 @@
     </div>
   </div>
 
-  <!-- Add Modal -->
   <div class="modal-overlay" id="addModal">
     <div class="modal">
       <div class="modal-header">
@@ -717,555 +183,36 @@
     </div>
   </div>
 
+  <script src="/js/api.js"></script>
+  <script src="/js/decay.js"></script>
+  <script src="/js/decay-curve.js"></script>
+  <script src="/js/dashboard.js"></script>
+  <script src="/js/river.js"></script>
+  <script src="/js/galaxy.js"></script>
+  <script src="/js/replay.js"></script>
+  <script src="/js/promenade.js"></script>
   <script>
-    const API_BASE = '';
-    let currentMemories = [];
-    let searchTimeout;
-    let currentZone = null;
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
 
-    // Human temporal zones
-    const ZONES = {
-      encoding: { label: 'Encodage récent', maxHours: 24 },
-      consolidating: { label: 'En consolidation', maxHours: 24 * 7 },
-      consolidated: { label: 'Consolidé', maxHours: 24 * 30 },
-      fragile: { label: 'Fragile', maxHours: 24 * 90 },
-      dormant: { label: 'En sommeil', maxHours: Infinity }
-    };
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
 
-    function getMemoryZone(createdAt, currentLevel, saillance) {
-      const hours = (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
-      
-      // Niveau 4 = dormant
-      if (currentLevel === 4) return 'dormant';
-      
-      // Saillance très basse = fragile
-      if (saillance < 30) return 'fragile';
-      
-      // Temporal zones
-      if (hours < ZONES.encoding.maxHours) return 'encoding';
-      if (hours < ZONES.consolidating.maxHours) return 'consolidating';
-      if (hours < ZONES.consolidated.maxHours) return 'consolidated';
-      if (hours < ZONES.fragile.maxHours) return 'fragile';
-      return 'dormant';
-    }
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
 
-    function getConsolidationLevel(currentLevel) {
-      const labels = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-      return labels[currentLevel] || 'Inconnu';
-    }
-
-    async function loadMemories() {
-      const container = document.getElementById('memoryContainer');
-      container.innerHTML = '<div class="loading">Chargement des traces mnésiques...</div>';
-
-      try {
-        const params = new URLSearchParams();
-        const level = document.getElementById('levelFilter')?.value;
-        if (level) params.set('level', level);
-        
-        const response = await fetch(`${API_BASE}/memories?${params}`);
-        const data = await response.json();
-        currentMemories = data.memories || [];
-        
-        // Update context filter
-        updateContextFilter(currentMemories);
-        
-        // Sort
-        const sortBy = document.getElementById('sortBy').value;
-        if (sortBy === 'force') {
-          currentMemories.sort((a, b) => b.saillance - a.saillance);
-        } else if (sortBy === 'reactivations') {
-          currentMemories.sort((a, b) => b.recallCount - a.recallCount);
-        } else {
-          currentMemories.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        }
-
-        // Group by context
-        groupAndRender(currentMemories);
-        updateTemporalZones(currentMemories);
-      } catch (error) {
-        container.innerHTML = `<div class="empty-state"><h3>Erreur de récupération</h3><p>${error.message}</p></div>`;
-      }
-    }
-
-    function updateContextFilter(memories) {
-      const contexts = [...new Set(memories.map(m => m.directory))];
-      const select = document.getElementById('contextFilter');
-      
-      if (contexts.length === 0) return;
-      
-      select.innerHTML = '<option value="">Tous les contextes</option>' +
-        contexts.map(c => `<option value="${c}">${c}</option>`).join('');
-    }
-
-    function groupAndRender(memories) {
-      const container = document.getElementById('memoryContainer');
-      
-      // Filter by zone if selected
-      if (currentZone) {
-        memories = memories.filter(m => getMemoryZone(m.createdAt, m.currentLevel, m.saillance) === currentZone);
-      }
-
-      // Filter by type
-      const typeFilter = document.getElementById('typeFilter').value;
-      if (typeFilter) {
-        memories = memories.filter(m => m.memoryType === typeFilter);
-      }
-
-      // Filter by context
-      const contextFilter = document.getElementById('contextFilter').value;
-      if (contextFilter) {
-        memories = memories.filter(m => m.directory === contextFilter);
-      }
-
-      // Advanced filters (local — on already-loaded memories)
-      const minS = parseInt(document.getElementById('filterMinSaillance').value);
-      const minR = parseInt(document.getElementById('filterMinRecalls').value);
-      const fromVal = document.getElementById('filterFrom').value;
-      const toVal = document.getElementById('filterTo').value;
-      const photoOnly = document.getElementById('filterPhotographic').checked;
-      if (!isNaN(minS) && minS > 0) memories = memories.filter(m => m.saillance >= minS);
-      if (!isNaN(minR) && minR > 0) memories = memories.filter(m => m.recallCount >= minR);
-      if (fromVal) memories = memories.filter(m => m.day >= fromVal);
-      if (toVal) memories = memories.filter(m => m.day <= toVal);
-      if (photoOnly) memories = memories.filter(m => m.photographic);
-
-      if (memories.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <h3>Aucune trace mnésique</h3>
-            <p>Commencez par encoder votre premier souvenir</p>
-          </div>
-        `;
-        return;
-      }
-
-      // Group by context (lieu mental)
-      const byContext = {};
-      memories.forEach(m => {
-        if (!byContext[m.directory]) {
-          byContext[m.directory] = [];
-        }
-        byContext[m.directory].push(m);
-      });
-
-      container.innerHTML = Object.entries(byContext).map(([context, memories]) => `
-        <div class="context-section">
-          <div class="context-header">
-            <span class="context-icon">📍</span>
-            <h2>${context}</h2>
-            <span style="color: var(--text-muted); font-size: 0.9rem;">${memories.length} trace${memories.length > 1 ? 's' : ''}</span>
-          </div>
-          <div class="memory-list">
-            ${memories.map(m => renderMemoryItem(m)).join('')}
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderMemoryItem(memory) {
-      const zone = getMemoryZone(memory.createdAt, memory.currentLevel, memory.saillance);
-      const stateClass = zone;
-      const typeIcon = memory.memoryType === 'episodic' ? '📅' : memory.memoryType === 'semantic' ? '📖' : '⚡';
-      const typeLabel = memory.memoryType === 'episodic' ? 'Episodique' : memory.memoryType === 'semantic' ? 'Sémantique' : 'Procédurale';
-      const photoBadge = memory.photographic ? `<span class="photo-badge">🔒 Photo</span>` : '';
-
-      return `
-        <div class="memory-item ${memory.photographic ? 'is-photographic' : ''}" onclick="showDetail('${memory.id}')">
-          <div class="memory-state ${stateClass}" title="${getConsolidationLevel(memory.currentLevel)}"></div>
-          <div class="memory-content">
-            <p>${escapeHtml(memory.content.slice(0, 200))}${memory.content.length > 200 ? '…' : ''}</p>
-            <div class="memory-meta">
-              <span>🕐 ${getRelativeTime(memory.createdAt)}</span>
-              <span>🔁 ${memory.recallCount} réactivation${memory.recallCount > 1 ? 's' : ''}</span>
-              <span class="strength-indicator">
-                <span>Force</span>
-                <div class="strength-dots">
-                  ${[1,2,3,4,5].map(i => `<div class="strength-dot ${memory.saillance >= i * 20 ? 'active' : ''}"></div>`).join('')}
-                </div>
-              </span>
-              <span class="cue-tag" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${typeIcon} ${typeLabel}</span>
-              ${photoBadge}
-            </div>
-          </div>
-          <div class="memory-actions">
-            <button onclick="event.stopPropagation(); recallMemory('${memory.id}')" title="Réactiver cette trace">🔄</button>
-            <button onclick="event.stopPropagation(); togglePhotographic('${memory.id}', ${!memory.photographic})" title="${memory.photographic ? 'Désactiver mode photo' : 'Activer mode photo'}">${memory.photographic ? '🔓' : '🔒'}</button>
-          </div>
-        </div>
-      `;
-    }
-
-    function updateTemporalZones(memories) {
-      const counts = { encoding: 0, consolidating: 0, consolidated: 0, fragile: 0, dormant: 0 };
-      
-      memories.forEach(m => {
-        const zone = getMemoryZone(m.createdAt, m.currentLevel, m.saillance);
-        counts[zone]++;
-      });
-
-      document.getElementById('countEncoding').textContent = counts.encoding;
-      document.getElementById('countConsolidating').textContent = counts.consolidating;
-      document.getElementById('countConsolidated').textContent = counts.consolidated;
-      document.getElementById('countFragile').textContent = counts.fragile;
-      document.getElementById('countDormant').textContent = counts.dormant;
-    }
-
-    function filterByZone(zone) {
-      currentZone = currentZone === zone ? null : zone;
-      
-      // Update active state
-      document.querySelectorAll('.zone-card').forEach(card => {
-        card.classList.remove('active');
-      });
-      if (currentZone) {
-        document.querySelector(`.zone-${currentZone}`).classList.add('active');
-      }
-      
-      loadMemories();
-    }
-
-    function showDetail(id) {
-      const memory = currentMemories.find(m => m.id === id);
-      if (!memory) return;
-
-      const zone = getMemoryZone(memory.createdAt, memory.currentLevel, memory.saillance);
-      const consolidationLevel = getConsolidationLevel(memory.currentLevel);
-
-      const content = document.getElementById('modalContent');
-      content.innerHTML = `
-        <div class="memory-detail">
-          <div>
-            <div class="detail-label">Trace mnésique</div>
-            <div class="detail-value" style="font-size: 1.1rem; margin-top: 0.5rem;">${escapeHtml(memory.content)}</div>
-          </div>
-          
-          <div class="detail-row">
-            <div class="detail-label">État de consolidation</div>
-            <div class="detail-value">
-              <span style="font-size: 1.1rem;">${consolidationLevel}</span>
-              <div class="consolidation-track">
-                <div class="consolidation-bar">
-                  <div class="consolidation-segment stage-1 ${memory.currentLevel >= 0 ? 'active' : ''}"></div>
-                  <div class="consolidation-segment stage-2 ${memory.currentLevel >= 1 ? 'active' : ''}"></div>
-                  <div class="consolidation-segment stage-3 ${memory.currentLevel >= 2 ? 'active' : ''}"></div>
-                  <div class="consolidation-segment stage-4 ${memory.currentLevel >= 3 ? 'active' : ''}"></div>
-                  <div class="consolidation-segment stage-5 ${memory.currentLevel >= 4 ? 'active' : ''}"></div>
-                </div>
-              </div>
-              <div class="consolidation-labels">
-                <span>Encodage</span>
-                <span>Consolidation</span>
-                <span>Stable</span>
-                <span>Fragile</span>
-                <span>Sommeil</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Type de mémoire</div>
-            <div class="detail-value">
-              <span class="cue-tag">${memory.memoryType === 'episodic' ? '📅 Episodique' : memory.memoryType === 'semantic' ? '📖 Sémantique' : '⚡ Procédurale'}</span>
-            </div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Lieu mental</div>
-            <div class="detail-value">${escapeHtml(memory.directory)}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Contexte d'encodage</div>
-            <div class="detail-value">${escapeHtml(memory.sessionId)}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Date d'encodage</div>
-            <div class="detail-value">${new Date(memory.createdAt).toLocaleString('fr-FR')}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Dernière réactivation</div>
-            <div class="detail-value">${memory.lastRecalled ? new Date(memory.lastRecalled).toLocaleString('fr-FR') : 'Jamais réactivé'}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Nombre de réactivations</div>
-            <div class="detail-value">${memory.recallCount}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Force mnésique</div>
-            <div class="detail-value">
-              <span class="strength-indicator">
-                <span>${memory.saillance}/100</span>
-                <div class="strength-dots">
-                  ${[1,2,3,4,5].map(i => `<div class="strength-dot ${memory.saillance >= i * 20 ? 'active' : ''}"></div>`).join('')}
-                </div>
-              </span>
-            </div>
-          </div>
-
-          <div class="detail-row">
-            <div class="detail-label">Taux d'oubli</div>
-            <div class="detail-value">${(memory.decayRate * 100).toFixed(0)}%</div>
-          </div>
-
-          ${memory.keywords && memory.keywords.length > 0 ? `
-          <div>
-            <div class="detail-label">Indices de récupération</div>
-            <div class="cues-list">
-              ${memory.keywords.map(k => `<span class="cue-tag">${escapeHtml(k)}</span>`).join('')}
-            </div>
-          </div>
-          ` : ''}
-
-          ${memory.level3Keywords ? `
-          <div>
-            <div class="detail-label">Trace pour recherche</div>
-            <div class="detail-value">${escapeHtml(memory.level3Keywords)}</div>
-          </div>
-          ` : ''}
-
-          <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
-            <button class="primary" onclick="recallMemory('${memory.id}')">🔄 Réactiver</button>
-            <button onclick="togglePhotographic('${memory.id}', ${!memory.photographic})" style="background: var(--surface-2); border-color: ${memory.photographic ? 'var(--primary)' : 'var(--border)'}; color: ${memory.photographic ? 'var(--primary)' : 'var(--text)'};">${memory.photographic ? '🔒 Photo actif' : '🔓 Activer photo'}</button>
-            <button onclick="showSimilar('${memory.id}')" style="background: var(--surface-2);">🔍 Similaires</button>
-            <button onclick="deleteMemory('${memory.id}')" style="background: #ef4444; border-color: #ef4444; margin-left: auto;">🗑️ Oublier</button>
-          </div>
-          <div id="similarPanel-${memory.id}"></div>
-        </div>
-      `;
-
-      document.getElementById('detailModal').classList.add('active');
-    }
-
-    function showAddModal() {
-      document.getElementById('addModal').classList.add('active');
-      document.getElementById('addContent').focus();
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('active');
-    }
-
-    async function addMemory(event) {
-      event.preventDefault();
-      
-      const content = document.getElementById('addContent').value;
-      const directory = document.getElementById('addDirectory').value;
-      const sessionId = document.getElementById('addSession').value;
-      const keywordsStr = document.getElementById('addKeywords').value;
-      const level3 = document.getElementById('addLevel3').value;
-      const memoryType = document.getElementById('addMemoryType').value;
-
-      try {
-        const response = await fetch(`${API_BASE}/memories`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content,
-            directory,
-            sessionId,
-            keywords: keywordsStr ? keywordsStr.split(',').map(k => k.trim()).filter(Boolean) : [],
-            level3Keywords: level3,
-            memoryType,
-          }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          closeModal('addModal');
-          document.getElementById('addContent').value = '';
-          document.getElementById('addKeywords').value = '';
-          document.getElementById('addLevel3').value = '';
-          loadMemories();
-        } else {
-          alert('Erreur: ' + data.error);
-        }
-      } catch (error) {
-        alert('Erreur: ' + error.message);
-      }
-    }
-
-    async function recallMemory(id) {
-      try {
-        await fetch(`${API_BASE}/memories/${id}/recall`, { method: 'POST' });
-        loadMemories();
-      } catch (error) {
-        alert('Erreur: ' + error.message);
-      }
-    }
-
-    async function deleteMemory(id) {
-      if (!confirm('Oublier cette trace mnésique ?')) return;
-      
-      try {
-        await fetch(`${API_BASE}/memories/${id}`, { method: 'DELETE' });
-        loadMemories();
-      } catch (error) {
-        alert('Erreur: ' + error.message);
-      }
-    }
-
-    async function searchMemories(query) {
-      if (!query) {
-        loadMemories();
-        return;
-      }
-
-      try {
-        const params = new URLSearchParams({ q: query });
-        const type = document.getElementById('typeFilter').value;
-        const from = document.getElementById('filterFrom').value;
-        const to = document.getElementById('filterTo').value;
-        const minS = document.getElementById('filterMinSaillance').value;
-        const minR = document.getElementById('filterMinRecalls').value;
-        if (type) params.set('type', type);
-        if (from) params.set('dateFrom', from);
-        if (to) params.set('dateTo', to);
-        if (minS) params.set('minSaillance', minS);
-        if (minR) params.set('minRecalls', minR);
-
-        const response = await fetch(`${API_BASE}/search?${params}`);
-        const data = await response.json();
-        let memories = data.results ? data.results.map(r => r.memory) : [];
-        if (document.getElementById('filterPhotographic').checked) {
-          memories = memories.filter(m => m.photographic);
-        }
-        currentMemories = memories;
-        groupAndRender(memories);
-      } catch (error) {
-        console.error('Search error:', error);
-      }
-    }
-
-    async function togglePhotographic(id, enable) {
-      try {
-        await fetch(`${API_BASE}/memories/${id}/photo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enable }),
-        });
-        loadMemories();
-        closeModal('detailModal');
-      } catch (error) {
-        alert('Erreur: ' + error.message);
-      }
-    }
-
-    async function showSimilar(id) {
-      const panel = document.getElementById(`similarPanel-${id}`);
-      if (!panel) return;
-
-      panel.innerHTML = '<div class="similar-panel"><h4>Recherche en cours…</h4></div>';
-
-      try {
-        const res = await fetch(`${API_BASE}/memories/${id}/similar?limit=5&threshold=30`);
-        const data = await res.json();
-        const results = data.results || [];
-
-        if (results.length === 0) {
-          panel.innerHTML = '<div class="similar-panel"><h4>Aucune trace similaire trouvée</h4></div>';
-          return;
-        }
-
-        panel.innerHTML = `
-          <div class="similar-panel">
-            <h4>Traces similaires (${results.length})</h4>
-            ${results.map(r => `
-              <div class="similar-item">
-                <p>${escapeHtml(r.memory.content.slice(0, 120))}${r.memory.content.length > 120 ? '…' : ''}</p>
-                <span class="score">Score ${Math.round(r.score)}</span>
-                <button onclick="confirmMerge('${id}', '${r.memory.id}')" style="padding: 0.3rem 0.6rem; font-size: 0.78rem; white-space: nowrap;">🔀 Fusionner</button>
-              </div>
-            `).join('')}
-          </div>
-        `;
-      } catch (error) {
-        panel.innerHTML = `<div class="similar-panel"><h4>Erreur: ${error.message}</h4></div>`;
-      }
-    }
-
-    async function confirmMerge(sourceId, targetId) {
-      const source = currentMemories.find(m => m.id === sourceId);
-      const target = currentMemories.find(m => m.id === targetId);
-      const label = target ? target.content.slice(0, 60) + '…' : targetId;
-      if (!confirm(`Fusionner dans "${label}" ?\n\nLa trace source passera en niveau 4 (fusionnée).`)) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/memories/${sourceId}/merge`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetId }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          closeModal('detailModal');
-          loadMemories();
-        } else {
-          alert('Erreur: ' + data.error);
-        }
-      } catch (error) {
-        alert('Erreur: ' + error.message);
-      }
-    }
-
-    function toggleAdvancedFilters() {
-      const panel = document.getElementById('advancedFilters');
-      const btn = document.getElementById('btnAdvanced');
-      panel.classList.toggle('open');
-      btn.style.borderColor = panel.classList.contains('open') ? 'var(--primary)' : 'var(--border)';
-    }
-
-    function clearAdvancedFilters() {
-      document.getElementById('filterFrom').value = '';
-      document.getElementById('filterTo').value = '';
-      document.getElementById('filterMinSaillance').value = '';
-      document.getElementById('filterMinRecalls').value = '';
-      document.getElementById('filterPhotographic').checked = false;
-      loadMemories();
-    }
-
-    function debouncedSearch() {
-      clearTimeout(searchTimeout);
-      const query = document.getElementById('searchInput').value;
-      searchTimeout = setTimeout(() => searchMemories(query), 300);
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function getRelativeTime(date) {
-      const now = new Date();
-      const d = new Date(date);
-      const diffMs = now - d;
-      const diffMins = Math.floor(diffMs / (1000 * 60));
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-      if (diffMins < 1) return "À l'instant";
-      if (diffMins < 60) return `Il y a ${diffMins} min`;
-      if (diffHours < 24) return `Il y a ${diffHours} h`;
-      if (diffDays < 7) return `Il y a ${diffDays} j`;
-      return d.toLocaleDateString('fr-FR');
-    }
-
-    // Close modal on overlay click
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          overlay.classList.remove('active');
+        if (tabName === 'river') {
+          setTimeout(() => initRiver(), 100);
+        } else if (tabName === 'galaxy') {
+          setTimeout(() => initGalaxy(), 100);
+        } else if (tabName === 'replay') {
+          setTimeout(() => initReplay(), 100);
+        } else if (tabName === 'promenade') {
+          setTimeout(() => initPromenade(), 100);
         }
       });
     });
-
-    // Initial load
-    loadMemories();
   </script>
 </body>
 </html>

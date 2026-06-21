@@ -1,12 +1,12 @@
 project: "humemory"
 phase: development
 progress: 100
-last_updated: "2026-05-03"
+last_updated: "2026-06-21"
 
-next_action: "Release candidate — pnpm build + tag v0.1.0"
-next_command: "bmad-sprint"
-next_role: "scrum"
-active_role: "dev"
+next_action: "Verify test suite (install bun — absent from PATH) then tag v0.1.0"
+next_command: "bmad-test-unit"
+next_role: "tester"
+active_role: "reviewer"
 
 dependencies: []
 
@@ -139,3 +139,27 @@ sprints:
 
 qa:
   bugs: []
+  audits:
+    - id: AUDIT-2026-06-21
+      role: reviewer
+      health_score: 7
+      scope: "Uncommitted roadmap work — dashboard refactor (index.html -1185 LOC) + new API endpoints (server.ts +110)"
+      findings:
+        - severity: critical
+          id: SEC-01
+          title: "Path traversal in /css/*, /js/*, /assets/* static handlers (CWE-22)"
+          detail: "filePath taken from c.req.path with no containment; ../ escaped PUBLIC_DIR → arbitrary file read"
+          status: fixed
+          fix: "Added safeJoin() resolve-based containment guard in src/api/server.ts; build clean"
+        - severity: minor
+          id: QA-01
+          title: "Sprint 3 absent from status.yaml (jumps S2→S4); S1-03/04/05 tests_executed:false"
+          status: open
+        - severity: minor
+          id: QA-02
+          title: "Test suite unverified — bun not on PATH in this env; 37/37 pass claim not reproduced. Build (tsc) clean."
+          status: open
+      verified:
+        - "SQL fully parameterized (sqlite.ts dynamic WHERE uses static conditions + bound params) — no injection"
+        - "CORS locked to localhost dev / CORS_ORIGINS prod; credentials gated"
+        - "/sessions/:id filters in-memory only, no file read"

@@ -15,12 +15,24 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { SQLiteStore } from '../store/sqlite.js';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Resolve a request-supplied path under a trusted base dir, refusing any
+ * result that escapes the base (path traversal / CWE-22). Returns null if
+ * the path would leave baseDir.
+ */
+function safeJoin(baseDir: string, ...segments: string[]): string | null {
+  const base = resolve(baseDir);
+  const full = resolve(base, ...segments);
+  if (full !== base && !full.startsWith(base + sep)) return null;
+  return full;
+}
 
 const DB_PATH = join(__dirname, '../../data/humemory.db');
 const store = new SQLiteStore(DB_PATH);
@@ -52,9 +64,34 @@ app.get('/session', (c) => {
   return c.html(html);
 });
 
+app.get('/css/*', (c) => {
+  const filePath = c.req.path.replace('/css/', '');
+  const fullPath = safeJoin(PUBLIC_DIR, 'css', filePath);
+  if (!fullPath) return c.notFound();
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'text/css' });
+  } catch {
+    return c.notFound();
+  }
+});
+
+app.get('/js/*', (c) => {
+  const filePath = c.req.path.replace('/js/', '');
+  const fullPath = safeJoin(PUBLIC_DIR, 'js', filePath);
+  if (!fullPath) return c.notFound();
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'application/javascript' });
+  } catch {
+    return c.notFound();
+  }
+});
+
 app.get('/assets/*', (c) => {
   const filePath = c.req.path.replace('/assets/', '');
-  const fullPath = join(PUBLIC_DIR, filePath);
+  const fullPath = safeJoin(PUBLIC_DIR, filePath);
+  if (!fullPath) return c.notFound();
   try {
     const content = readFileSync(fullPath, 'utf-8');
     const ext = filePath.split('.').pop();
@@ -238,6 +275,94 @@ app.get('/status', async (c) => {
         recalls: parseFloat(avgRecalls.toFixed(1)),
       },
     },
+  });
+});
+
+// === SESSIONS (for Replay visualization) ===
+app.get('/sessions', async (c) => {
+  const memories = await store.list({ limit: 1000 });
+
+  const sessionMap = new Map<string, { sessionId: string; count: number; firstEvent: Date; lastEvent: Date; directory: string }>();
+
+  for (const m of memories) {
+    const existing = sessionMap.get(m.sessionId);
+    if (existing) {
+      existing.count++;
+      if (new Date(m.createdAt) < existing.firstEvent) existing.firstEvent = new Date(m.createdAt);
+      if (new Date(m.createdAt) > existing.lastEvent) existing.lastEvent = new Date(m.createdAt);
+    } else {
+      sessionMap.set(m.sessionId, {
+        sessionId: m.sessionId,
+        count: 1,
+        firstEvent: new Date(m.createdAt),
+        lastEvent: new Date(m.createdAt),
+        directory: m.directory,
+      });
+    }
+  }
+
+  const sessions = Array.from(sessionMap.values())
+    .sort((a, b) => b.lastEvent.getTime() - a.lastEvent.getTime());
+
+  return c.json({ success: true, sessions });
+});
+
+app.get('/sessions/:id', async (c) => {
+  const sessionId = decodeURIComponent(c.req.param('id'));
+  const memories = await store.list({ limit: 1000 });
+
+  const sessionMemories = memories.filter(m => m.sessionId === sessionId);
+
+  const events: Array<{
+    type: 'encoded' | 'decayed' | 'recalled';
+    timestamp: Date;
+    content: string;
+    memoryId: string;
+    level?: number;
+    saillance?: number;
+  }> = [];
+
+  for (const m of sessionMemories) {
+    events.push({
+      type: 'encoded',
+      timestamp: new Date(m.createdAt),
+      content: m.content,
+      memoryId: m.id,
+      level: m.currentLevel,
+      saillance: m.saillance,
+    });
+
+    if (m.lastRecalled) {
+      events.push({
+        type: 'recalled',
+        timestamp: new Date(m.lastRecalled),
+        content: m.content,
+        memoryId: m.id,
+        level: m.currentLevel,
+        saillance: m.saillance,
+      });
+    }
+
+    if (m.currentLevel > 0) {
+      const decayTime = new Date(new Date(m.createdAt).getTime() + 24 * 60 * 60 * 1000);
+      events.push({
+        type: 'decayed',
+        timestamp: decayTime,
+        content: m.content,
+        memoryId: m.id,
+        level: m.currentLevel,
+        saillance: m.saillance,
+      });
+    }
+  }
+
+  events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  return c.json({
+    success: true,
+    sessionId,
+    events,
+    totalMemories: sessionMemories.length,
   });
 });
 
