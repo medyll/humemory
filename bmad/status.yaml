@@ -1,12 +1,12 @@
 project: "humemory"
 phase: development
-progress: 100
-last_updated: "2026-06-21"
+progress: 75
+last_updated: "2026-06-24"
 
-next_action: "Release candidate — tag v0.1.0 (build clean, 37/37 tests pass)"
-next_command: "bmad-sprint"
-next_role: "scrum"
-active_role: "tester"
+next_action: "Sprint 5 — Phase 5.0 préconditions : implémenter advisory lock SQLite cross-process (closes Bug #3) + event bus injectable dans test env"
+next_command: "bmad-sprint-story"
+next_role: "architect"
+active_role: "scrum"
 
 dependencies: []
 
@@ -27,16 +27,16 @@ marketing:
   - "API HTTP + CLI + lib importable — intègre dans tout projet"
 
 product:
-  - "Core complet: decay, search inversée, SQLite (bun:sqlite), CLI, API, dashboard"
-  - "12 tests passent, build OK avec tsc local 5.9.3 + bun:sqlite"
-  - "Sprint 2 terminé: LLM levels, fusion, hook Claude Code, search enrichie, photographic"
-  - "37 tests passent, build TypeScript clean — prêt pour release ou Sprint 3 (DB lock)"
+  - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL, CLI, API, dashboard"
+  - "Sprints 1+2+4 livrés (37/37 tests). 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve)"
+  - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
+  - "Sprint 5 ouvert : Phase 5.0 préconditions (advisory lock + event bus testable) avant data model intentions/cues"
 
 far_vision:
-  - "Hook temps réel Claude Code/OpenCode: parse sessions, extrait apprentissages auto"
-  - "Photographic mode: désactiver dégradation pour traces critiques"
-  - "Search enrichie: par type, période, associations sémantiques"
-  - "DB partagée multi-projet avec verrou concurrence"
+  - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
+  - "Zeigarnik effect : git commit ferme les loops via marker explicite ou heuristique fichiers"
+  - "DB partagée multi-projet avec advisory lock (Phase 5.0)"
+  - "Cognitive scripts (Phase 6) : routines pré-chargées sur cue — spec à écrire"
 
 artifacts:
   prd: missing
@@ -137,8 +137,78 @@ sprints:
         test_output: "bun test — 37/37 pass"
         test_result: pass
 
+  # Note: Sprint 3 n'a jamais été ouvert (flag par QA-01). Numérotation conservée pour cohérence historique.
+
+  - id: 5
+    goal: "Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md)"
+    status: in_progress
+    stories:
+      - id: S5-00a
+        title: "Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-00b
+        title: "Phase 5.0 — Event bus injectable dans test env (extension docs/TESTING.md)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-01
+        title: "Phase 5.1 — Schéma data : tables intentions + cues (migrations idempotentes)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-02
+        title: "Phase 5.2 — Cue resolver : resolveTimeCues + resolveEventCues + expireStale, règles décay × intention (armed/fired/closed)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-03a
+        title: "Phase 5.3 — Hook scripts/hook-session-start.ts : résout cues du cwd/branch, markdown sur stdout, budget HUMEMORY_SESSION_BUDGET"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-03b
+        title: "Phase 5.3 — Hook .githooks/post-commit : ferme intentions via 'Closes loop-<id>' + heuristique fichiers"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S5-04
+        title: "Phase 5.4 — CLI 'intent {add,list,close,fire}' + API POST /intentions, POST /cues, POST /events"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
+
+backlog:
+  - id: B-VIZ-01
+    title: "Roadmap visualisation (ROADMAP.md options A-E) — 100% implémentée (river/galaxy/replay/promenade/decay-curve). Marquer ROADMAP.md comme done"
+    priority: low
+  - id: B-PHASE6
+    title: "Phase 6 — Cognitive scripts : écrire spec avant implémentation (template vs intentions chaînées vs prompt vs tool bundle)"
+    priority: low
+  - id: B-DOC-01
+    title: "Vérifier date 2026-05-03 dans config.yaml (date suspecte / future)"
+    priority: low
+
 qa:
-  bugs: []
+  bugs:
+    - id: BUG-03
+      title: "SQLite multi-process : pas de cross-process advisory lock (WAL + write-queue OK intra-process seulement)"
+      severity: critical
+      impact: "Bloquant Phase 5 — cue resolver background + hooks + dashboard écrivent en concurrence"
+      status: open
+      target_story: S5-00a
+    - id: BUG-04
+      title: "tsc global peut shadow le tsc local — toujours utiliser pnpm build (= tsc -p tsconfig.json)"
+      severity: minor
+      status: known
   audits:
     - id: AUDIT-2026-06-21
       role: reviewer

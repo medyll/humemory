@@ -356,17 +356,23 @@ keywords >5. `photographic: true` disables decay entirely.
 - Photographic mode; Claude Code `Stop` hook → session learning capture
 
 ### 🎯 Phase 5 — Prospective memory (the destiny)
-> Code later. This section is the spec, not yet built.
+> Corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary:
 
-- [ ] **`intention` memory type** — a trace that holds a *to-do-on-cue*, not a fact.
-- [ ] **Cue table** — `{ kind: 'time' | 'event', trigger, intentionId }`. Time cues
-      ("Wednesday 9am"), event cues (open file X, branch Y, error pattern Z).
-- [ ] **`SessionStart` hook** — on session open, resolve cues for the current
-      dir/branch + decayed-but-relevant traces, inject as session context
-      ("yesterday you left *refactor fn X* open").
-- [ ] **Zeigarnik open loops** — an unclosed loop stays salient (decay paused/boosted)
-      until closed; **`git commit` closes linked loops** and purges them.
-- [ ] **Cognitive scripts** — context-triggered routine bundles, pre-loaded on cue.
+- [ ] **5.0 Preconditions** — cross-process SQLite advisory lock + injectable event
+      bus in the test env.
+- [ ] **5.1 Data model** — dedicated `intentions` table (not a new `MemoryType`,
+      intentions don't follow the retrospective decay curve) + `cues` table with
+      typed `trigger_spec`. One intention → N cues.
+- [ ] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
+      branch_switch, error_pattern). Decay rule: `armed` → saillance pinned at 100;
+      `fired` not `closed` → normal decay (Zeigarnik fades); `closed` → archived.
+- [ ] **5.3 Hooks** — `SessionStart` hook injects a markdown context block on stdout
+      (configurable budget); git `post-commit` closes loops via `Closes loop-<id>`
+      explicit marker or file-overlap heuristic.
+- [ ] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire}`, `POST /intentions`,
+      `POST /cues`, `POST /events`.
+
+**Deferred to Phase 6** — Cognitive scripts (spec needed before code).
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — in progress
@@ -381,5 +387,5 @@ keywords >5. `photographic: true` disables decay entirely.
 ## Notes
 - Shared DB: `data/humemory.db` · API port `3456` (`PORT` env)
 - Stack: TypeScript · `bun:sqlite` · `flexsearch` · `hono` · `commander` · `@anthropic-ai/sdk`
-- `CLAUDE.md` (Claude Code guidance) was removed from the tree; restore from git
-  history if needed — this README.md is now the single source of truth.
+- `CLAUDE.md` is a thin Claude-Code-specific quick-start that delegates to
+  `AGENTS.md`; `AGENTS.md` remains the canonical source of truth.

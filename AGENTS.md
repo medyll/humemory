@@ -139,17 +139,35 @@ clock- and event-driven and cannot be trusted without it.
 - Photographic mode; Claude Code `Stop` hook → session learning capture
 
 ### 🎯 Phase 5 — Prospective memory (the destiny)
-> Code later. This section is the spec, not yet built.
+> Detailed corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary below.
 
-- [ ] **`intention` memory type** — a trace that holds a *to-do-on-cue*, not a fact.
-- [ ] **Cue table** — `{ kind: 'time' | 'event', trigger, intentionId }`. Time cues
-      ("Wednesday 9am"), event cues (open file X, branch Y, error pattern Z).
-- [ ] **`SessionStart` hook** — on session open, resolve cues for the current
-      dir/branch + decayed-but-relevant traces, inject as session context
-      ("yesterday you left *refactor fn X* open").
-- [ ] **Zeigarnik open loops** — an unclosed loop stays salient (decay paused/boosted)
-      until closed; **`git commit` closes linked loops** and purges them.
-- [ ] **Cognitive scripts** — context-triggered routine bundles, pre-loaded on cue.
+**Preconditions (5.0, blocking):**
+- [ ] Cross-process SQLite advisory lock (closes Bug #3 below)
+- [ ] Injectable event bus in the test env (Phase 5 is event-driven, not just clock-driven)
+
+**Data model (5.1):** dedicated `intentions` table (NOT a new `MemoryType` —
+intentions have a future trigger, status, and different decay rules than retrospective
+traces) + `cues` table with typed `trigger_spec` (time = ISO/cron, event = file_open /
+branch_switch / error_pattern). One intention → N cues.
+
+**Cue resolver (5.2):** `resolveTimeCues(now)` + `resolveEventCues(event)` + expiry.
+Decay × intention rule: `armed` → saillance pinned at 100, no decay (open loop stays
+salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `closed`
+→ archived.
+
+**Hooks (5.3):**
+- `scripts/hook-session-start.ts` — Claude Code `SessionStart` hook resolves cues for
+  the current `cwd` + `git branch --show-current`, emits a structured markdown block
+  on stdout (configurable budget via `HUMEMORY_SESSION_BUDGET`).
+- `.githooks/post-commit` → `scripts/hook-post-commit.ts` — parses commit message for
+  `Closes loop-<id>` (explicit) or scores file overlap (heuristic fallback) to close
+  intentions and cancel their cues.
+
+**CLI/API (5.4):** `pnpm cli intent {add,list,close,fire}` + `POST /intentions`,
+`POST /cues`, `POST /events`.
+
+**Deferred to Phase 6:** Cognitive scripts — currently underspecified (template?
+chained intentions? system prompt? tool bundle?). Spec first, then code.
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — in progress
@@ -164,5 +182,5 @@ clock- and event-driven and cannot be trusted without it.
 ## 📝 Notes
 - Shared DB: `data/humemory.db` · API port `3456` (`PORT` env)
 - Stack: TypeScript · `bun:sqlite` · `flexsearch` · `hono` · `commander` · `@anthropic-ai/sdk`
-- `CLAUDE.md` (Claude Code guidance) was removed from the tree; restore from git
-  history if needed — this AGENTS.md is now the single source of truth.
+- `CLAUDE.md` is a thin quick-start companion that points back to this file; this
+  AGENTS.md remains the canonical source of truth for project vision and concepts.
