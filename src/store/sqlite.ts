@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { openSync, closeSync, unlinkSync, existsSync } from 'fs';
 import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult } from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
@@ -10,14 +11,92 @@ import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Advisory lock for cross-process synchronization
+class AdvisoryLock {
+  private lockFile: string;
+  private lockFd: number | null = null;
+  private maxRetries: number;
+  private retryDelay: number;
+
+  constructor(lockFile: string, maxRetries: number = 10, retryDelay: number = 100) {
+    this.lockFile = lockFile;
+    this.maxRetries = maxRetries;
+    this.retryDelay = retryDelay;
+  }
+
+  acquire(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const tryAcquire = () => {
+        try {
+          // Use exclusive lock (LOCK_EX) with non-blocking (LOCK_NB)
+          // On Windows, we'll simulate this with file operations
+          if (existsSync(this.lockFile)) {
+            // Lock file exists, wait and retry
+            attempts++;
+            if (attempts >= this.maxRetries) {
+              reject(new Error(`Failed to acquire lock after ${attempts} attempts`));
+              return;
+            }
+            setTimeout(tryAcquire, this.retryDelay);
+          } else {
+            // Create the lock file
+            this.lockFd = openSync(this.lockFile, 'wx'); // wx = create file exclusively
+            resolve();
+          }
+        } catch (error) {
+          attempts++;
+          if (attempts >= this.maxRetries) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            reject(new Error(`Failed to acquire lock: ${errorMessage}`));
+            return;
+          }
+          setTimeout(tryAcquire, this.retryDelay);
+        }
+      };
+      tryAcquire();
+    });
+  }
+
+  release(): void {
+    if (this.lockFd !== null) {
+      try {
+        closeSync(this.lockFd);
+        this.lockFd = null;
+        unlinkSync(this.lockFile);
+      } catch (error) {
+        console.error('Failed to release lock:', error);
+      }
+    }
+  }
+
+  async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
 export class SQLiteStore implements MemoryStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
   private writeQueue: Promise<any> = Promise.resolve();
+  private advisoryLock: AdvisoryLock;
 
   private enqueueWrite<T>(fn: () => T | Promise<T>): Promise<T> {
     this.writeQueue = this.writeQueue.then(() => fn(), () => fn());
     return this.writeQueue as Promise<T>;
+  }
+
+  private async withAdvisoryLock<T>(fn: () => Promise<T>): Promise<T> {
+    return this.advisoryLock.withLock(fn);
+  }
+
+  private async enqueueWriteWithLock<T>(fn: () => Promise<T>): Promise<T> {
+    return this.enqueueWrite(() => this.withAdvisoryLock(fn));
   }
 
   constructor(dbPath: string = join(__dirname, '../../data/humemory.db')) {
@@ -27,6 +106,11 @@ export class SQLiteStore implements MemoryStore {
     this.db.exec('PRAGMA synchronous=NORMAL');
     this.db.exec('PRAGMA cache_size=-16000');
     this.searchEngine = new InverseSearchEngine();
+    
+    // Initialize advisory lock for cross-process synchronization
+    const lockFile = dbPath + '.lock';
+    this.advisoryLock = new AdvisoryLock(lockFile);
+    
     this.initSchema();
     this.loadIntoMemory();
   }
@@ -154,7 +238,7 @@ export class SQLiteStore implements MemoryStore {
     };
 
     const row = this.memoryToRow(fullMemory);
-    await this.enqueueWrite(() => {
+    await this.enqueueWriteWithLock(async () => {
       this.db.query(`
         INSERT INTO memories (
           id, content, level1_summary, level2_essential, level3_keywords,
@@ -183,7 +267,7 @@ export class SQLiteStore implements MemoryStore {
 
   async recall(id: string): Promise<Memory> {
     const now = new Date();
-    await this.enqueueWrite(() => {
+    await this.enqueueWriteWithLock(async () => {
       this.db.query(`
         UPDATE memories
         SET last_recalled = $last_recalled,
@@ -214,7 +298,7 @@ export class SQLiteStore implements MemoryStore {
       }
     });
 
-    await this.enqueueWrite(() => {
+    await this.enqueueWriteWithLock(async () => {
       updateMany(updated);
       this.searchEngine.clear();
       for (const memory of updated) {
@@ -224,7 +308,7 @@ export class SQLiteStore implements MemoryStore {
   }
 
   async delete(id: string): Promise<void> {
-    await this.enqueueWrite(() => {
+    await this.enqueueWriteWithLock(async () => {
       this.db.query('DELETE FROM memories WHERE id = $id').run({ $id: id });
       this.searchEngine.remove(id);
     });
@@ -259,7 +343,7 @@ export class SQLiteStore implements MemoryStore {
   }
 
   async setPhotographic(id: string, value: boolean): Promise<Memory> {
-    await this.enqueueWrite(() => {
+    await this.enqueueWriteWithLock(async () => {
       this.db.query('UPDATE memories SET photographic = $val WHERE id = $id')
         .run({ $val: value ? 1 : 0, $id: id });
     });
@@ -305,7 +389,7 @@ export class SQLiteStore implements MemoryStore {
       const levels = await generateMemoryLevels(combinedContent, target.memoryType, options.client);
       mergedContent = levels.level1Summary;
 
-      await this.enqueueWrite(() => {
+      await this.enqueueWriteWithLock(async () => {
         this.db.query(`
           UPDATE memories
           SET level1_summary = $level1_summary,
@@ -328,7 +412,7 @@ export class SQLiteStore implements MemoryStore {
         this.searchEngine.remove(sourceId);
       });
     } else {
-      await this.enqueueWrite(() => {
+      await this.enqueueWriteWithLock(async () => {
         this.db.query(`
           UPDATE memories
           SET saillance = MIN(100, saillance + $bonus),

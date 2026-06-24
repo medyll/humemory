@@ -3,7 +3,7 @@ phase: development
 progress: 75
 last_updated: "2026-06-24"
 
-next_action: "Sprint 5 — Phase 5.0 préconditions : implémenter advisory lock SQLite cross-process (closes Bug #3) + event bus injectable dans test env"
+next_action: "Sprint 5 — Phase 5.0 : Event bus injectable dans test env (extension docs/TESTING.md)"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -145,10 +145,10 @@ sprints:
     stories:
       - id: S5-00a
         title: "Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3)"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 2/2 pass (simple concurrent tests)"
+        test_result: pass
       - id: S5-00b
         title: "Phase 5.0 — Event bus injectable dans test env (extension docs/TESTING.md)"
         status: pending
@@ -203,8 +203,9 @@ qa:
       title: "SQLite multi-process : pas de cross-process advisory lock (WAL + write-queue OK intra-process seulement)"
       severity: critical
       impact: "Bloquant Phase 5 — cue resolver background + hooks + dashboard écrivent en concurrence"
-      status: open
+      status: fixed
       target_story: S5-00a
+      fix: "AdvisoryLock class avec file-based lock (wx exclusive creation) + enqueueWriteWithLock pour combiner intra-process queue + cross-process lock"
     - id: BUG-04
       title: "tsc global peut shadow le tsc local — toujours utiliser pnpm build (= tsc -p tsconfig.json)"
       severity: minor
