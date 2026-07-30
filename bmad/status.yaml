@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 88
+progress: 92
 last_updated: "2026-07-30"
 
-next_action: "Sprint 5 — Phase 5.3 : hook scripts/hook-session-start.ts (résout les cues du cwd/branch, markdown sur stdout, budget HUMEMORY_SESSION_BUDGET)"
+next_action: "Sprint 5 — Phase 5.3b : git hook post-commit (ferme les boucles via Closes loop-<id> + heuristique fichiers)"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -28,10 +28,10 @@ marketing:
 
 product:
   - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard"
-  - "Sprints 1+2+3+4 livrés. Suite : 110 pass / 0 fail / 233 expect sur 7 fichiers (bun 1.3.14, vérifié 2026-07-30)"
+  - "Sprints 1+2+3+4 livrés. Suite : 128 pass / 0 fail / 274 expect sur 8 fichiers (bun 1.3.14, vérifié 2026-07-30)"
   - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 en cours (4/7) : 5.0 préconditions + 5.1 data model + 5.2 cue resolver livrés. Restent les hooks (5.3) et la surface CLI/API (5.4)"
+  - "Sprint 5 en cours (5/7) : 5.0 + 5.1 + 5.2 + hook SessionStart livrés — la boucle prospective tourne de bout en bout. Restent le hook post-commit et la surface CLI/API"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -247,10 +247,22 @@ sprints:
         notes: "FileSystemEventBus toujours absent — les events viennent des hooks (S5-03a/b), pas d'un watcher. Décision reconduite depuis S5-00b."
       - id: S5-03a
         title: "Phase 5.3 — Hook scripts/hook-session-start.ts : résout cues du cwd/branch, markdown sur stdout, budget HUMEMORY_SESSION_BUDGET"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 128 pass / 0 fail / 274 expect (8 fichiers), dont tests/session-context.test.ts 18/18. Build tsc clean. Script éprouvé bout-en-bout sur DB temporaire."
+        test_result: pass
+        delivered:
+          - "src/agent/session-context.ts — buildSessionContext() : ménage (expireStale + tir des cues échus) puis composition markdown"
+          - "scripts/hook-session-start.ts — coquille fine : lit env + branche git, écrit sur stdout, ne bloque jamais la session (exit 0 même en erreur)"
+          - "Sections : ⏰ Échéances atteintes, Boucles ouvertes (Zeigarnik), Traces pertinentes dégradées"
+          - "Scoping par directory : les boucles des autres projets ne fuitent pas dans le contexte"
+          - "Traces rappelées = niveaux 2-3 ET saillance >= seuil, rendues au niveau où elles sont tombées"
+          - "loopId()/extractLoopIds()/matchIntentionByShortId() — identité courte 'loop-a1b2c3d4', préfixe ambigu = rien fermé (préparé pour S5-03b)"
+          - "store.list() gagne les filtres directory, levels[], minSaillance"
+          - "Env : HUMEMORY_DB, HUMEMORY_DIR, HUMEMORY_SESSION_BUDGET, HUMEMORY_SAILLANCE_MIN, HUMEMORY_VERBOSE — documentés dans README"
+          - "tests/session-context.test.ts — 18 tests"
+        verification: "Exécution réelle du script : branche git détectée, boucle d'un autre projet filtrée, markdown propre sur stdout. Modes dégradés vérifiés — DB inaccessible et budget invalide sortent en exit 0 sans rien écrire sur stdout."
+        notes: "Bloc vide si rien de pertinent — on n'injecte pas de section creuse dans le prompt. Sans resolver fourni, la composition est en lecture seule (aucun effet de bord)."
       - id: S5-03b
         title: "Phase 5.3 — Hook .githooks/post-commit : ferme intentions via 'Closes loop-<id>' + heuristique fichiers"
         status: pending

@@ -407,8 +407,15 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     });
   }
 
-  async list(options?: { limit?: number; level?: DecayLevel; type?: MemoryType }): Promise<Memory[]> {
-    const { limit = 50, level, type } = options || {};
+  async list(options?: {
+    limit?: number;
+    level?: DecayLevel;
+    levels?: DecayLevel[];
+    type?: MemoryType;
+    directory?: string;
+    minSaillance?: number;
+  }): Promise<Memory[]> {
+    const { limit = 50, level, levels, type, directory, minSaillance } = options || {};
 
     let sql = 'SELECT * FROM memories';
     const conditions: string[] = [];
@@ -419,9 +426,28 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       params.$level = level;
     }
 
+    if (levels !== undefined && levels.length > 0) {
+      // Placeholders générés depuis l'index, valeurs liées — pas de SQL concaténé.
+      const keys = levels.map((l, i) => {
+        params[`$level_in${i}`] = l;
+        return `$level_in${i}`;
+      });
+      conditions.push(`current_level IN (${keys.join(', ')})`);
+    }
+
     if (type !== undefined) {
       conditions.push('memory_type = $type');
       params.$type = type;
+    }
+
+    if (directory !== undefined) {
+      conditions.push('directory = $directory');
+      params.$directory = directory;
+    }
+
+    if (minSaillance !== undefined) {
+      conditions.push('saillance >= $min_saillance');
+      params.$min_saillance = minSaillance;
     }
 
     if (conditions.length > 0) {

@@ -11,7 +11,8 @@ export { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllD
 export { generateMemoryLevels, setLLMClient } from './core/llm-generator.js';
 export { systemClock, FakeClock } from './core/clock.js';
 export { InMemoryEventBus } from './core/event-bus.js';
-export { SqliteCueResolver, attachResolverToBus, intentionSaillance, parseCron, cronMatches, cronDueSince, eventTriggerMatches } from './core/cues.js';
+export { SqliteCueResolver, attachResolverToBus, intentionSaillance, parseCron, cronMatches, cronDueSince, eventTriggerMatches, loopId, extractLoopIds, matchIntentionByShortId } from './core/cues.js';
+export { buildSessionContext, humanizeAge, DEFAULT_SESSION_BUDGET, DEFAULT_SAILLANCE_THRESHOLD } from './agent/session-context.js';
 export { processSession } from './agent/claude-hook.js';
 export { parseClaudeHookPayload } from './agent/session-parser.js';
 export { extractLearnings } from './agent/learning-extractor.js';
@@ -21,6 +22,7 @@ export type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MergeR
 export type { StoreOptions } from './store/sqlite.js';
 export type { Clock } from './core/clock.js';
 export type { CueResolver, CueResolverOptions } from './core/cues.js';
+export type { SessionContext, SessionContextOptions } from './agent/session-context.js';
 export type { AppEvent, AppEventType, AppEventOf, EventBus, EventHandler, Unsubscribe } from './core/event-bus.js';
 export type { GeneratedLevels, LLMClient } from './core/llm-generator.js';
 export type { ParsedSession, SessionMessage } from './agent/session-parser.js';

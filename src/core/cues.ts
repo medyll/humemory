@@ -208,6 +208,42 @@ export function eventTriggerMatches(spec: EventTriggerSpec, event: AppEvent): bo
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Identité courte d'une boucle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Longueur du préfixe d'UUID utilisé comme identifiant lisible d'une boucle. */
+export const LOOP_ID_LENGTH = 8;
+
+/**
+ * Identifiant court affiché à l'agent : `loop-a1b2c3d4`. C'est ce que l'humain
+ * recopie dans un message de commit (`Closes loop-a1b2c3d4`) — un UUID complet
+ * ne serait jamais recopié à la main.
+ */
+export function loopId(intentionId: string): string {
+  return `loop-${intentionId.slice(0, LOOP_ID_LENGTH)}`;
+}
+
+/** Extrait les identifiants courts de boucle cités dans un texte (message de commit). */
+export function extractLoopIds(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\bloop-([0-9a-f]{4,36})\b/gi)) {
+    found.add(m[1].toLowerCase());
+  }
+  return [...found];
+}
+
+/** Retrouve l'intention désignée par un identifiant court, si elle est sans ambiguïté. */
+export function matchIntentionByShortId(
+  intentions: Intention[],
+  shortId: string
+): Intention | null {
+  const needle = shortId.toLowerCase();
+  const hits = intentions.filter((i) => i.id.toLowerCase().startsWith(needle));
+  // Un préfixe ambigu ne ferme rien : mieux vaut ne rien faire que fermer la mauvaise boucle.
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Règles décay × intention
 // ─────────────────────────────────────────────────────────────────────────────
 

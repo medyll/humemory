@@ -184,7 +184,14 @@ export interface MemoryStore {
   recall(id: string): Promise<Memory>;
   updateDecay(): Promise<void>;
   delete(id: string): Promise<void>;
-  list(options?: { limit?: number; level?: DecayLevel; type?: MemoryType }): Promise<Memory[]>;
+  list(options?: {
+    limit?: number;
+    level?: DecayLevel;
+    levels?: DecayLevel[];
+    type?: MemoryType;
+    directory?: string;
+    minSaillance?: number;
+  }): Promise<Memory[]>;
   findSimilar(id: string, options?: { limit?: number; threshold?: number }): Promise<SearchResult[]>;
   merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: import('./llm-generator.js').LLMClient }): Promise<MergeResult>;
   setPhotographic(id: string, value: boolean): Promise<Memory>;

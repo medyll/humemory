@@ -55,12 +55,18 @@ src/
 ├── agent/
 │   ├── session-parser.ts     # parse Claude Code session transcripts
 │   ├── learning-extractor.ts # extract decisions/bugs/solutions
-│   └── claude-hook.ts        # Stop-hook → auto-encode session learnings
+│   ├── claude-hook.ts        # Stop-hook → auto-encode session learnings
+│   └── session-context.ts    # SessionStart → markdown block (open loops + traces)
+├── core/
+│   ├── clock.ts              # Clock seam (systemClock / FakeClock)
+│   ├── event-bus.ts          # AppEvent + InMemoryEventBus
+│   └── cues.ts               # cue resolver, cron matcher, loop ids
 ├── api/server.ts         # Hono HTTP API + serves public/ dashboard
 ├── cli/index.ts          # commander CLI
 └── index.ts              # library exports
-scripts/hook-session.ts   # bun script wired to Claude Code Stop hook
-tests/                    # bun test (agent / humemory / llm-generator)
+scripts/hook-session.ts        # Claude Code Stop hook → encode learnings
+scripts/hook-session-start.ts  # Claude Code SessionStart hook → inject context
+tests/                    # bun test (hermetic; helpers/ + fixtures/)
 data/humemory.db          # shared DB (created on first run)
 ```
 

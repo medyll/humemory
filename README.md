@@ -68,6 +68,38 @@ pnpm test           # bun test
 Full command reference, concepts, and roadmap live in **[AGENTS.md](./AGENTS.md)**.
 The autonomous test environment spec lives in **[docs/TESTING.md](./docs/TESTING.md)**.
 
+### Wiring the Claude Code hooks
+
+Two hooks, both optional and both fail-open — neither will ever block a session:
+
+```jsonc
+// ~/.claude/settings.json
+{
+  "hooks": {
+    // start of session: injects open loops + relevant decayed traces as context
+    "SessionStart": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "bun /path/to/humemory/scripts/hook-session-start.ts" }
+    ]}],
+    // end of session: encodes what was learned
+    "Stop": [{ "matcher": "", "hooks": [
+      { "type": "command", "command": "bun /path/to/humemory/scripts/hook-session.ts" }
+    ]}]
+  }
+}
+```
+
+`SessionStart` reads the current directory and git branch, expires stale loops,
+fires any due time cues, and writes a markdown block on stdout — which Claude Code
+injects into the session. Nothing relevant means nothing written.
+
+| Env var | Default | Effect |
+| --- | --- | --- |
+| `HUMEMORY_DB` | `data/humemory.db` | database path |
+| `HUMEMORY_DIR` | `cwd` | mental place to scope loops and traces to |
+| `HUMEMORY_SESSION_BUDGET` | `10` | max items listed per section |
+| `HUMEMORY_SAILLANCE_MIN` | `60` | salience floor for recalling a decayed trace |
+| `HUMEMORY_VERBOSE` | unset | `1` logs a one-line summary on stderr |
+
 ---
 
 ## Why it exists
@@ -366,8 +398,8 @@ keywords >5. `photographic: true` disables decay entirely.
 - [x] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
       branch_switch, error_pattern). Decay rule: `armed` → saillance pinned at 100;
       `fired` not `closed` → normal decay (Zeigarnik fades); `closed` → archived.
-- [ ] **5.3 Hooks** — `SessionStart` hook injects a markdown context block on stdout
-      (configurable budget); git `post-commit` closes loops via `Closes loop-<id>`
+- [~] **5.3 Hooks** — `SessionStart` hook ✅ shipped (`scripts/hook-session-start.ts`,
+      budget via `HUMEMORY_SESSION_BUDGET`); git `post-commit` closes loops via `Closes loop-<id>`
       explicit marker or file-overlap heuristic.
 - [ ] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire}`, `POST /intentions`,
       `POST /cues`, `POST /events`.
