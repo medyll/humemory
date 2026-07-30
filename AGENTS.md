@@ -150,7 +150,7 @@ intentions have a future trigger, status, and different decay rules than retrosp
 traces) + `cues` table with typed `trigger_spec` (time = ISO/cron, event = file_open /
 branch_switch / error_pattern). One intention → N cues.
 
-**Cue resolver (5.2):** `resolveTimeCues(now)` + `resolveEventCues(event)` + expiry.
+**Cue resolver (5.2): ✅ shipped (S5-02), `src/core/cues.ts`.** `resolveTimeCues(now)` + `resolveEventCues(event)` + expiry.
 Decay × intention rule: `armed` → saillance pinned at 100, no decay (open loop stays
 salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `closed`
 → archived.

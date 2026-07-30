@@ -772,6 +772,26 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     return rows.map((r) => this.rowToCue(r));
   }
 
+  /**
+   * Marque un cue comme tiré. `rearm: true` le laisse `armed` tout en enregistrant
+   * `fired_at` — c'est ce dont un cue récurrent (cron) a besoin : sans ça, une
+   * récurrence ne serait qu'un one-shot déguisé.
+   */
+  async markCueFired(id: string, options: { rearm?: boolean } = {}): Promise<Cue> {
+    const now = this.clock.now();
+    const status: CueStatus = options.rearm ? 'armed' : 'fired';
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query('UPDATE cues SET status = $status, fired_at = $now WHERE id = $id')
+        .run({ $id: id, $status: status, $now: now.getTime() });
+    });
+
+    const cue = await this.getCue(id);
+    if (!cue) throw new Error(`Cue ${id} not found`);
+    return cue;
+  }
+
   async updateCueStatus(id: string, status: CueStatus): Promise<Cue> {
     const now = this.clock.now();
 

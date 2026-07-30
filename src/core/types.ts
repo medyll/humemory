@@ -173,6 +173,8 @@ export interface IntentionStore {
     limit?: number;
   }): Promise<Cue[]>;
   updateCueStatus(id: string, status: CueStatus): Promise<Cue>;
+  /** Enregistre un tir. `rearm` garde le cue `armed` (cas des cues récurrents). */
+  markCueFired(id: string, options?: { rearm?: boolean }): Promise<Cue>;
 }
 
 export interface MemoryStore {

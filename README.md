@@ -363,7 +363,7 @@ keywords >5. `photographic: true` disables decay entirely.
 - [x] **5.1 Data model** — dedicated `intentions` table (not a new `MemoryType`,
       intentions don't follow the retrospective decay curve) + `cues` table with
       typed `trigger_spec`. One intention → N cues.
-- [ ] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
+- [x] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
       branch_switch, error_pattern). Decay rule: `armed` → saillance pinned at 100;
       `fired` not `closed` → normal decay (Zeigarnik fades); `closed` → archived.
 - [ ] **5.3 Hooks** — `SessionStart` hook injects a markdown context block on stdout

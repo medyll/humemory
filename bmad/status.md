@@ -1,12 +1,12 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [████████▌░] 84%
+> Phase: **development** | Progress: [█████████░] 88%
 > Last updated: 2026-07-30 | Active role: scrum
-> Stories: 21/25 complete · Tests: 78 pass / 0 fail / 167 expect (6 fichiers, bun 1.3.14)
+> Stories: 22/25 complete · Tests: 110 pass / 0 fail / 233 expect (7 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Sprint 5 — Phase 5.2 : Cue resolver (resolveTimeCues, resolveEventCues, expireStale)
+- **Next action:** Sprint 5 — Phase 5.3a : hook scripts/hook-session-start.ts
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -41,11 +41,11 @@
       ✅ S4-01: SQLite WAL mode + busy_timeout + PRAGMA optimizations
       ✅ S4-02: Write serialization layer (enqueueWrite promise queue)
       ✅ S4-03: Fix flaky list test + CLAUDE.md tsc/test doc update
-  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (3/7 stories)
+  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (4/7 stories)
       ✅ S5-00a: Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3) — 8118e54
       ✅ S5-00b: Phase 5.0 — Env de test autonome : clock seam, event bus, helpers, fixtures, garde prod-DB
       ✅ S5-01: Phase 5.1 — Tables intentions + cues, CRUD, cascade, fixtures loops.open.json
-      ⬚ S5-02: Phase 5.2 — Cue resolver : resolveTimeCues + resolveEventCues + expireStale, règles décay × intention (armed/fired/closed)
+      ✅ S5-02: Phase 5.2 — Cue resolver : cron maison, scoping par lieu mental, expireStale, règles décay
       ⬚ S5-03a: Phase 5.3 — Hook scripts/hook-session-start.ts : résout cues du cwd/branch, markdown sur stdout, budget HUMEMORY_SESSION_BUDGET
       ⬚ S5-03b: Phase 5.3 — Hook .githooks/post-commit : ferme intentions via 'Closes loop-<id>' + heuristique fichiers
       ⬚ S5-04: Phase 5.4 — CLI 'intent {add,list,close,fire}' + API POST /intentions, POST /cues, POST /events
@@ -72,10 +72,10 @@
 ## Product
 
   - Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard
-  - Sprints 1+2+3+4 livrés. Suite : 78 pass / 0 fail / 167 expect sur 6 fichiers (bun 1.3.14, vérifié 2026-07-30)
+  - Sprints 1+2+3+4 livrés. Suite : 110 pass / 0 fail / 233 expect sur 7 fichiers (bun 1.3.14, vérifié 2026-07-30)
   - 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos
   - PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit
-  - Sprint 5 en cours (3/7) : préconditions 5.0 closes + data model 5.1 livré (tables intentions/cues, CRUD, cascade)
+  - Sprint 5 en cours (4/7) : 5.0 préconditions + 5.1 data model + 5.2 cue resolver livrés
 
 ## Far Vision
 
