@@ -1,7 +1,7 @@
 project: "humemory"
 phase: development
-progress: 75
-last_updated: "2026-06-24"
+progress: 76
+last_updated: "2026-07-30"
 
 next_action: "Sprint 5 — Phase 5.0 : Event bus injectable dans test env (extension docs/TESTING.md)"
 next_command: "bmad-sprint-story"
@@ -27,10 +27,11 @@ marketing:
   - "API HTTP + CLI + lib importable — intègre dans tout projet"
 
 product:
-  - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL, CLI, API, dashboard"
-  - "Sprints 1+2+4 livrés (37/37 tests). 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve)"
+  - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard"
+  - "Sprints 1+2+3+4 livrés. Suite : 40 pass / 0 fail / 88 expect sur 4 fichiers (bun 1.3.14, vérifié 2026-07-30)"
+  - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 ouvert : Phase 5.0 préconditions (advisory lock + event bus testable) avant data model intentions/cues"
+  - "Sprint 5 en cours (1/7) : S5-00a advisory lock livré, reste event bus testable puis data model intentions/cues"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -114,6 +115,51 @@ sprints:
         test_output: "bun test — 37/37 pass"
         test_result: pass
 
+  # Sprint 3 reconstruit rétroactivement (2026-07-30) depuis l'historique git : le travail
+  # avait été livré sans jamais être ouvert dans status.yaml — c'est ce que QA-01 signalait.
+  # Sources : ab814f3 (dashboard UX), 6df0cac (visualisations roadmap + fix SEC-01).
+  # Note chrono : 6df0cac a atterri après Sprint 4, rattaché ici par cohérence thématique.
+  - id: 3
+    goal: "Dashboard UX + visualisations roadmap"
+    status: completed
+    reconstructed_from_git: true
+    stories:
+      - id: S3-01
+        title: "Photographic badge 🔒 + toggle inline par trace (public/index.html)"
+        status: complete
+        commit: ab814f3
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S3-02
+        title: "Merge UI : panel similaires (score) + confirmMerge → POST /memories/:id/merge"
+        status: complete
+        commit: ab814f3
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S3-03
+        title: "Filtres avancés : dateFrom/dateTo/minSaillance/minRecalls/photo-only + clear"
+        status: complete
+        commit: ab814f3
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S3-04
+        title: "Visualisations roadmap (ROADMAP.md options A-E) : river, galaxy, replay, promenade, decay-curve + endpoints API"
+        status: complete
+        commit: 6df0cac
+        tests_executed: false
+        test_output: null
+        test_result: null
+      - id: S3-05
+        title: "Fix path traversal SEC-01 : safeJoin() containment sur handlers statiques"
+        status: complete
+        commit: 6df0cac
+        tests_executed: true
+        test_output: "build clean; audit AUDIT-2026-06-21 SEC-01 → fixed"
+        test_result: pass
+
   - id: 4
     goal: "Concurrence SQLite + build stability"
     status: completed
@@ -137,8 +183,6 @@ sprints:
         test_output: "bun test — 37/37 pass"
         test_result: pass
 
-  # Note: Sprint 3 n'a jamais été ouvert (flag par QA-01). Numérotation conservée pour cohérence historique.
-
   - id: 5
     goal: "Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md)"
     status: in_progress
@@ -146,8 +190,9 @@ sprints:
       - id: S5-00a
         title: "Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3)"
         status: complete
+        commit: 8118e54
         tests_executed: true
-        test_output: "bun test — 2/2 pass (simple concurrent tests)"
+        test_output: "bun test — 40/40 pass, dont tests/advisory-lock-basic.test.ts 3/3 (multi-instance write, recall concurrent sérialisé, cleanup lock file)"
         test_result: pass
       - id: S5-00b
         title: "Phase 5.0 — Event bus injectable dans test env (extension docs/TESTING.md)"
@@ -188,14 +233,19 @@ sprints:
 
 backlog:
   - id: B-VIZ-01
-    title: "Roadmap visualisation (ROADMAP.md options A-E) — 100% implémentée (river/galaxy/replay/promenade/decay-curve). Marquer ROADMAP.md comme done"
+    title: "Roadmap visualisation (ROADMAP.md options A-E) — 100% implémentée (river/galaxy/replay/promenade/decay-curve)"
     priority: low
+    status: done
+    resolution: "Vérifié 2026-07-30 : les 5 modules existent dans public/js/, 21 refs dans index.html. Tracké comme S3-04. Reste à marquer ROADMAP.md done."
   - id: B-PHASE6
     title: "Phase 6 — Cognitive scripts : écrire spec avant implémentation (template vs intentions chaînées vs prompt vs tool bundle)"
     priority: low
+    status: open
   - id: B-DOC-01
     title: "Vérifier date 2026-05-03 dans config.yaml (date suspecte / future)"
     priority: low
+    status: done
+    resolution: "Fausse alerte — 2026-05-03 = date du commit initial 8a92ac0. Date légitime, aucun changement."
 
 qa:
   bugs:
@@ -210,6 +260,23 @@ qa:
       title: "tsc global peut shadow le tsc local — toujours utiliser pnpm build (= tsc -p tsconfig.json)"
       severity: minor
       status: known
+    - id: BUG-05
+      title: "tests/fixtures/ n'existe pas — les suites seedent des littéraux ad hoc"
+      severity: major
+      impact: "Viole docs/TESTING.md + CLAUDE.md ('Seed memories from tests/fixtures/, not ad hoc literals'). Bloquant qualité pour Phase 5 : la logique prospective est event/clock-driven et a besoin de fixtures déterministes."
+      status: open
+      target_story: S5-00b
+    - id: BUG-06
+      title: "vitest.config.ts orphelin — toute la suite tourne sous bun test"
+      severity: minor
+      impact: "Runner ambigu ; un contributeur peut lancer vitest et croire la suite vide."
+      status: open
+    - id: BUG-07
+      title: "Artefact de test orphelin tests/test-advisory-lock.db (32 Ko) laissé sur disque"
+      severity: minor
+      impact: "Viole la contrainte hermétique. Résidu d'un test supprimé — aucune suite ne le référençait."
+      status: fixed
+      fix: "Fichier supprimé le 2026-07-30. advisory-lock-basic.test.ts utilise test-advisory-lock-basic.db et nettoie en beforeEach/afterEach — mais ne purge pas les sidecars -wal/-shm (à traiter en S5-00b)."
   audits:
     - id: AUDIT-2026-06-21
       role: reviewer
@@ -225,7 +292,8 @@ qa:
         - severity: minor
           id: QA-01
           title: "Sprint 3 absent from status.yaml (jumps S2→S4); S1-03/04/05 tests_executed:false"
-          status: open
+          status: fixed
+          fix: "Sprint 3 reconstruit depuis git (ab814f3, 6df0cac) en 5 stories S3-01..S3-05, 2026-07-30. S1-03/04/05 restent tests_executed:false — CLI/API/cron sans couverture directe, reporté (voir BUG-05)."
         - severity: minor
           id: QA-02
           title: "Test suite was unverified — bun not installed. Installed bun 1.3.14; ran suite: 37 pass / 0 fail / 81 expect (3 files). Claim confirmed."
@@ -234,3 +302,19 @@ qa:
         - "SQL fully parameterized (sqlite.ts dynamic WHERE uses static conditions + bound params) — no injection"
         - "CORS locked to localhost dev / CORS_ORIGINS prod; credentials gated"
         - "/sessions/:id filters in-memory only, no file read"
+    - id: AUDIT-2026-07-30
+      role: scrum
+      scope: "Audit de synchronisation bmad ↔ code réel (demandé par l'utilisateur : 'vérifie si le bmad est synchro / legit')"
+      verdict: "Légit sur le fond, désynchro sur la forme — aucune story marquée complete sans code derrière."
+      verified:
+        - "S5-00a réel : class AdvisoryLock src/store/sqlite.ts:15, enqueueWriteWithLock câblé sur 7 chemins d'écriture"
+        - "Phase 5 à zéro ligne : aucune occurrence de intention/cue/resolveTimeCues dans src/ ni scripts/ — les 6 stories pending sont honnêtes"
+        - "B-VIZ-01 exact : les 5 modules de visualisation existent dans public/js/"
+        - "Sprints 1/2/4 : code présent pour chaque story"
+        - "config.yaml created 2026-05-03 == date du commit initial 8a92ac0"
+      corrections:
+        - "Compte de tests 37/37 → 40 pass / 88 expect / 4 fichiers (advisory-lock-basic.test.ts jamais reporté)"
+        - "status.md périmé (affichait S5-00a ⬚ et Sprint 5 0/7, réel 1/7) → régénéré"
+        - "QA-01 clos : Sprint 3 reconstruit depuis git"
+        - "B-DOC-01 clos : fausse alerte"
+        - "BUG-05/06/07 ouverts : écarts constatés hors périmètre bmad (fixtures, vitest orphelin, artefact de test)"

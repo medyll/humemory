@@ -1,5 +1,10 @@
 # ROADMAP.md — humemory demo / visualization
 
+> **STATUS: DONE (2026-07-30).** All five options below shipped — `public/js/river.js`,
+> `galaxy.js`, `replay.js`, `promenade.js`, `decay-curve.js`, wired into
+> `public/index.html`. Tracked as story S3-04; backlog item B-VIZ-01 closed.
+> Kept as the design rationale for those views.
+
 Goal: make humemory **demonstrable**. Today's dashboard (`public/index.html`) is a
 filterable card list with zone counters and a detail modal — functional, but it
 shows *state*, not *behavior*. A case study about a memory that decays, gets

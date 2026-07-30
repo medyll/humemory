@@ -142,7 +142,7 @@ clock- and event-driven and cannot be trusted without it.
 > Detailed corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary below.
 
 **Preconditions (5.0, blocking):**
-- [ ] Cross-process SQLite advisory lock (closes Bug #3 below)
+- [x] Cross-process SQLite advisory lock (closes Bug #3 below) — shipped, `AdvisoryLock` in `src/store/sqlite.ts`
 - [ ] Injectable event bus in the test env (Phase 5 is event-driven, not just clock-driven)
 
 **Data model (5.1):** dedicated `intentions` table (NOT a new `MemoryType` —
@@ -170,13 +170,15 @@ salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `cl
 chained intentions? system prompt? tool bundle?). Spec first, then code.
 
 ### 🛣️ Beyond
-- Shared multi-project DB with concurrency lock (WAL + advisory) — in progress
+- Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - OpenCode / other-agent integration; export/import memories between projects
 
 ---
 
 ## 🐛 Known issues
-- SQLite multi-process: WAL + write-queue added (Sprint 4); advisory lock still open.
+- ~~SQLite multi-process: advisory lock~~ — fixed in Sprint 5 (S5-00a): WAL + write-queue (Sprint 4) plus file-based cross-process `AdvisoryLock`.
+- `tests/fixtures/` missing — suites seed ad hoc literals (BUG-05, due with S5-00b).
+- `vitest.config.ts` orphaned; suite runs under `bun test` (BUG-06).
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## 📝 Notes

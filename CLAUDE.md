@@ -46,5 +46,7 @@ This constraint exists because Phase 5 (prospective/Zeigarnik logic) is clock- a
 
 ## Known issues
 
-- SQLite multi-process: WAL + write-queue serialization added (Sprint 4); a cross-process advisory lock is still open.
+- SQLite multi-process: resolved. WAL + write-queue serialization (Sprint 4) plus a file-based cross-process advisory lock (`AdvisoryLock` in `src/store/sqlite.ts`, Sprint 5 / S5-00a).
+- `tests/fixtures/` does not exist yet — suites still seed ad hoc literals, against the rule below (tracked as BUG-05, due with S5-00b).
+- `vitest.config.ts` is orphaned; the whole suite runs under `bun test` (BUG-06).
 - A global `tsc` install can shadow the local one — always run `pnpm build` (which pins `tsc -p tsconfig.json`), not a bare `tsc`.

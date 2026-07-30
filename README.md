@@ -358,8 +358,8 @@ keywords >5. `photographic: true` disables decay entirely.
 ### 🎯 Phase 5 — Prospective memory (the destiny)
 > Corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary:
 
-- [ ] **5.0 Preconditions** — cross-process SQLite advisory lock + injectable event
-      bus in the test env.
+- [~] **5.0 Preconditions** — cross-process SQLite advisory lock ✅ shipped;
+      injectable event bus in the test env still to do.
 - [ ] **5.1 Data model** — dedicated `intentions` table (not a new `MemoryType`,
       intentions don't follow the retrospective decay curve) + `cues` table with
       typed `trigger_spec`. One intention → N cues.
@@ -375,13 +375,15 @@ keywords >5. `photographic: true` disables decay entirely.
 **Deferred to Phase 6** — Cognitive scripts (spec needed before code).
 
 ### 🛣️ Beyond
-- Shared multi-project DB with concurrency lock (WAL + advisory) — in progress
+- Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - OpenCode / other-agent integration; export/import memories between projects
 
 ---
 
 ## Known issues
-- SQLite multi-process: WAL + write-queue added (Sprint 4); advisory lock still open.
+- ~~SQLite multi-process: advisory lock~~ — fixed in Sprint 5 (S5-00a): WAL + write-queue (Sprint 4) plus file-based cross-process `AdvisoryLock`.
+- `tests/fixtures/` missing — suites seed ad hoc literals (BUG-05, due with S5-00b).
+- `vitest.config.ts` orphaned; suite runs under `bun test` (BUG-06).
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## Notes
