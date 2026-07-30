@@ -4,6 +4,7 @@ const flexsearch = require('flexsearch');
 const { Document } = flexsearch;
 
 import type { Memory, SearchQuery, SearchResult, DecayLevel } from './types.js';
+import { systemClock, type Clock } from './clock.js';
 
 /**
  * Moteur de recherche inversée avec BM25
@@ -12,8 +13,12 @@ import type { Memory, SearchQuery, SearchResult, DecayLevel } from './types.js';
 export class InverseSearchEngine {
   private index: any;
   private memories: Map<string, Memory> = new Map();
+  private clock: Clock;
 
-  constructor() {
+  constructor(options: { clock?: Clock } = {}) {
+    // Le bonus de récence dépend de « maintenant » — injectable pour que le
+    // scoring soit déterministe en test (docs/TESTING.md → pilier 2).
+    this.clock = options.clock ?? systemClock;
     // Index FlexSearch optimisé pour les mots-clés
     this.index = new Document({
       tokenize: 'forward',
@@ -139,7 +144,8 @@ export class InverseSearchEngine {
     score += levelBonus;
 
     // Bonus pour récence
-    const daysSinceCreation = (Date.now() - memory.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    const daysSinceCreation =
+      (this.clock.now().getTime() - memory.createdAt.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceCreation < 7) {
       score += 20;
     } else if (daysSinceCreation < 30) {

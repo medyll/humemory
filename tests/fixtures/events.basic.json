@@ -1,0 +1,31 @@
+{
+  "$comment": "Events applicatifs rejouables contre l'InMemoryEventBus. Servent aux tests d'event bus aujourd'hui, et alimenteront le cue resolver en Phase 5.2 (S5-02).",
+  "events": [
+    {
+      "key": "open-auth-service",
+      "type": "file_open",
+      "path": "src/auth/service.ts",
+      "directory": "/src/auth"
+    },
+    {
+      "key": "switch-to-feature",
+      "type": "branch_switch",
+      "branch": "feature/prospective-memory",
+      "directory": "/src"
+    },
+    {
+      "key": "sqlite-busy-error",
+      "type": "error_pattern",
+      "text": "SQLITE_BUSY: database is locked",
+      "directory": "/src/store"
+    },
+    {
+      "key": "commit-closes-loop",
+      "type": "commit",
+      "sha": "deadbee",
+      "message": "fix(auth): token expiry off-by-one\n\nCloses loop-42",
+      "files": ["src/auth/middleware.ts"],
+      "directory": "/src/auth"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { openSync, closeSync, unlinkSync, existsSync } from 'fs';
@@ -7,9 +7,33 @@ import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, Memory
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
 import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
+import { systemClock, type Clock } from '../core/clock.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const DEFAULT_DB_PATH = join(__dirname, '../../data/humemory.db');
+
+export interface StoreOptions {
+  /** Source de temps. Défaut : `systemClock`. Les tests passent une `FakeClock`. */
+  clock?: Clock;
+}
+
+/**
+ * Garde-fou : sous NODE_ENV=test, ouvrir la DB de prod est un bug, pas une option.
+ * Les suites doivent passer ':memory:' ou un fichier temporaire (cf. docs/TESTING.md).
+ */
+function assertNotProdDbUnderTest(dbPath: string): void {
+  if (process.env.NODE_ENV !== 'test') return;
+  if (dbPath === ':memory:') return;
+  const resolved = resolve(dbPath);
+  if (resolved === resolve(DEFAULT_DB_PATH)) {
+    throw new Error(
+      `Refus d'ouvrir la DB de production (${resolved}) sous NODE_ENV=test. ` +
+        `Utilise freshStore() / ':memory:' — voir docs/TESTING.md.`
+    );
+  }
+}
 
 // Advisory lock for cross-process synchronization
 class AdvisoryLock {
@@ -80,11 +104,26 @@ class AdvisoryLock {
   }
 }
 
+/**
+ * Lock inerte pour une DB privée au process (`:memory:`) : il n'y a pas d'autre
+ * process avec qui se synchroniser, et `':memory:' + '.lock'` n'est de toute façon
+ * pas un nom de fichier valide sous Windows. La sérialisation intra-process reste
+ * assurée par `enqueueWrite`.
+ */
+class NoopLock {
+  async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    return fn();
+  }
+}
+
+type Lock = Pick<AdvisoryLock, 'withLock'>;
+
 export class SQLiteStore implements MemoryStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
   private writeQueue: Promise<any> = Promise.resolve();
-  private advisoryLock: AdvisoryLock;
+  private advisoryLock: Lock;
+  private clock: Clock;
 
   private enqueueWrite<T>(fn: () => T | Promise<T>): Promise<T> {
     this.writeQueue = this.writeQueue.then(() => fn(), () => fn());
@@ -99,17 +138,19 @@ export class SQLiteStore implements MemoryStore {
     return this.enqueueWrite(() => this.withAdvisoryLock(fn));
   }
 
-  constructor(dbPath: string = join(__dirname, '../../data/humemory.db')) {
+  constructor(dbPath: string = DEFAULT_DB_PATH, options: StoreOptions = {}) {
+    assertNotProdDbUnderTest(dbPath);
+    this.clock = options.clock ?? systemClock;
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode=WAL');
     this.db.exec('PRAGMA busy_timeout=5000');
     this.db.exec('PRAGMA synchronous=NORMAL');
     this.db.exec('PRAGMA cache_size=-16000');
-    this.searchEngine = new InverseSearchEngine();
+    this.searchEngine = new InverseSearchEngine({ clock: this.clock });
     
-    // Initialize advisory lock for cross-process synchronization
-    const lockFile = dbPath + '.lock';
-    this.advisoryLock = new AdvisoryLock(lockFile);
+    // Initialize advisory lock for cross-process synchronization.
+    // Une DB :memory: n'est partagée avec personne → lock inerte.
+    this.advisoryLock = dbPath === ':memory:' ? new NoopLock() : new AdvisoryLock(dbPath + '.lock');
     
     this.initSchema();
     this.loadIntoMemory();
@@ -217,7 +258,7 @@ export class SQLiteStore implements MemoryStore {
     options: { autoGenerate?: boolean } = {}
   ): Promise<Memory> {
     const id = crypto.randomUUID();
-    const now = new Date();
+    const now = this.clock.now();
 
     let generatedLevels = {};
     if (options.autoGenerate && !memory.level1Summary) {
@@ -266,7 +307,7 @@ export class SQLiteStore implements MemoryStore {
   }
 
   async recall(id: string): Promise<Memory> {
-    const now = new Date();
+    const now = this.clock.now();
     await this.enqueueWriteWithLock(async () => {
       this.db.query(`
         UPDATE memories
@@ -284,7 +325,7 @@ export class SQLiteStore implements MemoryStore {
 
   async updateDecay(): Promise<void> {
     const memories = this.searchEngine.getAll();
-    const updated = updateAllDecay(memories);
+    const updated = updateAllDecay(memories, this.clock.now());
 
     const updateStmt = this.db.query(`
       UPDATE memories

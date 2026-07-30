@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 76
+progress: 80
 last_updated: "2026-07-30"
 
-next_action: "Sprint 5 — Phase 5.0 : Event bus injectable dans test env (extension docs/TESTING.md)"
+next_action: "Sprint 5 — Phase 5.1 : Schéma data intentions + cues (migrations idempotentes)"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -31,7 +31,7 @@ product:
   - "Sprints 1+2+3+4 livrés. Suite : 40 pass / 0 fail / 88 expect sur 4 fichiers (bun 1.3.14, vérifié 2026-07-30)"
   - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 en cours (1/7) : S5-00a advisory lock livré, reste event bus testable puis data model intentions/cues"
+  - "Sprint 5 en cours (2/7) : S5-00a advisory lock + S5-00b env de test autonome livrés. Préconditions Phase 5.0 closes — data model intentions/cues ensuite"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -196,10 +196,20 @@ sprints:
         test_result: pass
       - id: S5-00b
         title: "Phase 5.0 — Event bus injectable dans test env (extension docs/TESTING.md)"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 58 pass / 0 fail / 123 expect (5 fichiers), dont tests/test-env.test.ts 18/18. Build tsc clean."
+        test_result: pass
+        delivered:
+          - "src/core/clock.ts — Clock, systemClock, FakeClock (advance/advanceHours/advanceDays/set)"
+          - "src/core/event-bus.ts — AppEvent typé, EventBus, InMemoryEventBus (dispatch awaité, journal, reset)"
+          - "Clock threadé dans SQLiteStore (add/recall/updateDecay) + InverseSearchEngine (bonus de récence)"
+          - "Garde assertNotProdDbUnderTest : ouvrir data/humemory.db sous NODE_ENV=test lève"
+          - "NoopLock pour DB :memory: — ':memory:.lock' n'est pas un nom de fichier valide sous Windows"
+          - "tests/helpers/{store,clock,llm,fixtures}.ts + tests/fixtures/{memories,events}.basic.json"
+          - "tests/test-env.test.ts — 4 piliers + e2e decay L0→L1→L2→L3 piloté uniquement par FakeClock"
+          - "docs/TESTING.md — pilier 4 event bus, checklist Phase 5 cochée"
+        verification: "Test de mutation : rétablir new Date() dans SQLiteStore.add fait tomber 2 tests de test-env — la suite n'est pas vacante."
       - id: S5-01
         title: "Phase 5.1 — Schéma data : tables intentions + cues (migrations idempotentes)"
         status: pending
@@ -261,11 +271,13 @@ qa:
       severity: minor
       status: known
     - id: BUG-05
-      title: "tests/fixtures/ n'existe pas — les suites seedent des littéraux ad hoc"
-      severity: major
-      impact: "Viole docs/TESTING.md + CLAUDE.md ('Seed memories from tests/fixtures/, not ad hoc literals'). Bloquant qualité pour Phase 5 : la logique prospective est event/clock-driven et a besoin de fixtures déterministes."
-      status: open
+      title: "Suites héritées seedent des littéraux ad hoc au lieu de tests/fixtures/"
+      severity: minor
+      impact: "Viole docs/TESTING.md + CLAUDE.md ('Seed memories from tests/fixtures/, not ad hoc literals')."
+      status: partial
       target_story: S5-00b
+      fix: "S5-00b a créé tests/fixtures/ + tests/helpers/ et les utilise dans test-env.test.ts. Sévérité abaissée major → minor : la fondation existe et n'est plus bloquante pour Phase 5."
+      remaining: "Migrer les 3 suites héritées (humemory.test.ts, agent.test.ts, llm-generator.test.ts) vers freshStore()/seedMemories() — elles passent mais restent sur DB fichier + littéraux inline."
     - id: BUG-06
       title: "vitest.config.ts orphelin — toute la suite tourne sous bun test"
       severity: minor

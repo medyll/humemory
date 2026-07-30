@@ -1,12 +1,12 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [███████▌░░] 76%
+> Phase: **development** | Progress: [████████░░] 80%
 > Last updated: 2026-07-30 | Active role: scrum
-> Stories: 19/25 complete · Tests: 40 pass / 0 fail / 88 expect (4 fichiers, bun 1.3.14)
+> Stories: 20/25 complete · Tests: 58 pass / 0 fail / 123 expect (5 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Sprint 5 — Phase 5.0 : Event bus injectable dans test env (extension docs/TESTING.md)
+- **Next action:** Sprint 5 — Phase 5.1 : Schéma data intentions + cues (migrations idempotentes)
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -41,9 +41,9 @@
       ✅ S4-01: SQLite WAL mode + busy_timeout + PRAGMA optimizations
       ✅ S4-02: Write serialization layer (enqueueWrite promise queue)
       ✅ S4-03: Fix flaky list test + CLAUDE.md tsc/test doc update
-  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (1/7 stories)
+  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (2/7 stories)
       ✅ S5-00a: Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3) — 8118e54
-      ⬚ S5-00b: Phase 5.0 — Event bus injectable dans test env (extension docs/TESTING.md)
+      ✅ S5-00b: Phase 5.0 — Env de test autonome : clock seam, event bus, helpers, fixtures, garde prod-DB
       ⬚ S5-01: Phase 5.1 — Schéma data : tables intentions + cues (migrations idempotentes)
       ⬚ S5-02: Phase 5.2 — Cue resolver : resolveTimeCues + resolveEventCues + expireStale, règles décay × intention (armed/fired/closed)
       ⬚ S5-03a: Phase 5.3 — Hook scripts/hook-session-start.ts : résout cues du cwd/branch, markdown sur stdout, budget HUMEMORY_SESSION_BUDGET
@@ -52,7 +52,7 @@
 
 ## Bugs ouverts
 
-  - **BUG-05** [major] tests/fixtures/ n'existe pas — suites seedent des littéraux ad hoc, viole docs/TESTING.md (→ S5-00b)
+  - **BUG-05** [minor, partiel] fondation fixtures/helpers livrée en S5-00b ; reste à migrer les 3 suites héritées
   - **BUG-06** [minor] vitest.config.ts orphelin — toute la suite tourne sous bun test
   - **BUG-04** [minor] tsc global peut shadow le tsc local — toujours passer par pnpm build
 
@@ -72,10 +72,10 @@
 ## Product
 
   - Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard
-  - Sprints 1+2+3+4 livrés. Suite : 40 pass / 0 fail / 88 expect sur 4 fichiers (bun 1.3.14, vérifié 2026-07-30)
+  - Sprints 1+2+3+4 livrés. Suite : 58 pass / 0 fail / 123 expect sur 5 fichiers (bun 1.3.14, vérifié 2026-07-30)
   - 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos
   - PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit
-  - Sprint 5 en cours (1/7) : S5-00a advisory lock livré, reste event bus testable puis data model intentions/cues
+  - Sprint 5 en cours (2/7) : S5-00a advisory lock + S5-00b env de test autonome livrés. Préconditions Phase 5.0 closes
 
 ## Far Vision
 

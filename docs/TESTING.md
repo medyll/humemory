@@ -1,8 +1,13 @@
 # Autonomous Test Environment — humemory
 
-**Status:** spec (2026-06-17). Code later. This is the *required* foundation for
-Phase 5 (prospective / Zeigarnik). See [AGENTS.md](../AGENTS.md) → "Autonomous test
-environment — REQUIRED".
+**Status:** implemented (2026-07-30, story S5-00b). Spec written 2026-06-17.
+This is the *required* foundation for Phase 5 (prospective / Zeigarnik). See
+[AGENTS.md](../AGENTS.md) → "Autonomous test environment — REQUIRED".
+
+Seams live in `src/core/clock.ts` and `src/core/event-bus.ts`; test-side helpers
+in `tests/helpers/`, data in `tests/fixtures/`. `tests/test-env.test.ts` covers the
+four pillars themselves — if it goes red, no time- or event-driven assertion in the
+suite can be trusted.
 
 ## Why it must be autonomous
 
@@ -15,9 +20,9 @@ LLM. Every run must be:
   ordering that depends on real time.
 - **Fast** — fake-clock fast-forward instead of real waiting; in-memory DB.
 
-## Three pillars
+## Four pillars
 
-### 1. Isolated database — partly done, finish it
+### 1. Isolated database — done
 
 Today `tests/humemory.test.ts` uses a temp file `test-humemory.db` with
 `beforeEach`/`afterEach` cleanup. Good enough but file-bound and serial.
@@ -26,34 +31,31 @@ Today `tests/humemory.test.ts` uses a temp file `test-humemory.db` with
 constructor already accepts a path → pass `':memory:'`.
 
 ```ts
-// helper: tests/helpers/store.ts
-export function freshStore() {
-  return new SQLiteStore(':memory:'); // no disk, no cross-test bleed
-}
+import { freshStore } from './helpers/store.js';
+
+const store = freshStore();            // ':memory:', clock frozen at T0
+const store2 = freshStore({ clock });  // drive time yourself
 ```
 
-Rule: **a test must never open `data/humemory.db`.** Add a guard that throws if the
-prod DB path is opened under `NODE_ENV=test`.
+Rule: **a test must never open `data/humemory.db`.** Enforced, not just asked:
+`SQLiteStore`'s constructor throws under `NODE_ENV=test` if the resolved path is the
+prod DB (`assertNotProdDbUnderTest`).
 
-### 2. Injectable clock — THE missing piece
+Note: a `:memory:` store gets a no-op advisory lock — there is no other process to
+synchronise with, and `':memory:' + '.lock'` is not a valid filename on Windows.
+Intra-process serialisation still runs through `enqueueWrite`.
 
-`src/store/sqlite.ts` and `src/core/decay.ts` call `new Date()` / `Date.now()`
-directly (see `sqlite.ts:136,185`). That makes decay transitions impossible to test
-deterministically. **This is the one real gap to close before Phase 5.**
+### 2. Injectable clock — done
 
-**Target:** a `Clock` seam injected into the store and decay functions.
+`src/core/clock.ts` exports the seam: `Clock`, `systemClock` (production default,
+unchanged behaviour) and `FakeClock` with `advance()` / `advanceHours()` /
+`advanceDays()` / `set()`. `FakeClock.now()` returns a defensive copy, so a caller
+mutating the returned `Date` cannot shift the clock.
 
-```ts
-// src/core/clock.ts
-export interface Clock { now(): Date; }
-export const systemClock: Clock = { now: () => new Date() };
-
-export class FakeClock implements Clock {
-  constructor(private t: Date) {}
-  now() { return this.t; }
-  advance(ms: number) { this.t = new Date(this.t.getTime() + ms); }
-}
-```
+Threaded through `SQLiteStore` (`add`, `recall`, `updateDecay`) and
+`InverseSearchEngine` (the recency bonus in `calculateScore`). `decay.ts` already
+took `now` as a parameter. Anything still calling `new Date()` in a hot path is a
+regression.
 
 Then decay tests assert the full curve without waiting:
 
@@ -66,8 +68,9 @@ await store.updateDecay();
 expect((await store.getById(m.id)).currentLevel).toBe(1); // L0→L1
 ```
 
-Migration: thread `clock` through `SQLiteStore`, `decay.ts`, and the consolidation
-script; default to `systemClock` so production is unchanged.
+Remaining: `scripts/consolidate.js` and the CLI/API still stamp `day` with
+`new Date()` at the edges. Harmless for decay assertions, worth threading when the
+prospective hooks land (S5-03a/b).
 
 ### 3. Mocked LLM — seam already exists
 
@@ -87,29 +90,77 @@ setLLMClient({
 
 CI runs with **no `ANTHROPIC_API_KEY`**. A test hitting the network is a bug.
 
+Use `tests/helpers/llm.ts`: `useStubLLM()` installs a deterministic client shaped
+like an Anthropic one (`messages.create` returning a JSON text block), records the
+calls it received, and can be made to throw via `{ fail: new Error(...) }` to
+exercise fallback paths.
+
+### 4. Injectable event bus — done
+
+Phase 5 is **event-driven**, not only clock-driven: a cue can be armed on
+`file_open`, `branch_switch`, `error_pattern` or `commit`. Without a seam, testing
+"this cue fires when the branch changes" would mean touching the real FS or git.
+
+```ts
+import { InMemoryEventBus } from '../src/core/event-bus.js';
+
+const bus = new InMemoryEventBus();
+bus.subscribe('branch_switch', (e) => resolver.resolveEventCues(e));
+await bus.publish({ type: 'branch_switch', branch: 'feature/x', directory: '/src' });
+// handlers are awaited: the effect is observable right after this line
+```
+
+`publish()` awaits handlers in subscription order, so **a test never needs a
+`setTimeout` to observe an effect**. Handlers are snapshotted before dispatch, so a
+handler unsubscribing mid-broadcast cannot corrupt the iteration. `published()` /
+`publishedOf(type)` expose the log for assertions without subscribing; `reset()`
+clears both handlers and log.
+
+`FileSystemEventBus` (fs.watch / chokidar + git hooks) is deliberately **not**
+implemented yet — there is nothing to feed until the `intentions`/`cues` tables and
+the resolver exist. It lands with Phase 5.2 (S5-02).
+
 ## Fixtures
 
-Seed from `tests/fixtures/` (JSON memory sets) rather than inline literals, so
-prospective-memory scenarios (open loops, cues firing at given times) are described
-as data and replayed against the `FakeClock`.
+Seed from `tests/fixtures/` (JSON sets) rather than inline literals, so scenarios are
+described as data and replayed against the `FakeClock`.
 
 ```
 tests/
 ├── fixtures/
-│   ├── memories.basic.json
-│   ├── loops.open.json        # Zeigarnik open loops for Phase 5
-│   └── cues.json             # time/event cues
+│   ├── memories.basic.json   # traces; dates as offsetHours from T0, never absolute
+│   ├── events.basic.json     # AppEvents replayable on the bus
+│   ├── loops.open.json       # Zeigarnik open loops   — lands with S5-01
+│   └── cues.json             # time/event cues        — lands with S5-01
 └── helpers/
     ├── store.ts              # freshStore()
-    └── clock.ts              # FakeClock factory
+    ├── clock.ts              # fakeClock(), T0, HOURS thresholds
+    ├── llm.ts                # useStubLLM(), stubLLMClient()
+    └── fixtures.ts           # seedMemories(), eventFixtures()
 ```
+
+Fixtures carry **no absolute timestamps**: a trace declares `offsetHours` relative to
+`T0`, resolved against the injected clock. `seedMemories()` returns the inserted
+traces keyed by fixture `key`, so assertions read as
+`seeded['auth-bug'].currentLevel` rather than array indices.
+
+`loops.open.json` and `cues.json` are intentionally absent: writing fixtures for
+tables that do not exist yet is dead weight. They arrive with the Phase 5.1 schema.
 
 ## Checklist before Phase 5 starts
 
-- [ ] `Clock` seam added; `new Date()` removed from decay/store hot paths
-- [ ] `freshStore()` → `:memory:` per test; prod-DB guard under test env
-- [ ] all suites use `setLLMClient` stub; CI green with no API key
-- [ ] fixtures dir + helpers in place
-- [ ] one end-to-end decay test driven purely by `FakeClock.advance()`
+- [x] `Clock` seam added; `new Date()` removed from decay/store hot paths
+- [x] `freshStore()` → `:memory:` per test; prod-DB guard under test env
+- [x] LLM stub helper in place; CI green with no API key
+- [x] injectable event bus (`InMemoryEventBus`) with awaited dispatch
+- [x] fixtures dir + helpers in place
+- [x] one end-to-end decay test driven purely by `FakeClock.advance()`
+      (`tests/test-env.test.ts` → L0→L1→L2→L3 with zero real waiting)
 
-When this checklist is green, prospective/Zeigarnik logic can be built and trusted.
+Checklist green as of 2026-07-30 — prospective/Zeigarnik logic can now be built on
+top and trusted.
+
+**Still open:** the three legacy suites (`humemory.test.ts`, `agent.test.ts`,
+`llm-generator.test.ts`) predate these helpers and still seed ad hoc literals against
+temp-file DBs. They pass, but they are not yet hermetic in the sense above.
+Migrating them is tracked as BUG-05 and should happen before the suite grows further.
