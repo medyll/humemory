@@ -143,9 +143,9 @@ clock- and event-driven and cannot be trusted without it.
 
 **Preconditions (5.0, blocking):**
 - [x] Cross-process SQLite advisory lock (closes Bug #3 below) — shipped, `AdvisoryLock` in `src/store/sqlite.ts`
-- [ ] Injectable event bus in the test env (Phase 5 is event-driven, not just clock-driven)
+- [x] Injectable event bus in the test env (Phase 5 is event-driven, not just clock-driven) — shipped as S5-00b, `src/core/event-bus.ts`
 
-**Data model (5.1):** dedicated `intentions` table (NOT a new `MemoryType` —
+**Data model (5.1): ✅ shipped (S5-01).** Dedicated `intentions` table (NOT a new `MemoryType` —
 intentions have a future trigger, status, and different decay rules than retrospective
 traces) + `cues` table with typed `trigger_spec` (time = ISO/cron, event = file_open /
 branch_switch / error_pattern). One intention → N cues.

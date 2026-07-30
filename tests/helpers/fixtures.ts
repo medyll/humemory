@@ -2,8 +2,9 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { SQLiteStore } from '../../src/store/sqlite.js';
-import type { Memory } from '../../src/core/types.js';
+import type { Memory, Intention, TriggerSpec } from '../../src/core/types.js';
 import type { AppEvent } from '../../src/core/event-bus.js';
+import { T0 } from './clock.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../fixtures');
 
@@ -51,6 +52,47 @@ export async function seedMemories(
       day: '2026-01-01',
     } as any);
   }
+  return seeded;
+}
+
+interface IntentionFixture {
+  key: string;
+  content: string;
+  directory: string;
+  /** Deadline exprimée en heures depuis « maintenant » — jamais une date absolue. */
+  expiresInHours?: number;
+  cues?: TriggerSpec[];
+}
+
+/** Boucles ouvertes brutes du fichier de fixtures, sans insertion. */
+export function intentionFixtures(file = 'loops.open.json'): IntentionFixture[] {
+  return readFixture<{ intentions: IntentionFixture[] }>(file).intentions;
+}
+
+/**
+ * Arme les intentions du fichier de fixtures (avec leurs cues) dans le store.
+ * `expiresInHours` est résolu contre `now` — passe le `now()` de ta FakeClock pour
+ * que les deadlines restent déterministes.
+ */
+export async function seedIntentions(
+  store: SQLiteStore,
+  options: { now?: Date; file?: string } = {}
+): Promise<Record<string, Intention>> {
+  const { now = new Date(T0), file = 'loops.open.json' } = options;
+  const seeded: Record<string, Intention> = {};
+
+  for (const fixture of intentionFixtures(file)) {
+    const expiresAt =
+      fixture.expiresInHours === undefined
+        ? undefined
+        : new Date(now.getTime() + fixture.expiresInHours * 3600_000);
+
+    seeded[fixture.key] = await store.addIntention(
+      { content: fixture.content, directory: fixture.directory, expiresAt },
+      fixture.cues ?? []
+    );
+  }
+
   return seeded;
 }
 

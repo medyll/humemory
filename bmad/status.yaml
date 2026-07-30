@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 80
+progress: 84
 last_updated: "2026-07-30"
 
-next_action: "Sprint 5 — Phase 5.1 : Schéma data intentions + cues (migrations idempotentes)"
+next_action: "Sprint 5 — Phase 5.2 : Cue resolver (resolveTimeCues, resolveEventCues, expireStale, règles décay × intention)"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -28,10 +28,10 @@ marketing:
 
 product:
   - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard"
-  - "Sprints 1+2+3+4 livrés. Suite : 40 pass / 0 fail / 88 expect sur 4 fichiers (bun 1.3.14, vérifié 2026-07-30)"
+  - "Sprints 1+2+3+4 livrés. Suite : 78 pass / 0 fail / 167 expect sur 6 fichiers (bun 1.3.14, vérifié 2026-07-30)"
   - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 en cours (2/7) : S5-00a advisory lock + S5-00b env de test autonome livrés. Préconditions Phase 5.0 closes — data model intentions/cues ensuite"
+  - "Sprint 5 en cours (3/7) : préconditions 5.0 closes + data model 5.1 livré (tables intentions/cues, CRUD, cascade). Cue resolver 5.2 ensuite"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -212,10 +212,20 @@ sprints:
         verification: "Test de mutation : rétablir new Date() dans SQLiteStore.add fait tomber 2 tests de test-env — la suite n'est pas vacante."
       - id: S5-01
         title: "Phase 5.1 — Schéma data : tables intentions + cues (migrations idempotentes)"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 78 pass / 0 fail / 167 expect (6 fichiers), dont tests/intentions.test.ts 20/20. Build tsc clean."
+        test_result: pass
+        delivered:
+          - "src/core/types.ts — Intention, Cue, TriggerSpec (Time|Event), statuts, NewIntention/NewCue, interface IntentionStore"
+          - "Tables intentions + cues + 6 index, via CREATE ... IF NOT EXISTS (initProspectiveSchema) — rejouable sur base peuplée"
+          - "PRAGMA foreign_keys=ON — sans lui le ON DELETE CASCADE de cues était décoratif"
+          - "CRUD : addIntention (+cues dans la même écriture verrouillée), getIntention, listIntentions, updateIntentionStatus, deleteIntention, addCue, getCue, listCues, updateCueStatus"
+          - "Horodatages fired_at/closed_at posés par l'horloge injectée ; fired_at non réécrit si déjà posé"
+          - "tests/fixtures/loops.open.json + seedIntentions() — deadlines en expiresInHours, jamais absolues"
+          - "tests/intentions.test.ts — 20 tests : schéma, CRUD, filtres, transitions, cascade, fixtures"
+        verification: "Mutation : retirer PRAGMA foreign_keys=ON laisse 2 cues orphelins et fait tomber le test de cascade. Migration validée sur copie de la vraie data/humemory.db — 5 traces préservées, tables créées, intention armée."
+        notes: "EventTriggerSpec n'a volontairement pas de variante 'commit' : un commit ne réveille pas une intention, il la ferme (hook post-commit, S5-03b)."
       - id: S5-02
         title: "Phase 5.2 — Cue resolver : resolveTimeCues + resolveEventCues + expireStale, règles décay × intention (armed/fired/closed)"
         status: pending

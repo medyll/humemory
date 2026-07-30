@@ -130,22 +130,26 @@ tests/
 ├── fixtures/
 │   ├── memories.basic.json   # traces; dates as offsetHours from T0, never absolute
 │   ├── events.basic.json     # AppEvents replayable on the bus
-│   ├── loops.open.json       # Zeigarnik open loops   — lands with S5-01
-│   └── cues.json             # time/event cues        — lands with S5-01
+│   └── loops.open.json       # Zeigarnik open loops + their cues (S5-01)
 └── helpers/
     ├── store.ts              # freshStore()
     ├── clock.ts              # fakeClock(), T0, HOURS thresholds
     ├── llm.ts                # useStubLLM(), stubLLMClient()
-    └── fixtures.ts           # seedMemories(), eventFixtures()
+    └── fixtures.ts           # seedMemories(), seedIntentions(), eventFixtures()
 ```
+
+Open loops declare their cues inline and their deadline as `expiresInHours`,
+resolved against the injected clock by `seedIntentions(store, { now })`. There is no
+separate `cues.json`: a cue has no meaning detached from the intention it wakes, so
+it is described where it is used.
 
 Fixtures carry **no absolute timestamps**: a trace declares `offsetHours` relative to
 `T0`, resolved against the injected clock. `seedMemories()` returns the inserted
 traces keyed by fixture `key`, so assertions read as
 `seeded['auth-bug'].currentLevel` rather than array indices.
 
-`loops.open.json` and `cues.json` are intentionally absent: writing fixtures for
-tables that do not exist yet is dead weight. They arrive with the Phase 5.1 schema.
+Fixtures for a table that does not exist yet are dead weight — each set lands with
+the schema it exercises.
 
 ## Checklist before Phase 5 starts
 

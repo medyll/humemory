@@ -358,9 +358,9 @@ keywords >5. `photographic: true` disables decay entirely.
 ### 🎯 Phase 5 — Prospective memory (the destiny)
 > Corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary:
 
-- [~] **5.0 Preconditions** — cross-process SQLite advisory lock ✅ shipped;
-      injectable event bus in the test env still to do.
-- [ ] **5.1 Data model** — dedicated `intentions` table (not a new `MemoryType`,
+- [x] **5.0 Preconditions** — cross-process SQLite advisory lock and injectable
+      event bus in the test env, both shipped (S5-00a, S5-00b).
+- [x] **5.1 Data model** — dedicated `intentions` table (not a new `MemoryType`,
       intentions don't follow the retrospective decay curve) + `cues` table with
       typed `trigger_spec`. One intention → N cues.
 - [ ] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,

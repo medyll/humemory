@@ -3,7 +3,11 @@ import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { openSync, closeSync, unlinkSync, existsSync } from 'fs';
-import type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult } from '../core/types.js';
+import type {
+  Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult,
+  Intention, IntentionStatus, IntentionStore, NewIntention,
+  Cue, CueKind, CueStatus, NewCue, TriggerSpec,
+} from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
 import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
@@ -118,7 +122,7 @@ class NoopLock {
 
 type Lock = Pick<AdvisoryLock, 'withLock'>;
 
-export class SQLiteStore implements MemoryStore {
+export class SQLiteStore implements MemoryStore, IntentionStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
   private writeQueue: Promise<any> = Promise.resolve();
@@ -146,6 +150,9 @@ export class SQLiteStore implements MemoryStore {
     this.db.exec('PRAGMA busy_timeout=5000');
     this.db.exec('PRAGMA synchronous=NORMAL');
     this.db.exec('PRAGMA cache_size=-16000');
+    // Sans ce pragma (off par défaut dans SQLite), le ON DELETE CASCADE de `cues`
+    // vers `intentions` serait purement décoratif et laisserait des cues orphelins.
+    this.db.exec('PRAGMA foreign_keys=ON');
     this.searchEngine = new InverseSearchEngine({ clock: this.clock });
     
     // Initialize advisory lock for cross-process synchronization.
@@ -197,6 +204,51 @@ export class SQLiteStore implements MemoryStore {
       CREATE INDEX IF NOT EXISTS idx_level ON memories(current_level);
       CREATE INDEX IF NOT EXISTS idx_day ON memories(day);
       CREATE INDEX IF NOT EXISTS idx_type ON memories(memory_type);
+    `);
+
+    this.initProspectiveSchema();
+  }
+
+  /**
+   * Schéma de la mémoire prospective (Phase 5.1). Idempotent : CREATE ... IF NOT
+   * EXISTS, donc rejouable sur une base existante sans migration manuelle.
+   */
+  private initProspectiveSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS intentions (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'armed',
+        fired_at INTEGER,
+        closed_at INTEGER,
+        closed_by_commit TEXT,
+        saillance INTEGER DEFAULT 100,
+        related_memory_id TEXT
+      )
+    `);
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS cues (
+        id TEXT PRIMARY KEY,
+        intention_id TEXT NOT NULL REFERENCES intentions(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        trigger_spec TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'armed',
+        armed_at INTEGER NOT NULL,
+        fired_at INTEGER
+      )
+    `);
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_intentions_status ON intentions(status);
+      CREATE INDEX IF NOT EXISTS idx_intentions_directory ON intentions(directory);
+      CREATE INDEX IF NOT EXISTS idx_intentions_expires ON intentions(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_cues_intention ON cues(intention_id);
+      CREATE INDEX IF NOT EXISTS idx_cues_status ON cues(status);
+      CREATE INDEX IF NOT EXISTS idx_cues_kind ON cues(kind);
     `);
   }
 
@@ -480,6 +532,263 @@ export class SQLiteStore implements MemoryStore {
       target: updatedTarget!,
       mergedContent,
     };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Mémoire prospective (Phase 5.1) — intentions & cues
+  // Couche données uniquement : armer, lister, changer de statut. La logique de
+  // déclenchement (resolveTimeCues / resolveEventCues / expireStale) arrive en
+  // Phase 5.2 dans src/core/cues.ts.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  private rowToIntention(row: any): Intention {
+    return {
+      id: row.id,
+      content: row.content,
+      directory: row.directory,
+      createdAt: new Date(row.created_at),
+      expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
+      status: row.status as IntentionStatus,
+      firedAt: row.fired_at ? new Date(row.fired_at) : undefined,
+      closedAt: row.closed_at ? new Date(row.closed_at) : undefined,
+      closedByCommit: row.closed_by_commit || undefined,
+      saillance: row.saillance,
+      relatedMemoryId: row.related_memory_id || undefined,
+    };
+  }
+
+  private rowToCue(row: any): Cue {
+    return {
+      id: row.id,
+      intentionId: row.intention_id,
+      kind: row.kind as CueKind,
+      triggerSpec: JSON.parse(row.trigger_spec) as TriggerSpec,
+      status: row.status as CueStatus,
+      armedAt: new Date(row.armed_at),
+      firedAt: row.fired_at ? new Date(row.fired_at) : undefined,
+    };
+  }
+
+  /**
+   * Arme une intention, et optionnellement ses cues dans la foulée — les deux
+   * écritures passent par le même verrou, pour qu'une intention ne puisse jamais
+   * être observée sans les cues censés la réveiller.
+   */
+  async addIntention(intention: NewIntention, cues: TriggerSpec[] = []): Promise<Intention> {
+    const id = crypto.randomUUID();
+    const now = this.clock.now();
+
+    const full: Intention = {
+      id,
+      content: intention.content,
+      directory: intention.directory,
+      createdAt: now,
+      expiresAt: intention.expiresAt,
+      status: intention.status ?? 'armed',
+      saillance: intention.saillance ?? 100,
+      relatedMemoryId: intention.relatedMemoryId,
+    };
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `INSERT INTO intentions (id, content, directory, created_at, expires_at, status, saillance, related_memory_id)
+           VALUES ($id, $content, $directory, $created_at, $expires_at, $status, $saillance, $related_memory_id)`
+        )
+        .run({
+          $id: full.id,
+          $content: full.content,
+          $directory: full.directory,
+          $created_at: now.getTime(),
+          $expires_at: full.expiresAt?.getTime() ?? null,
+          $status: full.status,
+          $saillance: full.saillance,
+          $related_memory_id: full.relatedMemoryId ?? null,
+        });
+
+      for (const spec of cues) {
+        this.insertCueRow(crypto.randomUUID(), full.id, spec, 'armed', now);
+      }
+    });
+
+    return full;
+  }
+
+  private insertCueRow(
+    id: string,
+    intentionId: string,
+    spec: TriggerSpec,
+    status: CueStatus,
+    armedAt: Date
+  ): void {
+    this.db
+      .query(
+        `INSERT INTO cues (id, intention_id, kind, trigger_spec, status, armed_at)
+         VALUES ($id, $intention_id, $kind, $trigger_spec, $status, $armed_at)`
+      )
+      .run({
+        $id: id,
+        $intention_id: intentionId,
+        $kind: spec.kind,
+        $trigger_spec: JSON.stringify(spec),
+        $status: status,
+        $armed_at: armedAt.getTime(),
+      });
+  }
+
+  async getIntention(id: string): Promise<Intention | null> {
+    const row = this.db.query('SELECT * FROM intentions WHERE id = $id').get({ $id: id }) as any;
+    return row ? this.rowToIntention(row) : null;
+  }
+
+  async listIntentions(
+    options: { status?: IntentionStatus | IntentionStatus[]; directory?: string; limit?: number } = {}
+  ): Promise<Intention[]> {
+    const { status, directory, limit = 50 } = options;
+    const conditions: string[] = [];
+    const params: any = {};
+
+    if (status !== undefined) {
+      const statuses = Array.isArray(status) ? status : [status];
+      // Placeholders nommés générés depuis l'index, jamais depuis la valeur —
+      // le statut reste une valeur liée, pas du SQL concaténé.
+      const keys = statuses.map((s, i) => {
+        params[`$status${i}`] = s;
+        return `$status${i}`;
+      });
+      conditions.push(`status IN (${keys.join(', ')})`);
+    }
+
+    if (directory !== undefined) {
+      conditions.push('directory = $directory');
+      params.$directory = directory;
+    }
+
+    let sql = 'SELECT * FROM intentions';
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ' ORDER BY created_at DESC LIMIT $limit';
+    params.$limit = limit;
+
+    const rows = this.db.query(sql).all(params) as any[];
+    return rows.map((r) => this.rowToIntention(r));
+  }
+
+  /**
+   * Transitions de statut. Les horodatages sont posés par l'horloge injectée :
+   * `fired` pose `fired_at`, `closed` pose `closed_at` (+ SHA éventuel).
+   * `expired` est un soft-delete — la ligne reste, pour l'historique.
+   */
+  async updateIntentionStatus(
+    id: string,
+    status: IntentionStatus,
+    options: { closedByCommit?: string } = {}
+  ): Promise<Intention> {
+    const now = this.clock.now();
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `UPDATE intentions
+              SET status = $status,
+                  fired_at = CASE WHEN $status = 'fired' AND fired_at IS NULL THEN $now ELSE fired_at END,
+                  closed_at = CASE WHEN $status = 'closed' THEN $now ELSE closed_at END,
+                  closed_by_commit = COALESCE($commit, closed_by_commit)
+            WHERE id = $id`
+        )
+        .run({ $id: id, $status: status, $now: now.getTime(), $commit: options.closedByCommit ?? null });
+    });
+
+    const intention = await this.getIntention(id);
+    if (!intention) throw new Error(`Intention ${id} not found`);
+    return intention;
+  }
+
+  /** Supprime l'intention ; ses cues partent en cascade (PRAGMA foreign_keys=ON). */
+  async deleteIntention(id: string): Promise<void> {
+    await this.enqueueWriteWithLock(async () => {
+      this.db.query('DELETE FROM intentions WHERE id = $id').run({ $id: id });
+    });
+  }
+
+  async addCue(cue: NewCue): Promise<Cue> {
+    const intention = await this.getIntention(cue.intentionId);
+    if (!intention) throw new Error(`Intention ${cue.intentionId} not found`);
+
+    const id = crypto.randomUUID();
+    const now = this.clock.now();
+    const status = cue.status ?? 'armed';
+
+    await this.enqueueWriteWithLock(async () => {
+      this.insertCueRow(id, cue.intentionId, cue.triggerSpec, status, now);
+    });
+
+    return {
+      id,
+      intentionId: cue.intentionId,
+      kind: cue.triggerSpec.kind,
+      triggerSpec: cue.triggerSpec,
+      status,
+      armedAt: now,
+    };
+  }
+
+  async getCue(id: string): Promise<Cue | null> {
+    const row = this.db.query('SELECT * FROM cues WHERE id = $id').get({ $id: id }) as any;
+    return row ? this.rowToCue(row) : null;
+  }
+
+  async listCues(
+    options: { intentionId?: string; status?: CueStatus | CueStatus[]; kind?: CueKind; limit?: number } = {}
+  ): Promise<Cue[]> {
+    const { intentionId, status, kind, limit = 50 } = options;
+    const conditions: string[] = [];
+    const params: any = {};
+
+    if (intentionId !== undefined) {
+      conditions.push('intention_id = $intention_id');
+      params.$intention_id = intentionId;
+    }
+
+    if (status !== undefined) {
+      const statuses = Array.isArray(status) ? status : [status];
+      const keys = statuses.map((s, i) => {
+        params[`$status${i}`] = s;
+        return `$status${i}`;
+      });
+      conditions.push(`status IN (${keys.join(', ')})`);
+    }
+
+    if (kind !== undefined) {
+      conditions.push('kind = $kind');
+      params.$kind = kind;
+    }
+
+    let sql = 'SELECT * FROM cues';
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ' ORDER BY armed_at ASC LIMIT $limit';
+    params.$limit = limit;
+
+    const rows = this.db.query(sql).all(params) as any[];
+    return rows.map((r) => this.rowToCue(r));
+  }
+
+  async updateCueStatus(id: string, status: CueStatus): Promise<Cue> {
+    const now = this.clock.now();
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `UPDATE cues
+              SET status = $status,
+                  fired_at = CASE WHEN $status = 'fired' AND fired_at IS NULL THEN $now ELSE fired_at END
+            WHERE id = $id`
+        )
+        .run({ $id: id, $status: status, $now: now.getTime() });
+    });
+
+    const cue = await this.getCue(id);
+    if (!cue) throw new Error(`Cue ${id} not found`);
+    return cue;
   }
 
   close(): void {
