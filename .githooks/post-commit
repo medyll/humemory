@@ -1,0 +1,22 @@
+#!/bin/sh
+# humemory — ferme les boucles ouvertes purgées par ce commit.
+#
+# Activation dans CE dépôt :
+#   git config core.hooksPath .githooks
+#
+# Activation dans un AUTRE projet : copier ce fichier dans son .githooks/ et
+# exporter HUMEMORY_HOME vers l'installation de humemory. Sans ça le script
+# serait cherché dans le dépôt commité, où il n'existe pas — la base est
+# partagée entre projets, le code ne l'est pas.
+#   export HUMEMORY_HOME=/chemin/vers/humemory
+#
+# Ne ferme d'office que les boucles citées explicitement ("Closes loop-a1b2c3d4").
+# Le reste est suggéré. N'échoue jamais : le commit est déjà écrit.
+
+command -v bun >/dev/null 2>&1 || exit 0
+
+HOME_DIR="${HUMEMORY_HOME:-$(git rev-parse --show-toplevel)}"
+SCRIPT="$HOME_DIR/scripts/hook-post-commit.ts"
+
+[ -f "$SCRIPT" ] || exit 0
+bun "$SCRIPT" || true

@@ -92,6 +92,34 @@ Over HTTP: `POST /intentions`, `GET /intentions?status=armed&directory=…`,
 `DELETE /intentions/:id`, `POST /cues`, `GET /cues`, `POST /events`,
 `POST /cues/resolve`.
 
+### Closing loops from git
+
+```bash
+git config core.hooksPath .githooks   # in this repo
+```
+
+For another project, copy `.githooks/post-commit` into it and point
+`HUMEMORY_HOME` at your humemory checkout — the database is shared across
+projects, the code is not:
+
+```bash
+export HUMEMORY_HOME=/path/to/humemory
+```
+
+Write `Closes loop-a1b2c3d4` in a commit message and that loop is closed, its
+SHA recorded, its remaining cues cancelled. Everything else is only **suggested**:
+the hook scores the overlap between the files you touched and the loop's text,
+and prints candidates. It never closes on a guess — closing the wrong loop costs
+more than leaving one open.
+
+```
+💡 Boucles peut-être concernées par ce commit :
+   loop-e99166cd — Refactorer le middleware auth
+      recoupe : auth, middleware
+
+   Fermer : pnpm cli intent close loop-e99166cd
+```
+
 ### Wiring the Claude Code hooks
 
 Two hooks, both optional and both fail-open — neither will ever block a session:
@@ -422,9 +450,9 @@ keywords >5. `photographic: true` disables decay entirely.
 - [x] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
       branch_switch, error_pattern). Decay rule: `armed` → saillance pinned at 100;
       `fired` not `closed` → normal decay (Zeigarnik fades); `closed` → archived.
-- [~] **5.3 Hooks** — `SessionStart` hook ✅ shipped (`scripts/hook-session-start.ts`,
-      budget via `HUMEMORY_SESSION_BUDGET`); git `post-commit` closes loops via `Closes loop-<id>`
-      explicit marker or file-overlap heuristic.
+- [x] **5.3 Hooks** — `SessionStart` injects context (`scripts/hook-session-start.ts`,
+      budget via `HUMEMORY_SESSION_BUDGET`); git `post-commit` closes loops via the
+      explicit `Closes loop-<id>` marker, and only *suggests* on file-overlap.
 - [x] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire,resolve}`,
       `POST /intentions`, `POST /cues`, `POST /events`, `POST /cues/resolve`.
 

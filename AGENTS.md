@@ -161,13 +161,16 @@ Decay × intention rule: `armed` → saillance pinned at 100, no decay (open loo
 salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `closed`
 → archived.
 
-**Hooks (5.3):**
+**Hooks (5.3): ✅ shipped (S5-03a, S5-03b).**
 - `scripts/hook-session-start.ts` — Claude Code `SessionStart` hook resolves cues for
   the current `cwd` + `git branch --show-current`, emits a structured markdown block
-  on stdout (configurable budget via `HUMEMORY_SESSION_BUDGET`).
-- `.githooks/post-commit` → `scripts/hook-post-commit.ts` — parses commit message for
-  `Closes loop-<id>` (explicit) or scores file overlap (heuristic fallback) to close
-  intentions and cancel their cues.
+  on stdout (configurable budget via `HUMEMORY_SESSION_BUDGET`). Logic lives in
+  `src/agent/session-context.ts`.
+- `.githooks/post-commit` → `scripts/hook-post-commit.ts` — parses the commit message
+  for `Closes loop-<id>` and closes those loops, cancelling their cues. File-overlap
+  scoring only ever *suggests*, never closes: logic in `src/agent/commit-closer.ts`.
+  Set `HUMEMORY_HOME` when installing the hook into another project — the database is
+  shared across projects, the code is not.
 
 **CLI/API (5.4): ✅ shipped (S5-04).** `pnpm cli intent {add,list,close,fire,resolve}`
 (cue args like `event:file_open:src/a.ts`, `cron:0 9 * * 1`) + `POST /intentions`,
