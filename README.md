@@ -66,19 +66,19 @@ pnpm cli status     # state of the memory palace
 pnpm test           # bun test — backend and React components, one runner
 ```
 
-Two front-ends live side by side: the original vanilla dashboard at `/`, and the
-React app at `/app`, which now carries six tabs — loops, traces, river, galaxy,
-replay and promenade, and has reached feature parity.
+The React app is served at **`/`** (and `/app`). The original vanilla dashboard
+is kept at **`/legacy`** — nothing depends on it, it is a safety net while the
+React front proves itself, and it can be deleted whenever you want.
 
 The visualisations are **wrapped, not rewritten**: d3 owns its SVG subtree and
 three.js its WebGL canvas, so they stay imperative inside a `useEffect`. Only the
-parts built from `innerHTML` strings — the trace dashboard, the replay player and
+parts built from `innerHTML` strings — the trace dashboard, the replay player,
 the merge panel — became JSX. Each visualisation is code-split and loaded on
 demand; three.js alone is half a megabyte, and nobody who never opens the
 promenade should download it.
 
-The vanilla dashboard is still served, and can be retired whenever you want it
-gone — nothing in the React app depends on it.
+Run `pnpm build:web` before `pnpm start:api`, or `/` falls back to the legacy
+dashboard rather than serving a dead page.
 
 ### Open loops (prospective memory)
 

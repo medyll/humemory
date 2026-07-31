@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 100
+progress: 97
 last_updated: "2026-07-31"
 
-next_action: "Décision utilisateur : retirer le dashboard vanilla (public/index.html + public/js) ; sinon Sprint 7 — BUG-05/06/08 et phase release"
+next_action: "Sprint 7 — S7-02 : solder BUG-05/06/08, puis phase release. Suppression du vanilla au choix de l utilisateur."
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -384,6 +384,31 @@ sprints:
           - "Hauteur des sphères de la promenade : Math.random() remplacé par une dérivation de l'index — le palais doit être le même d'une visite à l'autre"
         remaining: "Replay, fusion, encodage et filtres avancés livrés depuis en S6-04 — la parité est atteinte."
         notes: "4 vues sur 5 sont wrappées et non réécrites : river et galaxy sont pilotées par d3, qui possède son sous-arbre SVG. Seul dashboard.js, fait de chaînes innerHTML, méritait un portage JSX."
+
+  - id: 7
+    goal: "Bascule du front React à la racine + dette tracée avant release"
+    status: in_progress
+    stories:
+      - id: S7-01
+        title: "Servir l'app React à / , conserver le vanilla sur /legacy"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 238 pass / 0 fail / 964 expect (15 fichiers). Build clean. Routes vérifiées en HTTP réel."
+        test_result: pass
+        delivered:
+          - "GET / sert l'app React ; repli sur le dashboard vanilla si le bundle est absent"
+          - "GET /legacy conserve l'ancien dashboard — filet de sécurité, rien n'en dépend"
+          - "GET /app conservé (URL historique)"
+        fixes:
+          - "Les assets étaient référencés en relatif (./index-abc.js) : servie à /app sans slash final, la page les cherchait à la racine et ne les trouvait pas. L'app React était donc cassée en navigateur réel, ce que mes vérifications HTTP n'avaient pas montré (elles tapaient les assets par leur chemin direct). Les références sont désormais absolutisées vers /app/."
+        verification: "Les trois routes servent des assets qui répondent 200 depuis l'URL telle qu'écrite dans la page ; les 5 chunks dynamiques (dont three.js) sont joignables ; #root présent."
+        notes: "Suppression du vanilla non faite : c'est une suppression, elle reste à la main de l'utilisateur."
+      - id: S7-02
+        title: "Dette : BUG-05 (suites héritées vers fixtures), BUG-06 (vitest orphelin), BUG-08 (createApp testable)"
+        status: pending
+        tests_executed: false
+        test_output: null
+        test_result: null
 
 backlog:
   - id: B-VIZ-01

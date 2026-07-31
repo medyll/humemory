@@ -1,12 +1,12 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [██████████] 100%
+> Phase: **development** | Progress: [█████████▊] 97%
 > Last updated: 2026-07-31 | Active role: scrum
-> Stories: 29/29 complete · Tests: 238 pass / 0 fail / 963 expect (15 fichiers, bun 1.3.14)
+> Stories: 30/31 complete · Tests: 238 pass / 0 fail / 964 expect (15 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Décision : retirer le dashboard vanilla ? Sinon Sprint 7 — BUG-05/06/08 puis release
+- **Next action:** Sprint 7 — S7-02 : solder BUG-05/06/08, puis phase release
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -54,6 +54,10 @@
       ✅ S6-01: Socle bundler bun + React + TS + @testing-library, servi par Hono sur /app, types partagés
       ✅ S6-02: Onglet prospectif — tension partagée avec le back, cues, armement, fermeture
       ⬚ S6-03: Portage des vues existantes ; three.js et canvas wrappés, jamais réécrits
+
+  🔨 Sprint 7: Bascule du front + dette avant release (1/2 stories)
+      ✅ S7-01: App React servie à / ; vanilla conservé sur /legacy ; assets absolutisés
+      ⬚ S7-02: Solder BUG-05 (fixtures), BUG-06 (vitest orphelin), BUG-08 (createApp testable)
 
 ## Bugs ouverts
 

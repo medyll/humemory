@@ -11,6 +11,11 @@
  * POST   /decay             - Mettre à jour la dégradation
  * GET    /status            - État de la mémoire
  *
+ * Fronts :
+ * GET    /                  - App React (repli sur le dashboard vanilla si non construite)
+ * GET    /app               - Même app, URL historique
+ * GET    /legacy            - Ancien dashboard vanilla
+ *
  * Mémoire prospective (src/api/intentions-routes.ts):
  * POST   /intentions        - Armer une boucle (+ ses cues)
  * GET    /intentions        - Lister (filtres status, directory)
@@ -70,9 +75,32 @@ app.use('*', cors({
 }));
 
 // Static files (dashboard)
+const APP_DIR = join(PUBLIC_DIR, 'app');
+
+/**
+ * Page de l'app React, servie à `/` comme à `/app`.
+ *
+ * bun émet des références relatives (`./index-abc.js`). Servies ailleurs qu'à
+ * `/app/`, le navigateur les résout contre la racine et ne trouve rien — il faut
+ * donc les absolutiser vers `/app/`.
+ */
+function reactAppHtml(): string {
+  const html = readFileSync(join(APP_DIR, 'index.html'), 'utf-8');
+  return html.replace(/(src|href)="\.\//g, '$1="/app/');
+}
+
 app.get('/', (c) => {
-  const html = readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8');
-  return c.html(html);
+  try {
+    return c.html(reactAppHtml());
+  } catch {
+    // Bundle absent : on retombe sur l'ancien dashboard plutôt que sur une page morte.
+    return c.html(readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8'));
+  }
+});
+
+/** Ancien dashboard vanilla — conservé le temps que le front React fasse ses preuves. */
+app.get('/legacy', (c) => {
+  return c.html(readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8'));
 });
 
 app.get('/session', (c) => {
@@ -80,11 +108,8 @@ app.get('/session', (c) => {
   return c.html(html);
 });
 
-// Front React (web/ → public/app/ via `pnpm build:web`).
-// Servi sous /app tant que le portage n'est pas terminé : le dashboard vanilla
-// reste à la racine, pas de fenêtre cassée pendant la migration.
-const APP_DIR = join(PUBLIC_DIR, 'app');
-
+// Front React (web/ → public/app/ via `pnpm build:web`), servi à / et /app.
+// L'ancien dashboard reste joignable sur /legacy.
 const APP_MIME: Record<string, string> = {
   js: 'application/javascript',
   css: 'text/css',
@@ -97,7 +122,7 @@ const APP_MIME: Record<string, string> = {
 
 app.get('/app', (c) => {
   try {
-    return c.html(readFileSync(join(APP_DIR, 'index.html'), 'utf-8'));
+    return c.html(reactAppHtml());
   } catch {
     // Bundle absent : dire quoi faire plutôt qu'un 404 muet.
     return c.text('Front non construit. Lance `pnpm build:web`.', 503);
