@@ -1,20 +1,20 @@
 import type { IntentionStatus } from '../../src/core/types.js';
 
 /**
- * État d'une boucle, rendu tel qu'il se lit dans le modèle : `armed` est en
- * tension (saillance figée à 100), `fired` se relâche, `closed` est purgée.
+ * A loop's state, rendered the way the model reads: `armed` is under tension
+ * (salience pinned at 100), `fired` relaxes, `closed` has been purged.
  */
 const LABELS: Record<IntentionStatus, { icon: string; label: string }> = {
-  armed: { icon: '🔁', label: 'ouverte' },
-  fired: { icon: '⏰', label: 'remontée' },
-  closed: { icon: '✅', label: 'fermée' },
-  expired: { icon: '💤', label: 'expirée' },
+  armed: { icon: '🔁', label: 'open' },
+  fired: { icon: '⏰', label: 'surfaced' },
+  closed: { icon: '✅', label: 'closed' },
+  expired: { icon: '💤', label: 'expired' },
 };
 
 export function LoopBadge({ status }: { status: IntentionStatus }) {
   const { icon, label } = LABELS[status];
   return (
-    <span className="loop-badge" data-status={status} title={`Boucle ${label}`}>
+    <span className="loop-badge" data-status={status} title={`Loop ${label}`}>
       <span aria-hidden="true">{icon}</span> {label}
     </span>
   );

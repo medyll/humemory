@@ -1,26 +1,26 @@
 /**
- * Clock seam — permet de piloter le temps en test.
+ * Clock seam — lets tests drive time.
  *
- * humemory est time-driven : toute la dégradation (L0→L4) dépend de l'écart entre
- * `createdAt`/`lastRecalled` et « maintenant ». Tant que ce « maintenant » est un
- * `new Date()` planqué dans le store, une transition de niveau ne peut être testée
- * qu'en attendant réellement 24h. Ce module extrait le seam : la prod injecte
- * `systemClock`, les tests injectent une `FakeClock` qu'ils font avancer à la main.
+ * humemory is time-driven: all decay (L0→L4) depends on the gap between
+ * `createdAt`/`lastRecalled` and "now". As long as that "now" is a `new Date()`
+ * buried in the store, a level transition can only be tested by actually waiting
+ * 24 hours. This module extracts the seam: production injects `systemClock`,
+ * tests inject a `FakeClock` they advance by hand.
  *
- * Voir docs/TESTING.md → pilier 2.
+ * See docs/TESTING.md → pillar 2.
  */
 
 export interface Clock {
   now(): Date;
 }
 
-/** Horloge de production — lit l'heure système. */
+/** Production clock — reads the system time. */
 export const systemClock: Clock = {
   now: () => new Date(),
 };
 
 /**
- * Horloge de test — n'avance que sur appel explicite d'`advance()`/`set()`.
+ * Test clock — only moves when `advance()`/`set()` is called.
  *
  * ```ts
  * const clock = new FakeClock(new Date('2026-01-01T00:00:00Z'));
@@ -36,27 +36,27 @@ export class FakeClock implements Clock {
   }
 
   now(): Date {
-    // Copie défensive : un appelant qui mute le retour ne doit pas décaler l'horloge.
+    // Defensive copy: a caller mutating the result must not shift the clock.
     return new Date(this.t.getTime());
   }
 
-  /** Avance de `ms` millisecondes. */
+  /** Advances by `ms` milliseconds. */
   advance(ms: number): this {
     this.t = new Date(this.t.getTime() + ms);
     return this;
   }
 
-  /** Avance de `h` heures — les seuils de decay sont exprimés en heures. */
+  /** Advances by `h` hours — decay thresholds are expressed in hours. */
   advanceHours(h: number): this {
     return this.advance(h * 3600_000);
   }
 
-  /** Avance de `d` jours. */
+  /** Advances by `d` days. */
   advanceDays(d: number): this {
     return this.advance(d * 24 * 3600_000);
   }
 
-  /** Repositionne l'horloge à une date absolue. */
+  /** Moves the clock to an absolute date. */
   set(t: Date | string | number): this {
     this.t = new Date(t);
     return this;

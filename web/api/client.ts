@@ -1,14 +1,14 @@
 /**
- * Client HTTP du front.
+ * Front-end HTTP client.
  *
- * Les types viennent de `src/core/types.ts` — les mêmes que ceux du store et de
- * l'API. Pas de types dupliqués côté front : si le modèle change, le front ne
- * compile plus, ce qui est exactement le comportement voulu.
+ * Types come from `src/core/types.ts` — the same ones the store and the API use.
+ * No duplicated front-end types: if the model changes, the front end stops
+ * compiling, which is exactly the intended behaviour.
  */
 
 import type { Intention, Cue, Memory, MemoryType, TriggerSpec, IntentionStatus } from '../../src/core/types.js';
 
-/** Une intention telle que l'API la renvoie : avec son identifiant court. */
+/** An intention as the API returns it: with its short id. */
 export interface IntentionDTO extends Omit<Intention, 'createdAt' | 'expiresAt' | 'firedAt' | 'closedAt'> {
   loopId: string;
   createdAt: string;
@@ -41,7 +41,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-/** Filtres avancés de recherche — portage de l'ancien panneau ⚙️. */
+/** Advanced search filters — ported from the old ⚙️ panel. */
 export interface SearchFilters {
   limit?: number;
   maxLevel?: number;
@@ -113,7 +113,7 @@ export const api = {
     });
   },
 
-  /** Ménage : expire les boucles périmées, tire les échéances atteintes. */
+  /** Sweep: expires overdue loops, fires deadlines that have come due. */
   resolveCues() {
     return request<{ expired: number; fired: IntentionDTO[]; count: number }>('/cues/resolve', {
       method: 'POST',
@@ -182,7 +182,7 @@ export const api = {
     );
   },
 
-  /** Fusionne `sourceId` dans `targetId`. Irréversible : la source passe au niveau 4. */
+  /** Merges `sourceId` into `targetId`. Irreversible: the source drops to level 4. */
   mergeMemories(sourceId: string, targetId: string) {
     return request<{ success: boolean }>(`/memories/${sourceId}/merge`, {
       method: 'POST',

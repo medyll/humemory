@@ -1,13 +1,13 @@
 /**
- * Contexte mnésique de début de session — Phase 5.3.1.
+ * Session-start mnemonic context — Phase 5.3.1.
  *
- * Au démarrage d'une session Claude Code, l'agent ne sait pas ce qu'il avait
- * laissé en plan. Ce module compose le bloc markdown qui le lui rappelle : les
- * boucles ouvertes du projet courant d'abord (mémoire prospective), puis les
- * traces dégradées encore pertinentes (mémoire rétrospective).
+ * When a Claude Code session begins, the agent has no idea what it left
+ * unfinished. This module composes the markdown block that reminds it: the open
+ * loops of the current project first (prospective memory), then the decayed but
+ * still relevant traces (retrospective memory).
  *
- * La logique vit ici pour rester testable ; `scripts/hook-session-start.ts`
- * n'est qu'une coquille qui lit l'environnement et écrit sur stdout.
+ * The logic lives here so it stays testable; `scripts/hook-session-start.ts` is
+ * only a shell that reads the environment and writes to stdout.
  */
 
 import type { Intention, Memory, MemoryStore, IntentionStore, DecayLevel } from '../core/types.js';
@@ -15,21 +15,21 @@ import type { CueResolver } from '../core/cues.js';
 import { loopId, intentionSaillance } from '../core/cues.js';
 import { systemClock, type Clock } from '../core/clock.js';
 
-/** Budget par défaut : nombre max d'éléments listés par section. */
+/** Default budget: maximum number of items listed per section. */
 export const DEFAULT_SESSION_BUDGET = 10;
 
-/** Une trace n'est rappelée que si elle est restée saillante malgré sa dégradation. */
+/** A trace is only recalled if it stayed salient despite its decay. */
 export const DEFAULT_SAILLANCE_THRESHOLD = 60;
 
-/** Niveaux « dégradés mais encore utiles » : le détail est parti, le sens reste. */
+/** Levels that are "degraded but still useful": the detail is gone, the meaning remains. */
 export const RELEVANT_LEVELS: DecayLevel[] = [2, 3];
 
 export interface SessionContextOptions {
   store: MemoryStore & IntentionStore;
   directory: string;
-  /** Branche git courante — affichée en en-tête, sert de contexte à l'agent. */
+  /** Current git branch — shown in the header, gives the agent its bearings. */
   branch?: string;
-  /** Resolver : si fourni, les cues échus sont tirés avant composition. */
+  /** Resolver: when provided, due cues are fired before composing. */
   resolver?: CueResolver;
   budget?: number;
   saillanceThreshold?: number;
@@ -40,24 +40,24 @@ export interface SessionContext {
   markdown: string;
   openLoops: Intention[];
   traces: Memory[];
-  /** Boucles réveillées par un cue temporel pendant cette composition. */
+  /** Loops woken by a time cue during this composition. */
   firedNow: Intention[];
 }
 
-/** Rend une durée en formulation courte : « il y a 2j », « il y a 3h ». */
+/** Renders a duration in short form: "2d ago", "3h ago". */
 export function humanizeAge(from: Date, now: Date): string {
   const ms = Math.max(0, now.getTime() - from.getTime());
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return minutes <= 1 ? "à l'instant" : `il y a ${minutes}min`;
+  if (minutes < 60) return minutes <= 1 ? 'just now' : `${minutes}min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours}h`;
+  if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `il y a ${days}j`;
+  if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
-  return `il y a ${months} mois`;
+  return `${months} months ago`;
 }
 
-/** Contenu le plus pertinent d'une trace selon son niveau de dégradation. */
+/** The most relevant content of a trace, given how far it has decayed. */
 function traceText(memory: Memory): string {
   switch (memory.currentLevel) {
     case 0:
@@ -73,18 +73,18 @@ function traceText(memory: Memory): string {
   }
 }
 
-/** Aplati un texte sur une ligne — le bloc est injecté dans un prompt, pas dans un document. */
+/** Flattens text onto one line — the block goes into a prompt, not a document. */
 function oneLine(text: string, max = 220): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
 /**
- * Compose le contexte mnésique du répertoire courant.
+ * Composes the mnemonic context of the current directory.
  *
- * Effets de bord assumés : les intentions périmées passent en `expired` et les
- * cues temporels échus sont tirés. Un début de session est exactement le moment
- * où ce ménage doit avoir lieu — sinon personne ne le fait jamais.
+ * Side effects, deliberately: overdue intentions are expired and due time cues
+ * are fired. The start of a session is exactly when that housekeeping should
+ * happen — otherwise nobody ever does it.
  */
 export async function buildSessionContext(options: SessionContextOptions): Promise<SessionContext> {
   const {
@@ -138,34 +138,34 @@ function renderMarkdown(input: {
 }): string {
   const { openLoops, traces, firedNow, branch, now } = input;
 
-  // Rien à dire : on n'écrit rien plutôt que d'injecter un bloc vide dans le prompt.
+  // Nothing to say: write nothing rather than inject an empty block into the prompt.
   if (!openLoops.length && !traces.length && !firedNow.length) return '';
 
-  const lines: string[] = ['## 🧠 Contexte mnésique (humemory)'];
-  if (branch) lines.push('', `_Branche courante : \`${branch}\`_`);
+  const lines: string[] = ['## 🧠 Mnemonic context (humemory)'];
+  if (branch) lines.push('', `_Current branch: \`${branch}\`_`);
 
   if (firedNow.length) {
-    lines.push('', '### ⏰ Échéances atteintes');
+    lines.push('', '### ⏰ Deadlines reached');
     for (const i of firedNow) {
       lines.push(`- **[${loopId(i.id)}]** ${oneLine(i.content)}`);
     }
   }
 
   if (openLoops.length) {
-    lines.push('', '### Boucles ouvertes (Zeigarnik)');
+    lines.push('', '### Open loops (Zeigarnik)');
     for (const i of openLoops) {
       const age = humanizeAge(i.createdAt, now);
       const deadline =
         i.expiresAt && i.expiresAt.getTime() > now.getTime()
-          ? ` — échéance ${humanizeAge(now, i.expiresAt).replace('il y a', 'dans')}`
+          ? ` — due in ${humanizeAge(now, i.expiresAt).replace(' ago', '')}`
           : '';
-      lines.push(`- **[${loopId(i.id)}]** ${oneLine(i.content)} (armée ${age}${deadline})`);
+      lines.push(`- **[${loopId(i.id)}]** ${oneLine(i.content)} (armed ${age}${deadline})`);
     }
-    lines.push('', `_Fermer une boucle : mentionner \`Closes ${loopId(openLoops[0].id)}\` dans un message de commit._`);
+    lines.push('', `_To close a loop: mention \`Closes ${loopId(openLoops[0].id)}\` in a commit message._`);
   }
 
   if (traces.length) {
-    lines.push('', '### Traces pertinentes dégradées');
+    lines.push('', '### Relevant decayed traces');
     for (const m of traces) {
       lines.push(`- [L${m.currentLevel}] ${oneLine(traceText(m))}`);
     }
@@ -174,5 +174,5 @@ function renderMarkdown(input: {
   return `${lines.join('\n')}\n`;
 }
 
-/** Saillance courante d'une boucle — réexporté pour les consommateurs du contexte. */
+/** Current salience of a loop — re-exported for consumers of the context. */
 export { intentionSaillance };

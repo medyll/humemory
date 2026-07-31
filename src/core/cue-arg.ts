@@ -1,15 +1,15 @@
 /**
- * Parsing des `--cue` de la ligne de commande.
+ * Parsing of `--cue` command-line arguments.
  *
- * Formats acceptés :
- *   time:2026-12-01                      — échéance one-shot (date ou datetime ISO)
- *   cron:0 9 * * 1                       — récurrence
- *   event:file_open:src/auth/service.ts  — ouverture de fichier
- *   event:branch_switch:feature/x        — changement de branche
- *   event:error_pattern:SQLITE_(BUSY)    — motif d'erreur (peut contenir des ':')
+ * Accepted formats:
+ *   time:2026-12-01                      — one-shot deadline (ISO date or datetime)
+ *   cron:0 9 * * 1                       — recurrence
+ *   event:file_open:src/auth/service.ts  — file opened
+ *   event:branch_switch:feature/x        — branch changed
+ *   event:error_pattern:SQLITE_(BUSY)    — error pattern (may contain ':')
  *
- * Vit dans core/ et non dans cli/ : le même format est saisi à la ligne de
- * commande et dans le formulaire du front. Un seul parseur, testé une fois.
+ * It lives in core/ rather than cli/: the same format is typed on the command
+ * line and in the front-end form. One parser, tested once.
  */
 
 import type { TriggerSpec } from '../core/types.js';
@@ -20,21 +20,21 @@ const EVENT_TYPES = ['file_open', 'branch_switch', 'error_pattern'] as const;
 
 export function parseCueArg(raw: string): TriggerSpec {
   const input = raw.trim();
-  if (!input) throw new CueArgError('cue vide');
+  if (!input) throw new CueArgError('empty cue');
 
   const [head, ...rest] = input.split(':');
-  const tail = rest.join(':'); // le motif d'erreur ou une heure ISO contiennent des ':'
+  const tail = rest.join(':'); // error patterns and ISO times contain ':'
 
   switch (head) {
     case 'time': {
-      if (!tail) throw new CueArgError('time: attend une date ISO — ex. time:2026-12-01');
+      if (!tail) throw new CueArgError('time: expects an ISO date — e.g. time:2026-12-01');
       const date = new Date(tail);
-      if (Number.isNaN(date.getTime())) throw new CueArgError(`date invalide: ${tail}`);
+      if (Number.isNaN(date.getTime())) throw new CueArgError(`invalid date: ${tail}`);
       return { kind: 'time', at: date.toISOString() };
     }
 
     case 'cron': {
-      if (!tail.trim()) throw new CueArgError('cron: attend une expression — ex. "cron:0 9 * * 1"');
+      if (!tail.trim()) throw new CueArgError('cron: expects an expression — e.g. "cron:0 9 * * 1"');
       return { kind: 'time', cron: tail.trim() };
     }
 
@@ -44,9 +44,9 @@ export function parseCueArg(raw: string): TriggerSpec {
       const value = sep === -1 ? '' : tail.slice(sep + 1);
 
       if (!EVENT_TYPES.includes(type as any)) {
-        throw new CueArgError(`type d'event inconnu: "${type}" (${EVENT_TYPES.join(' | ')})`);
+        throw new CueArgError(`unknown event type: "${type}" (${EVENT_TYPES.join(' | ')})`);
       }
-      if (!value) throw new CueArgError(`event:${type}: attend une valeur`);
+      if (!value) throw new CueArgError(`event:${type}: expects a value`);
 
       switch (type) {
         case 'file_open':
@@ -59,11 +59,11 @@ export function parseCueArg(raw: string): TriggerSpec {
     }
 
     default:
-      throw new CueArgError(`préfixe inconnu: "${head}" (time | cron | event)`);
+      throw new CueArgError(`unknown prefix: "${head}" (time | cron | event)`);
   }
 }
 
-/** Rend un cue sous sa forme CLI — l'inverse de `parseCueArg`, pour l'affichage. */
+/** Renders a cue in its CLI form — the inverse of `parseCueArg`, for display. */
 export function formatTriggerSpec(spec: TriggerSpec): string {
   if (spec.kind === 'time') {
     return spec.cron ? `cron:${spec.cron}` : `time:${spec.at}`;

@@ -1,10 +1,10 @@
 /**
- * Courbe d'oubli d'une trace, au canvas.
+ * A trace's forgetting curve, on canvas.
  *
- * Portage de `public/js/decay-curve.js` : le tracé est repris tel quel, mais la
- * projection vient désormais de `projectDecayCurve` (src/core/decay.ts) au lieu
- * d'une copie de l'algorithme côté front. La vue montre la courbe que le système
- * applique, pas une approximation qui lui ressemble.
+ * Ported from `public/js/decay-curve.js`: the drawing is taken as is, but the
+ * projection now comes from `projectDecayCurve` (src/core/decay.ts) instead of a
+ * front-end copy of the algorithm. The view shows the curve the system applies,
+ * not an approximation that resembles it.
  */
 
 import type { Memory, DecayLevel } from '../../src/core/types.js';
@@ -21,7 +21,7 @@ const LEVEL_COLORS: Record<DecayLevel, string> = {
 const LEVEL_LABELS = ['L0', 'L1', 'L2', 'L3', 'L4'];
 
 export interface DecayCurveOptions {
-  /** Instant de référence du repère « Maintenant ». */
+  /** Reference instant for the "now" marker. */
   now?: Date;
   daysAhead?: number;
 }
@@ -48,7 +48,7 @@ export function renderDecayCurve(
   const xScale = (hours: number) => padding.left + (hours / maxHours) * chartWidth;
   const yScale = (saillance: number) => padding.top + chartHeight - (saillance / 100) * chartHeight;
 
-  // Grille horizontale + graduations de saillance
+  // Horizontal grid and salience ticks
   ctx.strokeStyle = '#3f3f4e';
   ctx.lineWidth = 1;
   ctx.fillStyle = '#a1a1aa';
@@ -63,14 +63,14 @@ export function renderDecayCurve(
     ctx.fillText(`${i * 25}`, padding.left - 8, y + 4);
   }
 
-  // Graduations de temps
+  // Time ticks
   ctx.textAlign = 'center';
   for (const day of [0, 7, 30, 60, 90]) {
     if (day > daysAhead) continue;
     ctx.fillText(`${day}j`, xScale(day * 24), height - 10);
   }
 
-  // Repère « maintenant »
+  // "Now" marker
   const nowHours = (now.getTime() - new Date(memory.createdAt).getTime()) / 3600_000;
   const nowX = xScale(nowHours);
 
@@ -84,9 +84,9 @@ export function renderDecayCurve(
 
   ctx.fillStyle = '#8b5cf6';
   ctx.font = '10px -apple-system, sans-serif';
-  ctx.fillText('Maintenant', nowX, padding.top - 5);
+  ctx.fillText('Now', nowX, padding.top - 5);
 
-  // La courbe : trait plein pour le passé, pointillé pour la projection.
+  // The curve: solid for the past, dashed for the projection.
   let lastLevel = -1;
   for (let i = 1; i < curve.length; i++) {
     const p0 = curve[i - 1];
@@ -112,7 +112,7 @@ export function renderDecayCurve(
   }
   ctx.setLineDash([]);
 
-  // Marqueur de rappel : le moment où la trace a été réactivée.
+  // Recall marker: the moment the trace was reactivated.
   if (memory.lastRecalled) {
     const recallHours =
       (new Date(memory.lastRecalled).getTime() - new Date(memory.createdAt).getTime()) / 3600_000;
@@ -139,6 +139,6 @@ export function renderDecayCurve(
     ctx.fillStyle = '#8b5cf6';
     ctx.font = 'bold 12px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🔒 Mode photographique — pas de dégradation', width / 2, height / 2);
+    ctx.fillText('🔒 Photographic mode — no decay', width / 2, height / 2);
   }
 }

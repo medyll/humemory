@@ -1,24 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Hôte React pour une vue qui gère elle-même son DOM (d3, three.js, canvas).
+ * React host for a view that owns its own DOM (d3, three.js, canvas).
  *
- * Ces visualisations sont impératives par nature : d3 possède son sous-arbre SVG,
- * three.js son canvas WebGL. Les réécrire en JSX n'apporterait rien et coûterait
- * cher — on leur prête un conteneur et on ne touche plus à son contenu. React ne
- * voit qu'une `<div>` vide, ce qui est exactement ce qu'il faut.
+ * These visualisations are imperative by nature: d3 owns its SVG subtree,
+ * three.js its WebGL canvas. Rewriting them in JSX would gain nothing and cost a
+ * lot — we lend them a container and stop touching its contents. React only ever
+ * sees an empty `<div>`, which is exactly right.
  *
- * Le module est chargé dynamiquement : three.js et d3 pèsent lourd, et rien ne
- * justifie de les faire télécharger à quelqu'un qui ne visite jamais l'onglet.
+ * The module is loaded dynamically: three.js and d3 are heavy, and there is no
+ * reason to make someone who never opens the tab download them.
  */
 
-/** Contrat d'une vue impérative : elle prend un conteneur, elle rend de quoi se démonter. */
+/** Contract of an imperative view: it takes a container and returns its teardown. */
 export type ImperativeMount = (container: HTMLElement) => Promise<() => void> | (() => void);
 
 export interface ImperativeViewProps {
-  /** Import dynamique du module de la vue. */
+  /** Dynamic import of the view module. */
   load: () => Promise<{ mount: ImperativeMount }>;
-  /** Rejoué à l'identique, un changement de clé remonte la vue. */
+  /** Replayed as is; changing the key remounts the view. */
   viewKey: string;
   height?: number;
   label: string;
@@ -42,8 +42,8 @@ export function ImperativeView({ load, viewKey, height = 600, label }: Imperativ
     load()
       .then(({ mount }) => mount(container))
       .then((dispose) => {
-        // Démonté avant la fin du chargement : on nettoie tout de suite, sinon
-        // une animation continue de tourner dans un conteneur détaché.
+        // Unmounted before loading finished: clean up right away, otherwise an
+        // animation keeps running inside a detached container.
         if (disposed) {
           dispose?.();
           return;
@@ -66,10 +66,10 @@ export function ImperativeView({ load, viewKey, height = 600, label }: Imperativ
 
   return (
     <div className="imperative-view">
-      {loading && <p role="status">Chargement de {label}…</p>}
+      {loading && <p role="status">Loading {label}…</p>}
       {error && (
         <p role="alert" className="error">
-          {label} indisponible : {error.message}
+          {label} unavailable: {error.message}
         </p>
       )}
       <div ref={ref} className="imperative-canvas" style={{ height }} aria-label={label} />

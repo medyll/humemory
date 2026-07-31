@@ -1,49 +1,49 @@
 /**
- * Niveaux de dégradation de la mémoire
- * 0 = détail complet (frais)
- * 1 = résumé (quelques jours)
- * 2 = essentiel (semaines)
- * 3 = mots-clés (mois)
- * 4 = perdu/fusionné
+ * Memory decay levels.
+ * 0 = full detail (fresh)
+ * 1 = summary (days)
+ * 2 = gist (weeks)
+ * 3 = keywords (months)
+ * 4 = lost / merged
  */
 export type DecayLevel = 0 | 1 | 2 | 3 | 4;
 
 /**
- * Types de mémoire (neuroscience cognitive)
- * - Episodic: souvenirs d'événements vécus (contexte temporel/spatial)
- * - Semantic: connaissances factuelles, concepts
- * - Procedural: savoir-faire, gestes, routines
+ * Memory types (cognitive neuroscience).
+ * - Episodic: lived events, with their temporal and spatial context
+ * - Semantic: facts and concepts
+ * - Procedural: know-how, gestures, routines
  */
 export type MemoryType = 'episodic' | 'semantic' | 'procedural';
 
 export interface Memory {
   id: string;
-  content: string;           // Niveau 0 (détail complet)
-  level1Summary?: string;    // Niveau 1 (résumé)
-  level2Essential?: string;  // Niveau 2 (essentiel)
-  level3Keywords?: string;   // Niveau 3 (mots-clés pour BM25)
+  content: string;           // Level 0 (full detail)
+  level1Summary?: string;    // Level 1 (summary)
+  level2Essential?: string;  // Level 2 (gist)
+  level3Keywords?: string;   // Level 3 (keywords for BM25)
   
-  // Métadonnées légères
-  directory: string;         // Projet/source
+  // Lightweight metadata
+  directory: string;         // Project / source
   day: string;               // YYYY-MM-DD
-  keywords: string[];        // Mots-clés tagués
-  sessionId: string;         // Session de travail
-  memoryType: MemoryType;    // Type de mémoire
+  keywords: string[];        // Tagged keywords
+  sessionId: string;         // Working session
+  memoryType: MemoryType;    // Memory type
   
-  // Cycle de vie
+  // Lifecycle
   createdAt: Date;
   lastRecalled?: Date;
-  recallCount: number;       // Nombre de rappels
+  recallCount: number;       // How many times it was recalled
   
-  // Dégradation
-  decayRate: number;         // 0.0 (lent) à 1.0 (rapide)
-  currentLevel: DecayLevel;  // Niveau actuel de dégradation
+  // Decay
+  decayRate: number;         // 0.0 (slow) to 1.0 (fast)
+  currentLevel: DecayLevel;  // Current decay level
   saillance: number;         // Score 0-100
   
-  // Fusion
-  mergedIntoId?: string;     // ID du souvenir fusionné (si niveau 4)
+  // Merging
+  mergedIntoId?: string;     // Id of the trace it was merged into (level 4)
 
-  // Photographic mode — désactive la dégradation
+  // Photographic mode — disables decay
   photographic?: boolean;
 }
 
@@ -51,7 +51,7 @@ export interface SearchQuery {
   query: string;
   directory?: string;
   sessionId?: string;
-  maxLevel?: DecayLevel;     // Niveau max de dégradation à inclure
+  maxLevel?: DecayLevel;     // Highest decay level to include
   limit?: number;
   // Enriched filters
   memoryType?: MemoryType;
@@ -63,8 +63,8 @@ export interface SearchQuery {
 
 export interface SearchResult {
   memory: Memory;
-  matchLevel: DecayLevel;    // Niveau où le match a été trouvé
-  score: number;             // Score de pertinence
+  matchLevel: DecayLevel;    // Level at which the match was found
+  score: number;             // Relevance score
 }
 
 export interface MergeResult {
@@ -74,23 +74,23 @@ export interface MergeResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mémoire prospective (Phase 5) — intentions & cues
+// Prospective memory (Phase 5) — intentions and cues
 //
-// Une `Intention` est une boucle ouverte : « demain, refactorer fn X ». Elle ne
-// se cherche pas, elle revient — portée par un ou plusieurs `Cue` armés sur le
-// temps ou sur un event. Effet Zeigarnik : tant qu'elle est `armed`, sa saillance
-// reste figée à 100 ; une fois `fired` sans être `closed`, elle se met à décliner
-// comme une trace ordinaire. Voir PHASE5_PLAN.md § 5.1.
+// An `Intention` is an open loop: "tomorrow, refactor fn X". You do not search
+// for it, it comes back — carried by one or more `Cue`s armed on time or on an
+// event. Zeigarnik effect: while `armed` its salience stays pinned at 100; once
+// `fired` and not `closed`, it starts declining like an ordinary trace.
+// See PHASE5_PLAN.md § 5.1.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** armed = en attente · fired = remontée à l'agent · closed = accomplie · expired = deadline dépassée. */
+/** armed = waiting · fired = surfaced to the agent · closed = done · expired = past its deadline. */
 export type IntentionStatus = 'armed' | 'fired' | 'closed' | 'expired';
 
 export type CueStatus = 'armed' | 'fired' | 'cancelled';
 
 export type CueKind = 'time' | 'event';
 
-/** Déclencheur temporel : soit une date one-shot (`at`), soit une récurrence (`cron`). */
+/** Time trigger: either a one-shot date (`at`) or a recurrence (`cron`). */
 export interface TimeTriggerSpec {
   kind: 'time';
   at?: string; // ISO datetime
@@ -98,9 +98,9 @@ export interface TimeTriggerSpec {
 }
 
 /**
- * Déclencheur événementiel. Pas de variante `commit` ici, à dessein : un commit ne
- * réveille pas une intention, il la *ferme* — c'est le hook post-commit (S5-03b)
- * qui s'en charge, pas le cue resolver.
+ * Event trigger. No `commit` variant here, on purpose: a commit does not wake an
+ * intention, it *closes* one — that is the post-commit hook's job (S5-03b), not
+ * the cue resolver's.
  */
 export type EventTriggerSpec =
   | { kind: 'event'; type: 'file_open'; path: string }
@@ -112,15 +112,15 @@ export type TriggerSpec = TimeTriggerSpec | EventTriggerSpec;
 export interface Intention {
   id: string;
   content: string;
-  directory: string; // lieu mental
+  directory: string; // mental place
   createdAt: Date;
-  expiresAt?: Date; // intention sans deadline = undefined
+  expiresAt?: Date; // an intention without a deadline is undefined
   status: IntentionStatus;
   firedAt?: Date;
   closedAt?: Date;
-  closedByCommit?: string; // SHA du commit qui a fermé la boucle
-  saillance: number; // figée à 100 tant que armed
-  relatedMemoryId?: string; // lien optionnel vers une trace rétrospective
+  closedByCommit?: string; // SHA of the commit that closed the loop
+  saillance: number; // pinned at 100 while armed
+  relatedMemoryId?: string; // optional link to a retrospective trace
 }
 
 export interface Cue {
@@ -133,7 +133,7 @@ export interface Cue {
   firedAt?: Date;
 }
 
-/** Entrée d'écriture d'une intention : le store fixe id/createdAt/status/saillance. */
+/** Write shape for an intention: the store sets id/createdAt/status/saillance. */
 export type NewIntention = Omit<
   Intention,
   'id' | 'createdAt' | 'status' | 'saillance' | 'firedAt' | 'closedAt' | 'closedByCommit'
@@ -142,7 +142,7 @@ export type NewIntention = Omit<
   saillance?: number;
 };
 
-/** Entrée d'écriture d'un cue : le store fixe id/armedAt/status et déduit `kind` du spec. */
+/** Write shape for a cue: the store sets id/armedAt/status and derives `kind` from the spec. */
 export type NewCue = {
   intentionId: string;
   triggerSpec: TriggerSpec;
@@ -173,7 +173,7 @@ export interface IntentionStore {
     limit?: number;
   }): Promise<Cue[]>;
   updateCueStatus(id: string, status: CueStatus): Promise<Cue>;
-  /** Enregistre un tir. `rearm` garde le cue `armed` (cas des cues récurrents). */
+  /** Records a firing. `rearm` keeps the cue `armed` (recurring cues). */
   markCueFired(id: string, options?: { rearm?: boolean }): Promise<Cue>;
 }
 

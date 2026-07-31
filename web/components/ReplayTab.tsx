@@ -3,12 +3,12 @@ import { api } from '../api/client.js';
 import { useAsync } from '../hooks/useAsync.js';
 
 /**
- * Rejeu d'une session — portage JSX de `public/js/replay.js`.
+ * Session replay — JSX port of `public/js/replay.js`.
  *
- * Contrairement aux visualisations, il n'y a rien d'impératif ici : c'est un
- * curseur, deux listes et trois compteurs. L'original les tenait à jour à coups
- * d'`innerHTML` et de handlers `onclick` réassignés à chaque chargement de
- * session ; en JSX, l'affichage se déduit de l'index courant.
+ * Unlike the visualisations, nothing here is imperative: a slider, two lists and
+ * three counters. The original kept them in sync through `innerHTML` and
+ * `onclick` handlers reassigned on every session load; in JSX the display
+ * derives from the current index.
  */
 
 export type ReplayEventType = 'encoded' | 'decayed' | 'recalled';
@@ -20,15 +20,15 @@ export interface ReplayEvent {
 }
 
 const EVENT_META: Record<ReplayEventType, { icon: string; label: string }> = {
-  encoded: { icon: '📥', label: 'Encodage' },
-  decayed: { icon: '📉', label: 'Dégradation' },
-  recalled: { icon: '🔄', label: 'Rappel' },
+  encoded: { icon: '📥', label: 'Encoded' },
+  decayed: { icon: '📉', label: 'Decayed' },
+  recalled: { icon: '🔄', label: 'Recalled' },
 };
 
 const TICK_MS = 1000;
 
 function time(iso: string): string {
-  return new Date(iso).toLocaleTimeString('fr-FR');
+  return new Date(iso).toLocaleTimeString();
 }
 
 export function ReplayTab() {
@@ -47,8 +47,8 @@ export function ReplayTab() {
 
   const events: ReplayEvent[] = useMemo(() => session.data?.events ?? [], [session.data]);
 
-  // Changer de session repart du début, sinon l'index d'une session longue
-  // pointerait au-delà de la fin d'une session courte.
+  // Switching session restarts from the beginning, otherwise a long session's
+  // index would point past the end of a short one.
   useEffect(() => {
     setIndex(0);
     setPlaying(false);
@@ -73,7 +73,7 @@ export function ReplayTab() {
     setPlaying(false);
   }, []);
 
-  if (sessions.loading) return <p role="status">Chargement des sessions…</p>;
+  if (sessions.loading) return <p role="status">Loading sessions…</p>;
   if (sessions.error)
     return (
       <p role="alert" className="error">
@@ -84,7 +84,7 @@ export function ReplayTab() {
   if (available.length === 0) {
     return (
       <p className="empty">
-        Aucune session à rejouer. Elles se créent à mesure que des traces sont encodées.
+        No session to replay. They appear as traces get encoded.
       </p>
     );
   }
@@ -100,15 +100,15 @@ export function ReplayTab() {
         >
           {available.map((s) => (
             <option key={s.sessionId} value={s.sessionId}>
-              {s.sessionId} — {s.count} traces — {new Date(s.firstEvent).toLocaleDateString('fr-FR')}
+              {s.sessionId} — {s.count} traces — {new Date(s.firstEvent).toLocaleDateString()}
             </option>
           ))}
         </select>
       </div>
 
-      {session.loading && <p role="status">Chargement de la session…</p>}
+      {session.loading && <p role="status">Loading the session…</p>}
 
-      {!session.loading && events.length === 0 && <p className="empty">Session vide.</p>}
+      {!session.loading && events.length === 0 && <p className="empty">Empty session.</p>}
 
       {events.length > 0 && (
         <>
@@ -129,8 +129,8 @@ export function ReplayTab() {
                 ))}
             </section>
 
-            <section className="replay-events" aria-label="Événements mémoire">
-              <h3>Événements mémoire</h3>
+            <section className="replay-events" aria-label="Memory events">
+              <h3>Memory events</h3>
               {visible.slice(-20).map((e, i) => {
                 const meta = EVENT_META[e.type] ?? { icon: '•', label: e.type };
                 return (
@@ -157,7 +157,7 @@ export function ReplayTab() {
               max={Math.max(0, events.length - 1)}
               value={index}
               onChange={(e) => setIndex(Number(e.target.value))}
-              aria-label="Position dans la session"
+              aria-label="Position in the session"
             />
             <span className="replay-position">
               {index + 1} / {events.length}
@@ -168,9 +168,9 @@ export function ReplayTab() {
           </div>
 
           <div className="replay-counts">
-            <span>📥 Encodées : <strong>{counts.encoded}</strong></span>
-            <span>📉 Dégradées : <strong>{counts.decayed}</strong></span>
-            <span>🔄 Rappelées : <strong>{counts.recalled}</strong></span>
+            <span>📥 Encoded: <strong>{counts.encoded}</strong></span>
+            <span>📉 Decayed: <strong>{counts.decayed}</strong></span>
+            <span>🔄 Recalled: <strong>{counts.recalled}</strong></span>
           </div>
         </>
       )}

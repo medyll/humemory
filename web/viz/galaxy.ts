@@ -1,12 +1,11 @@
 /**
- * Galaxie mnésique — graphe force-directed d3.
+ * Memory galaxy — d3 force-directed graph.
  *
- * Portage de `public/js/galaxy.js`. Le tracé d3 est repris tel quel : d3 possède
- * son sous-arbre SVG, le réécrire en JSX n'apporterait rien. Trois choses
- * changent, toutes structurelles : le module est un ESM (plus de globales), il
- * reçoit son conteneur au lieu de le chercher par id, et il rend une fonction de
- * démontage — sans elle, la simulation continuerait de tourner après un
- * changement d'onglet.
+ * Ported from `public/js/galaxy.js`. The d3 drawing is taken as is: d3 owns its
+ * SVG subtree, and rewriting it in JSX would gain nothing. Three things change,
+ * all structural: the module is ESM (no more globals), it receives its container
+ * instead of looking it up by id, and it returns a teardown function — without
+ * which the simulation would keep running after a tab change.
  */
 
 import * as d3 from 'd3';
@@ -42,7 +41,7 @@ export function createMount(ctx: VizContext = {}) {
     const legend = document.createElement('div');
     legend.className = 'galaxy-legend';
     legend.innerHTML = `
-      <div style="font-weight:600;margin-bottom:.5rem;">Niveaux de decay</div>
+      <div style="font-weight:600;margin-bottom:.5rem;">Decay levels</div>
       ${LEVEL_LABELS.map(
         (_, level) => `
         <div class="galaxy-legend-item">
@@ -51,11 +50,11 @@ export function createMount(ctx: VizContext = {}) {
         </div>`
       ).join('')}
       <div style="margin-top:1rem;font-size:.8rem;color:var(--muted);">
-        Taille = force mnésique<br>Position = lieu mental
+        Size = mnemonic strength<br>Position = mental place
       </div>`;
     container.appendChild(legend);
 
-    // Un cercle de « lieux mentaux » : chaque répertoire attire ses traces.
+    // A ring of mental places: each directory attracts its own traces.
     const directories = [...new Set(memories.map((m) => m.directory))];
     const radius = Math.min(width, height) * 0.3;
     const angleStep = (2 * Math.PI) / Math.max(1, directories.length);
@@ -77,7 +76,7 @@ export function createMount(ctx: VizContext = {}) {
       memory: m,
     }));
 
-    // Une arête par fusion : la trace absorbée reste reliée à celle qui l'a reprise.
+    // One edge per merge: the absorbed trace stays linked to the one that took it in.
     const links: GalaxyLink[] = memories
       .filter((m) => m.mergedIntoId && memories.some((t) => t.id === m.mergedIntoId))
       .map((m) => ({ source: m.id, target: m.mergedIntoId! }));
@@ -177,8 +176,8 @@ export function createMount(ctx: VizContext = {}) {
       nodeElements.attr('cx', (d) => d.x!).attr('cy', (d) => d.y!);
     });
 
-    // La simulation tourne en continu : sans arrêt explicite, elle survivrait au
-    // démontage du composant et continuerait de consommer du CPU.
+    // The simulation runs continuously: without an explicit stop it would outlive
+    // the component and keep burning CPU.
     return () => {
       simulation.stop();
       container.innerHTML = '';

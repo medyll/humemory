@@ -7,8 +7,8 @@ import type { Memory, SearchQuery, SearchResult, DecayLevel } from './types.js';
 import { systemClock, type Clock } from './clock.js';
 
 /**
- * Moteur de recherche inversée avec BM25
- * Cherche d'abord sur les versions dégradées (Niveau 3), puis remonte
+ * Inverse search engine, BM25-backed.
+ * Queries the degraded layers first (level 3), then escalates.
  */
 export class InverseSearchEngine {
   private index: any;
@@ -16,10 +16,10 @@ export class InverseSearchEngine {
   private clock: Clock;
 
   constructor(options: { clock?: Clock } = {}) {
-    // Le bonus de récence dépend de « maintenant » — injectable pour que le
-    // scoring soit déterministe en test (docs/TESTING.md → pilier 2).
+    // The recency bonus depends on "now" — injectable so scoring is deterministic
+    // in tests (docs/TESTING.md → pillar 2).
     this.clock = options.clock ?? systemClock;
-    // Index FlexSearch optimisé pour les mots-clés
+    // FlexSearch index tuned for keywords
     this.index = new Document({
       tokenize: 'forward',
       charset: 'latin:advanced',
@@ -32,7 +32,7 @@ export class InverseSearchEngine {
   }
 
   /**
-   * Ajoute un souvenir à l'index
+   * Adds a memory to the index
    */
   add(memory: Memory): void {
     this.memories.set(memory.id, memory);
@@ -47,7 +47,7 @@ export class InverseSearchEngine {
   }
 
   /**
-   * Met à jour un souvenir dans l'index
+   * Updates a memory in the index
    */
   update(memory: Memory): void {
     this.index.remove(memory.id);
@@ -63,13 +63,13 @@ export class InverseSearchEngine {
   }
 
   /**
-   * Recherche inversée : commence par Niveau 3, remonte si besoin
+   * Inverse search: starts at level 3 and escalates when needed
    */
   search(query: SearchQuery): SearchResult[] {
     const results: SearchResult[] = [];
     const { query: searchQuery, maxLevel = 3, limit = 10 } = query;
 
-    // Stratégie de recherche par niveau (du plus dégradé au plus détaillé)
+    // Level-by-level strategy, from most degraded to most detailed
     const searchOrder: { field: string; level: DecayLevel }[] = [
       { field: 'level3Keywords', level: 3 },
       { field: 'level2Essential', level: 2 },
@@ -80,18 +80,18 @@ export class InverseSearchEngine {
     const seenIds = new Set<string>();
 
     for (const { field, level } of searchOrder) {
-      // Skip si on a dépassé le niveau max
+      // Skip once past the caller's maximum level
       if (level > maxLevel) continue;
 
       // Recherche sur ce niveau
       const matches = this.index.search({
         query: searchQuery,
         field,
-        limit: limit * 2, // Prendre plus large pour filtrer après
+        limit: limit * 2, // over-fetch, filtering happens below
       });
 
       // FlexSearch retourne [{field, result: [ids]}]
-      // Extraire les IDs de tous les champs matchés
+      // Collect ids from every matched field
       const ids: string[] = [];
       for (const match of matches) {
         if (match && typeof match === 'object' && 'result' in match) {
@@ -101,7 +101,7 @@ export class InverseSearchEngine {
         }
       }
 
-      // Traiter les résultats
+      // Process the results
       for (const id of ids) {
         if (seenIds.has(id)) continue;
         seenIds.add(id);
@@ -139,11 +139,11 @@ export class InverseSearchEngine {
   private calculateScore(memory: Memory, query: string, matchLevel: DecayLevel): number {
     let score = 100;
 
-    // Bonus pour match sur niveau dégradé (plus rapide = plus utile)
+    // Bonus for matching on a degraded level: cheaper to reach, more useful
     const levelBonus = (4 - matchLevel) * 10;
     score += levelBonus;
 
-    // Bonus pour récence
+    // Recency bonus
     const daysSinceCreation =
       (this.clock.now().getTime() - memory.createdAt.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceCreation < 7) {
@@ -152,13 +152,13 @@ export class InverseSearchEngine {
       score += 10;
     }
 
-    // Bonus pour rappels fréquents
+    // Bonus for frequent recalls
     score += memory.recallCount * 5;
 
     // Bonus pour saillance
     score += memory.saillance * 0.2;
 
-    // Pénalité si contenu très long (moins précis)
+    // Penalty for very long content: less precise
     if (memory.content.length > 1000) {
       score -= 10;
     }

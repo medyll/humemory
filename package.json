@@ -20,7 +20,8 @@
     "README.md",
     "AGENTS.md",
     "CHANGELOG.md",
-    "docs"
+    "docs",
+    "LICENSE"
   ],
   "keywords": [
     "memory",
@@ -36,6 +37,7 @@
     "mcp"
   ],
   "author": "medyll",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/medyll/humemory.git"

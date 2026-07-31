@@ -7,27 +7,27 @@ import { LoopCard } from './LoopCard.tsx';
 import { NewLoopForm } from './NewLoopForm.tsx';
 
 const FILTERS: Array<{ value: IntentionStatus | 'all'; label: string }> = [
-  { value: 'armed', label: 'Ouvertes' },
-  { value: 'fired', label: 'Remontées' },
-  { value: 'closed', label: 'Fermées' },
-  { value: 'expired', label: 'Expirées' },
-  { value: 'all', label: 'Toutes' },
+  { value: 'armed', label: 'Open' },
+  { value: 'fired', label: 'Surfaced' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'all', label: 'All' },
 ];
 
 /**
- * Onglet prospectif.
+ * Prospective tab.
  *
- * Montre ce que le reste du système ne montrait qu'en markdown : les boucles
- * ouvertes, leur tension, leurs déclencheurs, et de quoi les fermer.
+ * Shows what the rest of the system only ever rendered as markdown: the open
+ * loops, their tension, their triggers, and a way to close them.
  */
 export function LoopsTab() {
   const [filter, setFilter] = useState<IntentionStatus | 'all'>('armed');
   const [directory, setDirectory] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Instant de référence de ce rendu : la tension se calcule contre lui, pas
-  // contre un Date.now() appelé dans chaque carte, sinon deux boucles affichées
-  // côte à côte pourraient être évaluées à des instants différents.
+  // Reference instant for this render: tension is computed against it rather
+  // than a Date.now() called inside each card, otherwise two loops shown side by
+  // side could be evaluated at different moments.
   const now = useMemo(() => new Date(), [filter, directory, notice]);
 
   const loops = useAsync(async () => {
@@ -36,8 +36,8 @@ export function LoopsTab() {
       directory: directory.trim() || undefined,
     });
 
-    // Les cues arrivent par un second appel, un par boucle : l'API n'a pas de
-    // route de liste jointe et en inventer une pour l'écran serait prématuré.
+    // Cues come from a second call, one per loop: the API has no joined list
+    // route and inventing one for this screen would be premature.
     const withCues = await Promise.all(
       intentions.map(async (dto) => {
         const detail = await api.getIntention(dto.id).catch(() => null);
@@ -56,7 +56,7 @@ export function LoopsTab() {
   const handleCreate = useCallback(
     async (input: Parameters<typeof api.createIntention>[0]) => {
       const { intention } = await api.createIntention(input);
-      setNotice(`${intention.loopId} armée.`);
+      setNotice(`${intention.loopId} armed.`);
       refresh();
     },
     [refresh]
@@ -88,84 +88,84 @@ export function LoopsTab() {
 
   const handleResolve = useCallback(async () => {
     const { expired, count } = await api.resolveCues();
-    setNotice(`${expired} expirée(s), ${count} réveillée(s).`);
+    setNotice(`${expired} expired, ${count} woken.`);
     refresh();
   }, [refresh]);
 
   return (
     <>
       <section aria-labelledby="new-heading">
-          <h2 id="new-heading">Armer une boucle</h2>
-          <NewLoopForm defaultDirectory={directory || '.'} onSubmit={handleCreate} />
-        </section>
+        <h2 id="new-heading">Arm a loop</h2>
+        <NewLoopForm defaultDirectory={directory || '.'} onSubmit={handleCreate} />
+      </section>
 
-        <section aria-labelledby="loops-heading">
-          <div className="section-head">
-            <h2 id="loops-heading">Boucles</h2>
-            <button type="button" onClick={handleResolve} disabled={loops.loading}>
-              Passer le balai
-            </button>
-          </div>
+      <section aria-labelledby="loops-heading">
+        <div className="section-head">
+          <h2 id="loops-heading">Loops</h2>
+          <button type="button" onClick={handleResolve} disabled={loops.loading}>
+            Sweep
+          </button>
+        </div>
 
-          <div className="filters">
-            <div className="filter-tabs" role="group" aria-label="Filtrer par état">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  className={filter === f.value ? 'tab active' : 'tab'}
-                  aria-pressed={filter === f.value}
-                  onClick={() => setFilter(f.value)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            <input
-              className="filter-directory"
-              value={directory}
-              onChange={(e) => setDirectory(e.target.value)}
-              placeholder="Filtrer par lieu mental"
-              aria-label="Filtrer par lieu mental"
-            />
-          </div>
-
-          {notice && (
-            <p role="status" className="notice">
-              {notice}
-            </p>
-          )}
-
-          {loops.loading && <p role="status">Chargement…</p>}
-
-          {loops.error && (
-            <p role="alert" className="error">
-              Impossible de charger les boucles : {loops.error.message}
-            </p>
-          )}
-
-          {!loops.loading && !loops.error && loops.data?.length === 0 && (
-            <p className="empty">
-              {filter === 'armed'
-                ? 'Aucune boucle ouverte. Rien ne tire sur la manche.'
-                : 'Aucune boucle dans cet état.'}
-            </p>
-          )}
-
-          <ul className="loop-list">
-            {loops.data?.map(({ intention, cues }) => (
-              <LoopCard
-                key={intention.id}
-                intention={intention}
-                cues={cues}
-                now={now}
-                onClose={handleClose}
-                onFire={handleFire}
-                onDelete={handleDelete}
-              />
+        <div className="filters">
+          <div className="filter-tabs" role="group" aria-label="Filter by state">
+            {FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                className={filter === f.value ? 'tab active' : 'tab'}
+                aria-pressed={filter === f.value}
+                onClick={() => setFilter(f.value)}
+              >
+                {f.label}
+              </button>
             ))}
-          </ul>
+          </div>
+
+          <input
+            className="filter-directory"
+            value={directory}
+            onChange={(e) => setDirectory(e.target.value)}
+            placeholder="Filter by mental place"
+            aria-label="Filter by mental place"
+          />
+        </div>
+
+        {notice && (
+          <p role="status" className="notice">
+            {notice}
+          </p>
+        )}
+
+        {loops.loading && <p role="status">Loading…</p>}
+
+        {loops.error && (
+          <p role="alert" className="error">
+            Could not load the loops: {loops.error.message}
+          </p>
+        )}
+
+        {!loops.loading && !loops.error && loops.data?.length === 0 && (
+          <p className="empty">
+            {filter === 'armed'
+              ? 'No open loop. Nothing is tugging at your sleeve.'
+              : 'No loop in this state.'}
+          </p>
+        )}
+
+        <ul className="loop-list">
+          {loops.data?.map(({ intention, cues }) => (
+            <LoopCard
+              key={intention.id}
+              intention={intention}
+              cues={cues}
+              now={now}
+              onClose={handleClose}
+              onFire={handleFire}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
       </section>
     </>
   );

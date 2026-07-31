@@ -1,8 +1,8 @@
 /**
  * humemory — Human-like memory system
  * 
- * Stocke des souvenirs avec dégradation progressive
- * et recherche inversée (dégradé → détail)
+ * Stores memories with progressive decay and inverse search
+ * (degraded layers first, escalating to full detail)
  */
 
 export { SQLiteStore } from './store/sqlite.js';

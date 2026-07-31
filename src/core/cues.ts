@@ -1,13 +1,13 @@
 /**
  * Cue resolver — Phase 5.2.
  *
- * Une intention ne se cherche pas : elle revient. Ce module décide *quand*.
- * Il lit les cues armés et répond à deux questions, l'une temporelle
- * (`resolveTimeCues`), l'autre événementielle (`resolveEventCues`), puis
- * `fire()` marque cue + intention comme remontés à l'agent.
+ * You do not search for an intention: it comes back. This module decides *when*.
+ * It reads the armed cues and answers two questions, one temporal
+ * (`resolveTimeCues`), one event-driven (`resolveEventCues`); then `fire()` marks
+ * both cue and intention as surfaced to the agent.
  *
- * La couche données (tables, CRUD) est en Phase 5.1 dans `src/store/sqlite.ts` ;
- * ici il n'y a que de la décision. Voir PHASE5_PLAN.md § 5.2.
+ * The data layer (tables, CRUD) is Phase 5.1, in `src/store/sqlite.ts`; there is
+ * nothing but decisions here. See PHASE5_PLAN.md § 5.2.
  */
 
 import type {
@@ -21,18 +21,18 @@ import type { AppEvent, EventBus, Unsubscribe } from './event-bus.js';
 import { systemClock, type Clock } from './clock.js';
 
 export interface CueResolver {
-  /** Cues temporels échus à `now` (non encore firés, ou récurrents dus à nouveau). */
+  /** Time cues due at `now` (not yet fired, or recurring and due again). */
   resolveTimeCues(now?: Date): Promise<Cue[]>;
-  /** Cues événementiels qui matchent cet event. */
+  /** Event cues matching this event. */
   resolveEventCues(event: AppEvent): Promise<Cue[]>;
-  /** Marque cue + intention comme firés. Renvoie l'intention réveillée. */
+  /** Marks cue and intention as fired. Returns the woken intention. */
   fire(cueId: string): Promise<Intention>;
-  /** Passe en `expired` les intentions dont la deadline est dépassée. Renvoie le compte. */
+  /** Expires intentions past their deadline. Returns how many. */
   expireStale(now?: Date): Promise<number>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cron — matcher minimal, 5 champs (minute heure jour-du-mois mois jour-semaine)
+// Cron — minimal matcher, 5 fields (minute hour day-of-month month day-of-week)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CRON_RANGES: Array<[min: number, max: number]> = [
@@ -43,7 +43,7 @@ const CRON_RANGES: Array<[min: number, max: number]> = [
   [0, 6], // jour de la semaine, 0 = dimanche
 ];
 
-/** Développe un champ cron (`*`, `5`, `1-5`, `*\/15`, `1-9/2`, listes) en ensemble de valeurs. */
+/** Expands a cron field (`*`, `5`, `1-5`, `*\/15`, `1-9/2`, lists) into a value set. */
 function expandCronField(field: string, index: number): Set<number> | null {
   const [min, max] = CRON_RANGES[index];
   const values = new Set<number>();
@@ -88,7 +88,7 @@ interface ParsedCron {
   dowRestricted: boolean;
 }
 
-/** Parse une expression cron 5 champs. Renvoie null si elle est invalide. */
+/** Parses a 5-field cron expression. Returns null when it is invalid. */
 export function parseCron(expr: string): ParsedCron | null {
   const fields = expr.trim().split(/\s+/);
   if (fields.length !== 5) return null;
@@ -109,11 +109,11 @@ export function parseCron(expr: string): ParsedCron | null {
 }
 
 /**
- * Vrai si `date` (à la minute près, en UTC) tombe sur une occurrence du cron.
+ * True when `date` (to the minute, in UTC) lands on a cron occurrence.
  *
- * Quand jour-du-mois et jour-de-semaine sont tous deux restreints, cron standard
- * les combine en OU, pas en ET — `0 9 1 * 1` veut dire « le 1er du mois **ou**
- * le lundi ». On garde cette sémantique pour ne pas surprendre.
+ * When day-of-month and day-of-week are both restricted, standard cron combines
+ * them with OR, not AND — `0 9 1 * 1` means "the 1st of the month **or** on a
+ * Monday". That semantics is kept so nothing surprises anyone.
  */
 export function cronMatches(parsed: ParsedCron, date: Date): boolean {
   if (!parsed.minute.has(date.getUTCMinutes())) return false;
@@ -130,20 +130,20 @@ export function cronMatches(parsed: ParsedCron, date: Date): boolean {
 }
 
 /**
- * Fenêtre de rattrapage d'un cron, en minutes (7 jours).
+ * Cron catch-up window, in minutes (7 days).
  *
- * Le resolver n'est pas un démon : il tourne au SessionStart, donc sporadiquement.
- * Sans rattrapage, une occurrence tombée entre deux sessions serait perdue. On
- * remonte donc le temps minute par minute depuis `now` jusqu'à la dernière
- * référence connue, plafonné à cette fenêtre — au-delà, l'occurrence est
- * considérée comme trop vieille pour valoir un réveil.
+ * The resolver is not a daemon: it runs at SessionStart, so only now and then.
+ * Without catch-up, an occurrence falling between two sessions would be lost. So
+ * time is walked backwards minute by minute from `now` to the last known
+ * reference, capped by this window — beyond it, an occurrence is considered too
+ * old to be worth a wake-up.
  */
 export const CRON_CATCHUP_MINUTES = 7 * 24 * 60;
 
-/** Vrai s'il existe une occurrence du cron dans l'intervalle ouvert-fermé (since, now]. */
+/** True when a cron occurrence exists in the half-open interval (since, now]. */
 export function cronDueSince(expr: string, since: Date, now: Date): boolean {
   const parsed = parseCron(expr);
-  if (!parsed) return false; // expression invalide → jamais due, jamais de crash
+  if (!parsed) return false; // invalid expression: never due, never a crash
 
   const MINUTE = 60_000;
   const nowMin = Math.floor(now.getTime() / MINUTE);
@@ -157,28 +157,28 @@ export function cronDueSince(expr: string, since: Date, now: Date): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Matching événementiel
+// Event matching
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Normalise les séparateurs pour que Windows et POSIX matchent pareil. */
+/** Normalises separators so Windows and POSIX paths match alike. */
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
 /**
- * Un cue n'est éligible que dans son lieu mental : l'event doit venir du
- * `directory` de l'intention ou d'un sous-dossier. Sans ça, une boucle ouverte
- * sur un projet se réveillerait en travaillant sur un autre — la DB est partagée
- * entre projets.
+ * A cue is only eligible within its mental place: the event must come from the
+ * intention's `directory` or a subdirectory. Without this, a loop opened on one
+ * project would wake while working on another — the database is shared across
+ * projects.
  */
 function directoryMatches(intentionDir: string, eventDir: string | undefined): boolean {
-  if (!eventDir) return true; // event sans contexte : on ne filtre pas
+  if (!eventDir) return true; // event without context: no filtering
   const a = normalizePath(intentionDir).replace(/\/$/, '');
   const b = normalizePath(eventDir).replace(/\/$/, '');
   return b === a || b.startsWith(`${a}/`) || a.startsWith(`${b}/`);
 }
 
-/** Teste un pattern d'erreur. Une regex invalide retombe sur une recherche littérale. */
+/** Tests an error pattern. An invalid regex falls back to a literal search. */
 function errorPatternMatches(pattern: string, text: string): boolean {
   try {
     return new RegExp(pattern, 'i').test(text);
@@ -187,15 +187,15 @@ function errorPatternMatches(pattern: string, text: string): boolean {
   }
 }
 
-/** Vrai si ce déclencheur événementiel correspond à cet event. */
+/** True when this event trigger matches this event. */
 export function eventTriggerMatches(spec: EventTriggerSpec, event: AppEvent): boolean {
   switch (spec.type) {
     case 'file_open': {
       if (event.type !== 'file_open') return false;
       const want = normalizePath(spec.path);
       const got = normalizePath(event.path);
-      // Suffixe accepté : un cue armé sur 'src/auth/service.ts' doit matcher un
-      // event portant le chemin absolu du même fichier.
+      // Suffix accepted: a cue armed on 'src/auth/service.ts' must match an event
+      // carrying the absolute path of the same file.
       return got === want || got.endsWith(`/${want}`);
     }
     case 'branch_switch':
@@ -208,22 +208,22 @@ export function eventTriggerMatches(spec: EventTriggerSpec, event: AppEvent): bo
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Identité courte d'une boucle
+// Short loop identity
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Longueur du préfixe d'UUID utilisé comme identifiant lisible d'une boucle. */
+/** Length of the UUID prefix used as a readable loop identifier. */
 export const LOOP_ID_LENGTH = 8;
 
 /**
- * Identifiant court affiché à l'agent : `loop-a1b2c3d4`. C'est ce que l'humain
- * recopie dans un message de commit (`Closes loop-a1b2c3d4`) — un UUID complet
- * ne serait jamais recopié à la main.
+ * Short identifier shown to the agent: `loop-a1b2c3d4`. This is what a human
+ * retypes into a commit message (`Closes loop-a1b2c3d4`) — a full UUID would
+ * never be retyped by hand.
  */
 export function loopId(intentionId: string): string {
   return `loop-${intentionId.slice(0, LOOP_ID_LENGTH)}`;
 }
 
-/** Extrait les identifiants courts de boucle cités dans un texte (message de commit). */
+/** Extracts short loop ids mentioned in a text (a commit message). */
 export function extractLoopIds(text: string): string[] {
   const found = new Set<string>();
   for (const m of text.matchAll(/\bloop-([0-9a-f]{4,36})\b/gi)) {
@@ -232,30 +232,30 @@ export function extractLoopIds(text: string): string[] {
   return [...found];
 }
 
-/** Retrouve l'intention désignée par un identifiant court, si elle est sans ambiguïté. */
+/** Finds the intention a short id points to, when it is unambiguous. */
 export function matchIntentionByShortId(
   intentions: Intention[],
   shortId: string
 ): Intention | null {
   const needle = shortId.toLowerCase();
   const hits = intentions.filter((i) => i.id.toLowerCase().startsWith(needle));
-  // Un préfixe ambigu ne ferme rien : mieux vaut ne rien faire que fermer la mauvaise boucle.
+  // An ambiguous prefix closes nothing: better to do nothing than close the wrong loop.
   return hits.length === 1 ? hits[0] : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Règles décay × intention
+// Decay rules for intentions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Décroissance de la saillance d'une intention firée, en points par jour (Zeigarnik qui faiblit). */
+/** Salience decline of a fired intention, in points per day (the Zeigarnik pull fading). */
 export const INTENTION_FADE_PER_DAY = 10;
 
 /**
- * Saillance courante d'une intention (PHASE5_PLAN.md § 5.2) :
- * - `armed`   → figée à 100 : une boucle ouverte reste saillante, elle ne décay pas
- * - `fired` non `closed` → décline depuis `firedAt` : l'effet Zeigarnik s'émousse
- * - `closed`  → 0 : archivée, gardée pour l'historique
- * - `expired` → 0 : soft-delete
+ * Current salience of an intention (PHASE5_PLAN.md § 5.2):
+ * - `armed`   → pinned at 100: an open loop stays salient, it does not decay
+ * - `fired` and not `closed` → declines from `firedAt`: the Zeigarnik pull fades
+ * - `closed`  → 0: archived, kept for history
+ * - `expired` → 0: soft-deleted
  */
 export function intentionSaillance(intention: Intention, now: Date): number {
   switch (intention.status) {
@@ -288,8 +288,8 @@ export class SqliteCueResolver implements CueResolver {
   }
 
   /**
-   * Un cue ne réveille que si son intention est encore `armed` : une boucle déjà
-   * fermée, expirée ou déjà remontée ne doit pas resurgir.
+   * A cue only wakes while its intention is still `armed`: a loop already closed,
+   * expired or already surfaced must not resurface.
    */
   private async armedIntentionOf(cue: Cue): Promise<Intention | null> {
     const intention = await this.store.getIntention(cue.intentionId);
@@ -310,7 +310,7 @@ export class SqliteCueResolver implements CueResolver {
         const at = new Date(spec.at);
         isDue = !Number.isNaN(at.getTime()) && at.getTime() <= now.getTime();
       } else if (spec.cron) {
-        // Référence = dernier réveil connu, sinon l'armement.
+        // Reference: the last known wake-up, otherwise the arming time.
         isDue = cronDueSince(spec.cron, cue.firedAt ?? cue.armedAt, now);
       }
 
@@ -323,8 +323,8 @@ export class SqliteCueResolver implements CueResolver {
   }
 
   async resolveEventCues(event: AppEvent): Promise<Cue[]> {
-    // Un commit ne réveille pas une intention, il la ferme — c'est le hook
-    // post-commit (S5-03b) qui s'en charge, pas ce resolver.
+    // A commit does not wake an intention, it closes one — that is the
+    // post-commit hook's job (S5-03b), not this resolver's.
     if (event.type === 'commit') return [];
 
     const cues = await this.store.listCues({ status: 'armed', kind: 'event', limit: 500 });
@@ -346,8 +346,8 @@ export class SqliteCueResolver implements CueResolver {
   }
 
   /**
-   * Marque cue + intention comme firés. Un cue cron est ré-armé après tir : une
-   * récurrence qui ne se rearme pas n'est qu'un one-shot déguisé.
+   * Marks cue and intention as fired. A cron cue is re-armed after firing: a
+   * recurrence that does not re-arm is a one-shot in disguise.
    */
   async fire(cueId: string): Promise<Intention> {
     const cue = await this.store.getCue(cueId);
@@ -361,8 +361,8 @@ export class SqliteCueResolver implements CueResolver {
   }
 
   /**
-   * Passe en `expired` les intentions `armed` dont `expiresAt` est dépassé, et
-   * annule leurs cues — un cue qui survit à son intention est un réveil fantôme.
+   * Expires `armed` intentions whose `expiresAt` has passed and cancels their
+   * cues — a cue outliving its intention is a ghost wake-up.
    */
   async expireStale(now: Date = this.clock.now()): Promise<number> {
     const armed = await this.store.listIntentions({ status: 'armed', limit: 500 });
@@ -383,8 +383,8 @@ export class SqliteCueResolver implements CueResolver {
 }
 
 /**
- * Branche un resolver sur un event bus : chaque event publié réveille les cues
- * qui matchent. Renvoie de quoi se désabonner.
+ * Wires a resolver onto an event bus: every published event wakes the cues that
+ * match. Returns the unsubscribe handle.
  *
  * ```ts
  * const detach = attachResolverToBus(bus, resolver);

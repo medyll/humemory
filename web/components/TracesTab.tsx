@@ -18,16 +18,16 @@ import {
 } from './zones.js';
 
 /**
- * Onglet Traces — portage JSX de `public/js/dashboard.js`.
+ * Traces tab — JSX port of `public/js/dashboard.js`.
  *
- * C'est la seule vue du portage à être réécrite plutôt que wrappée : elle était
- * faite de chaînes `innerHTML` et de `onclick` en attribut, ce qui se traduit
- * directement en composants. Les visualisations, elles, restent impératives.
+ * The only view of the port that was rewritten rather than wrapped: it was made
+ * of `innerHTML` strings and `onclick` attributes, which translate directly into
+ * components. The visualisations stay imperative.
  */
 
 function StrengthDots({ saillance }: { saillance: number }) {
   return (
-    <span className="strength-dots" aria-label={`Force ${saillance} sur 100`}>
+    <span className="strength-dots" aria-label={`Strength ${saillance} out of 100`}>
       {[1, 2, 3, 4, 5].map((i) => (
         <span key={i} className={saillance >= i * 20 ? 'strength-dot active' : 'strength-dot'} />
       ))}
@@ -35,7 +35,7 @@ function StrengthDots({ saillance }: { saillance: number }) {
   );
 }
 
-/** Courbe d'oubli d'une trace : canvas piloté à la main, comme les autres viz. */
+/** A trace's forgetting curve: a hand-driven canvas, like the other visualisations. */
 function DecayCurve({ memory }: { memory: Memory }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -64,7 +64,7 @@ function MemoryDetail({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showSimilar, setShowSimilar] = useState(false);
 
-  // Échap ferme : une modale qui ne se ferme qu'à la souris est une impasse.
+  // Escape closes: a modal you can only dismiss with the mouse is a dead end.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -77,14 +77,14 @@ function MemoryDetail({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Détail de la trace" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Trace detail" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <span className="cue-tag">
             {icon} {label}
           </span>
           <span className="cue-tag">{consolidationLabel(memory.currentLevel)}</span>
-          {memory.photographic && <span className="photo-badge">🔒 Photographique</span>}
-          <button type="button" className="secondary" onClick={onClose} aria-label="Fermer">
+          {memory.photographic && <span className="photo-badge">🔒 Photographic</span>}
+          <button type="button" className="secondary" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </header>
@@ -92,11 +92,11 @@ function MemoryDetail({
         <p className="modal-content">{memory.content}</p>
 
         <dl className="modal-meta">
-          <div><dt>Lieu</dt><dd>{memory.directory}</dd></div>
+          <div><dt>Place</dt><dd>{memory.directory}</dd></div>
           <div><dt>Session</dt><dd>{memory.sessionId}</dd></div>
-          <div><dt>Encodée</dt><dd>{new Date(memory.createdAt).toLocaleString('fr-FR')}</dd></div>
-          <div><dt>Réactivations</dt><dd>{memory.recallCount}</dd></div>
-          <div><dt>Force</dt><dd>{memory.saillance}/100</dd></div>
+          <div><dt>Encoded</dt><dd>{new Date(memory.createdAt).toLocaleString()}</dd></div>
+          <div><dt>Recalls</dt><dd>{memory.recallCount}</dd></div>
+          <div><dt>Strength</dt><dd>{memory.saillance}/100</dd></div>
         </dl>
 
         {memory.level1Summary && (
@@ -111,21 +111,21 @@ function MemoryDetail({
 
         <div className="modal-actions">
           <button type="button" onClick={() => onRecall(memory.id)}>
-            🔄 Réactiver
+            🔄 Recall
           </button>
           <button type="button" className="secondary" onClick={() => onTogglePhoto(memory.id, !memory.photographic)}>
-            {memory.photographic ? '🔓 Laisser se dégrader' : '🔒 Mode photographique'}
+            {memory.photographic ? '🔓 Let it decay' : '🔒 Photographic mode'}
           </button>
           <button type="button" className="secondary" onClick={() => setShowSimilar((v) => !v)}>
-            🔍 Similaires
+            🔍 Similar
           </button>
           {confirmingDelete ? (
             <button type="button" className="danger" onClick={() => onDelete(memory.id)}>
-              Confirmer la suppression
+              Confirm deletion
             </button>
           ) : (
             <button type="button" className="secondary" onClick={() => setConfirmingDelete(true)}>
-              Supprimer
+              Delete
             </button>
           )}
         </div>
@@ -137,7 +137,7 @@ function MemoryDetail({
 }
 
 export interface TracesTabProps {
-  /** Trace à ouvrir d'emblée — utilisé quand on clique une trace dans une visualisation. */
+  /** Trace to open straight away — used when clicking a trace in a visualisation. */
   initialSelection?: string | null;
 }
 
@@ -149,12 +149,12 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
 
-  // Une nouvelle trace désignée depuis une visualisation ouvre son détail.
+  // A trace pointed at from a visualisation opens its detail.
   useEffect(() => {
     if (initialSelection) setSelected(initialSelection);
   }, [initialSelection]);
 
-  // La recherche part quand la frappe se calme, pas à chaque touche.
+  // The search fires once typing settles, not on every keystroke.
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), 300);
     return () => clearTimeout(timer);
@@ -163,8 +163,8 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
   const activeFilters = Object.values(filters).filter((v) => v !== undefined && v !== '').length;
 
   const traces = useAsync(async () => {
-    // Les filtres avancés passent par /search, qui sait les appliquer ; sans
-    // requête ni filtre, une simple liste suffit.
+    // Advanced filters go through /search, which knows how to apply them; with
+    // neither query nor filter, a plain list is enough.
     if (debounced || activeFilters > 0) {
       const { results } = await api.search(debounced || '*', { limit: 100, ...filters });
       return results.map((r) => r.memory);
@@ -214,8 +214,8 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
           className="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher par indice de récupération…"
-          aria-label="Rechercher une trace"
+          placeholder="Search by retrieval cue…"
+          aria-label="Search a trace"
         />
         <button
           type="button"
@@ -223,45 +223,45 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
           aria-expanded={showFilters}
           onClick={() => setShowFilters((v) => !v)}
         >
-          ⚙️ Filtres{activeFilters > 0 ? ` (${activeFilters})` : ''}
+          ⚙️ Filters{activeFilters > 0 ? ` (${activeFilters})` : ''}
         </button>
       </div>
 
       {showFilters && (
         <div className="advanced-filters">
           <div className="field">
-            <label htmlFor="f-from">Encodée après</label>
+            <label htmlFor="f-from">Encoded after</label>
             <input id="f-from" type="date" value={filters.dateFrom ?? ''} onChange={(e) => setFilter({ dateFrom: e.target.value || undefined })} />
           </div>
           <div className="field">
-            <label htmlFor="f-to">Encodée avant</label>
+            <label htmlFor="f-to">Encoded before</label>
             <input id="f-to" type="date" value={filters.dateTo ?? ''} onChange={(e) => setFilter({ dateTo: e.target.value || undefined })} />
           </div>
           <div className="field">
-            <label htmlFor="f-saillance">Force minimale</label>
+            <label htmlFor="f-saillance">Minimum strength</label>
             <input id="f-saillance" type="number" min={0} max={100} value={filters.minSaillance ?? ''} onChange={(e) => setFilter({ minSaillance: e.target.value ? Number(e.target.value) : undefined })} />
           </div>
           <div className="field">
-            <label htmlFor="f-recalls">Réactivations minimales</label>
+            <label htmlFor="f-recalls">Minimum recalls</label>
             <input id="f-recalls" type="number" min={0} value={filters.minRecalls ?? ''} onChange={(e) => setFilter({ minRecalls: e.target.value ? Number(e.target.value) : undefined })} />
           </div>
           <div className="field">
-            <label htmlFor="f-directory">Lieu mental</label>
+            <label htmlFor="f-directory">Mental place</label>
             <input id="f-directory" value={filters.directory ?? ''} onChange={(e) => setFilter({ directory: e.target.value || undefined })} />
           </div>
           <button type="button" className="secondary" onClick={() => setFilters({})}>
-            Effacer les filtres
+            Clear filters
           </button>
         </div>
       )}
 
-      {traces.loading && <p role="status">Chargement…</p>}
+      {traces.loading && <p role="status">Loading…</p>}
       {traces.error && (
         <p role="alert" className="error">
           {traces.error.message}
         </p>
       )}
-      {!traces.loading && shown.length === 0 && <p className="empty">Aucune trace ici.</p>}
+      {!traces.loading && shown.length === 0 && <p className="empty">No trace here.</p>}
 
       <ul className="memory-list">
         {shown.map((memory) => {

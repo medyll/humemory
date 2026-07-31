@@ -13,9 +13,10 @@ export interface LLMClient {
   };
 }
 
-const SYSTEM_PROMPT = `Tu es un système de consolidation mnésique.
-Pour chaque trace, génère 3 niveaux de dégradation en JSON strict.
-Réponds UNIQUEMENT avec un objet JSON, sans markdown, sans explication.`;
+const SYSTEM_PROMPT = `You are a memory consolidation system.
+For each trace, produce 3 decay levels as strict JSON.
+Write the levels in the same language as the trace itself.
+Answer with a JSON object ONLY — no markdown, no explanation.`;
 
 let _client: LLMClient | null = null;
 
@@ -37,9 +38,9 @@ export async function generateMemoryLevels(
 ): Promise<GeneratedLevels> {
   const llm = client ?? getClient();
   const typeHints: Record<MemoryType, string> = {
-    episodic: 'événement vécu (contexte temporel/spatial)',
-    semantic: 'connaissance factuelle ou concept',
-    procedural: 'savoir-faire ou procédure',
+    episodic: 'a lived event, with its temporal and spatial context',
+    semantic: 'a fact or a concept',
+    procedural: 'know-how or a procedure',
   };
 
   const response = await llm.messages.create({
@@ -55,18 +56,18 @@ export async function generateMemoryLevels(
     messages: [
       {
         role: 'user',
-        content: `Type de mémoire: ${typeHints[memoryType]}
+        content: `Memory type: ${typeHints[memoryType]}
 
-Trace à consolider:
+Trace to consolidate:
 """
 ${content}
 """
 
-Génère exactement ce JSON:
+Produce exactly this JSON:
 {
-  "level1Summary": "<résumé 2-3 phrases, préserve le contexte clé>",
-  "level2Essential": "<1 phrase, l'information irréductible>",
-  "level3Keywords": "<8-12 mots-clés BM25 séparés par des espaces>"
+  "level1Summary": "<2-3 sentences, keep the key context>",
+  "level2Essential": "<1 sentence, the irreducible information>",
+  "level3Keywords": "<8-12 BM25 keywords separated by spaces>"
 }`,
       },
     ],

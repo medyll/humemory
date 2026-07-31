@@ -9,9 +9,10 @@ export interface ExtractedLearning {
   level3Keywords: string;
 }
 
-const SYSTEM_PROMPT = `Tu es un système d'extraction d'apprentissages mnésiques.
-Analyse la session et extrait les apprentissages clés à mémoriser.
-Réponds UNIQUEMENT avec un tableau JSON, sans markdown.`;
+const SYSTEM_PROMPT = `You are a system that extracts mnemonic learnings.
+Analyse the session and extract the key learnings worth remembering.
+Write them in the same language as the session itself.
+Answer with a JSON array ONLY — no markdown.`;
 
 export async function extractLearnings(
   session: ParsedSession,
@@ -42,16 +43,16 @@ Transcript:
 ${transcript}
 """
 
-Extrait jusqu'à ${maxLearnings} apprentissages clés (décisions techniques, bugs résolus, patterns découverts, faits importants).
-Ignore les échanges triviaux ou les répétitions.
+Extract up to ${maxLearnings} key learnings (technical decisions, bugs solved, patterns discovered, important facts).
+Skip trivial exchanges and repetitions.
 
 Format JSON requis:
 [
   {
-    "content": "description complète de l'apprentissage",
+    "content": "full description of the learning",
     "memoryType": "episodic|semantic|procedural",
     "keywords": ["mot1", "mot2"],
-    "level3Keywords": "mots clés BM25 séparés par espaces"
+    "level3Keywords": "BM25 keywords separated by spaces"
   }
 ]`,
       },

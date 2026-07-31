@@ -1,16 +1,16 @@
 /**
- * Fermeture des boucles par commit — Phase 5.3.2.
+ * Closing loops from commits — Phase 5.3.2.
  *
- * Le geste qui purge une boucle ouverte, c'est le commit. Deux voies :
+ * The gesture that purges an open loop is the commit. Two paths:
  *
- * 1. **Explicite** — `Closes loop-a1b2c3d4` dans le message. Intention de
- *    l'auteur, sans ambiguïté : on ferme.
- * 2. **Heuristique** — recoupement entre les fichiers touchés et le contenu de
- *    la boucle. On ne ferme **jamais** automatiquement là-dessus : on suggère.
- *    Fermer la mauvaise boucle coûte plus cher que d'en laisser une ouverte.
+ * 1. **Explicit** — `Closes loop-a1b2c3d4` in the message. The author's
+ *    intention, unambiguous: close it.
+ * 2. **Heuristic** — overlap between the files touched and the loop's text. This
+ *    **never** closes anything automatically: it suggests. Closing the wrong loop
+ *    costs more than leaving one open.
  *
- * La logique vit ici pour rester testable ; `scripts/hook-post-commit.ts` se
- * contente d'interroger git et d'afficher.
+ * The logic lives here so it stays testable; `scripts/hook-post-commit.ts` only
+ * queries git and prints.
  */
 
 import type { Intention, IntentionStore } from '../core/types.js';
@@ -20,38 +20,38 @@ export interface CommitInfo {
   sha: string;
   message: string;
   files: string[];
-  /** Lieu mental du dépôt — borne l'heuristique au projet courant. */
+  /** Mental place of the repository — bounds the heuristic to the current project. */
   directory: string;
 }
 
 export interface CloseSuggestion {
   intention: Intention;
   score: number;
-  /** Jetons partagés entre les fichiers du commit et le contenu de la boucle. */
+  /** Tokens shared between the commit's files and the loop's content. */
   matched: string[];
 }
 
 export interface CommitCloseResult {
   closed: Intention[];
   suggestions: CloseSuggestion[];
-  /** Identifiants cités dans le message mais introuvables ou ambigus. */
+  /** Ids mentioned in the message but unknown or ambiguous. */
   unresolved: string[];
 }
 
-/** Seuil de suggestion : au moins un jeton significatif partagé. */
+/** Suggestion threshold: at least one meaningful shared token. */
 export const SUGGESTION_THRESHOLD = 1;
 
-/** Nombre max de suggestions affichées — au-delà, c'est du bruit. */
+/** Maximum suggestions shown — beyond that it is noise. */
 export const MAX_SUGGESTIONS = 3;
 
-// Mots trop fréquents pour signaler quoi que ce soit.
+// Words too common to signal anything.
 const STOPWORDS = new Set([
-  'dans', 'pour', 'avec', 'sans', 'cette', 'cette', 'leur', 'plus', 'mais', 'donc',
+  'dans', 'pour', 'avec', 'sans', 'cette', 'leur', 'plus', 'mais', 'donc',
   'index', 'test', 'tests', 'src', 'lib', 'main', 'temp', 'utils', 'util', 'core',
   'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into',
 ]);
 
-/** Découpe un texte en jetons significatifs, sans accents ni casse. */
+/** Splits a text into meaningful tokens, without accents or case. */
 export function tokenize(text: string): string[] {
   return text
     .normalize('NFD')
@@ -61,7 +61,7 @@ export function tokenize(text: string): string[] {
     .filter((t) => t.length >= 4 && !STOPWORDS.has(t));
 }
 
-/** Jetons tirés d'un chemin de fichier : segments de dossier + nom sans extension. */
+/** Tokens drawn from a file path: directory segments plus the name without its extension. */
 export function tokenizePath(path: string): string[] {
   const normalized = path.replace(/\\/g, '/');
   const withoutExt = normalized.replace(/\.[a-z0-9]+$/i, '');
@@ -69,9 +69,10 @@ export function tokenizePath(path: string): string[] {
 }
 
 /**
- * Recoupement entre les fichiers d'un commit et le contenu d'une boucle.
- * Volontairement grossier : ce score ne ferme rien, il ne fait que classer des
- * suggestions soumises à l'humain.
+ * Overlap between a commit's files and a loop's content.
+ *
+ * Deliberately crude: this score closes nothing, it only ranks suggestions put
+ * to a human.
  */
 export function scoreOverlap(intention: Intention, files: string[]): CloseSuggestion['matched'] {
   const contentTokens = new Set(tokenize(intention.content));
@@ -87,11 +88,10 @@ export function scoreOverlap(intention: Intention, files: string[]): CloseSugges
 }
 
 /**
- * Applique un commit aux boucles ouvertes.
+ * Applies a commit to the open loops.
  *
- * Ferme celles citées explicitement (et annule leurs cues restants — un cue
- * survivant à sa boucle réveillerait un fantôme). Pour le reste, se contente de
- * proposer.
+ * Closes the ones named explicitly (and cancels their remaining cues — a cue
+ * outliving its loop is a ghost wake-up). For the rest, it only suggests.
  */
 export async function applyCommitToLoops(
   store: IntentionStore,
@@ -103,8 +103,8 @@ export async function applyCommitToLoops(
   const unresolved: string[] = [];
   const closedIds = new Set<string>();
 
-  // 1. Marqueurs explicites. Volontairement non bornés au répertoire : si
-  // quelqu'un écrit l'identifiant à la main, il sait ce qu'il ferme.
+  // 1. Explicit markers. Deliberately not bound to the directory: if someone
+  // types the id by hand, they know what they are closing.
   for (const shortId of extractLoopIds(commit.message)) {
     const target = matchIntentionByShortId(armed, shortId);
     if (!target) {
@@ -123,7 +123,7 @@ export async function applyCommitToLoops(
     closedIds.add(target.id);
   }
 
-  // 2. Heuristique, bornée au projet courant et jamais appliquée d'office.
+  // 2. Heuristic, bounded to the current project and never applied on its own.
   const suggestions = armed
     .filter((i) => !closedIds.has(i.id) && i.directory === commit.directory)
     .map((intention) => ({ intention, matched: scoreOverlap(intention, commit.files) }))
@@ -135,7 +135,7 @@ export async function applyCommitToLoops(
   return { closed, suggestions, unresolved };
 }
 
-/** Rend le compte rendu affiché après un commit. Chaîne vide si rien à dire. */
+/** Renders the report printed after a commit. Empty string when there is nothing to say. */
 export function renderCommitReport(result: CommitCloseResult): string {
   const { closed, suggestions, unresolved } = result;
   if (!closed.length && !suggestions.length && !unresolved.length) return '';
@@ -143,22 +143,22 @@ export function renderCommitReport(result: CommitCloseResult): string {
   const lines: string[] = [];
 
   for (const i of closed) {
-    lines.push(`✅ ${loopId(i.id)} fermée — ${i.content}`);
+    lines.push(`✅ ${loopId(i.id)} closed — ${i.content}`);
   }
 
   for (const shortId of unresolved) {
-    lines.push(`⚠️  loop-${shortId} : aucune boucle ouverte unique sous cet identifiant`);
+    lines.push(`⚠️  loop-${shortId}: no single open loop under that id`);
   }
 
   if (suggestions.length) {
     lines.push('');
-    lines.push('💡 Boucles peut-être concernées par ce commit :');
+    lines.push('💡 Loops this commit may have touched:');
     for (const { intention, matched } of suggestions) {
       lines.push(`   ${loopId(intention.id)} — ${intention.content}`);
-      lines.push(`      recoupe : ${matched.join(', ')}`);
+      lines.push(`      overlaps: ${matched.join(', ')}`);
     }
     lines.push('');
-    lines.push(`   Fermer : pnpm cli intent close ${loopId(suggestions[0].intention.id)}`);
+    lines.push(`   To close: pnpm cli intent close ${loopId(suggestions[0].intention.id)}`);
   }
 
   return `${lines.join('\n')}\n`;

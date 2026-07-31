@@ -3,16 +3,16 @@ import type { MemoryType } from '../../src/core/types.js';
 import { api } from '../api/client.js';
 
 /**
- * Encodage manuel d'une trace — portage de `showAddModal`/`addMemory`.
+ * Manual encoding of a trace — ported from `showAddModal`/`addMemory`.
  *
- * L'original ouvrait une modale ; ici c'est un panneau repliable, parce qu'une
- * modale qui ne fait qu'un formulaire coupe la vue pour rien.
+ * The original opened a modal; this is a collapsible panel, because a modal that
+ * holds nothing but a form cuts the view for no reason.
  */
 
 const TYPES: Array<{ value: MemoryType; label: string }> = [
-  { value: 'semantic', label: '📖 Sémantique' },
-  { value: 'episodic', label: '📅 Épisodique' },
-  { value: 'procedural', label: '⚡ Procédurale' },
+  { value: 'semantic', label: '📖 Semantic' },
+  { value: 'episodic', label: '📅 Episodic' },
+  { value: 'procedural', label: '⚡ Procedural' },
 ];
 
 export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
@@ -30,7 +30,7 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
     setError(null);
 
     if (!content.trim()) {
-      setError('Une trace sans contenu ne se rappelle pas.');
+      setError('A trace with no content cannot be recalled.');
       return;
     }
 
@@ -61,7 +61,7 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="new-trace-toggle">
-        + Encoder une trace
+        + Encode a trace
       </button>
     );
   }
@@ -69,19 +69,19 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
   return (
     <form className="new-loop" onSubmit={submit}>
       <div className="field">
-        <label htmlFor="trace-content">Contenu</label>
+        <label htmlFor="trace-content">Content</label>
         <textarea
           id="trace-content"
           rows={3}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Ce qu'il faudra se rappeler…"
+          placeholder="What will need to be remembered…"
         />
       </div>
 
       <div className="field-row">
         <div className="field">
-          <label htmlFor="trace-directory">Lieu mental</label>
+          <label htmlFor="trace-directory">Mental place</label>
           <input
             id="trace-directory"
             value={directory}
@@ -102,7 +102,7 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
       </div>
 
       <div className="field">
-        <label htmlFor="trace-keywords">Indices de récupération (séparés par des virgules)</label>
+        <label htmlFor="trace-keywords">Retrieval cues (comma separated)</label>
         <input
           id="trace-keywords"
           value={keywords}
@@ -117,7 +117,7 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
           checked={photographic}
           onChange={(e) => setPhotographic(e.target.checked)}
         />
-        🔒 Mode photographique — cette trace ne se dégradera jamais
+        🔒 Photographic mode — this trace will never decay
       </label>
 
       {error && (
@@ -128,10 +128,10 @@ export function NewTraceForm({ onCreated }: { onCreated: () => void }) {
 
       <div className="loop-actions">
         <button type="submit" disabled={busy}>
-          {busy ? 'Encodage…' : 'Encoder'}
+          {busy ? 'Encoding…' : 'Encode'}
         </button>
         <button type="button" className="secondary" onClick={() => setOpen(false)} disabled={busy}>
-          Annuler
+          Cancel
         </button>
       </div>
     </form>

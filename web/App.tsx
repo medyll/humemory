@@ -5,31 +5,31 @@ import { ReplayTab } from './components/ReplayTab.tsx';
 import { ImperativeView } from './components/ImperativeView.tsx';
 
 /**
- * Palais de mémoire — application React.
+ * Memory palace — React application.
  *
- * Deux familles d'onglets. Les uns sont du React ordinaire (traces, boucles).
- * Les autres délèguent à une vue impérative (d3, three.js) chargée à la demande :
- * three.js et d3 pèsent plusieurs centaines de kilo-octets, rien ne justifie de
- * les servir à quelqu'un qui ne visite jamais la galaxie.
+ * Two families of tabs. Some are ordinary React (traces, loops). The others
+ * delegate to an imperative view (d3, three.js) loaded on demand: three.js and d3
+ * weigh hundreds of kilobytes, and there is no reason to serve them to someone
+ * who never visits the galaxy.
  */
 
 type TabId = 'loops' | 'traces' | 'river' | 'galaxy' | 'replay' | 'promenade';
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'loops', label: '🔁 Boucles' },
+  { id: 'loops', label: '🔁 Loops' },
   { id: 'traces', label: '📊 Traces' },
-  { id: 'river', label: '🌊 Rivière' },
-  { id: 'galaxy', label: '🌌 Galaxie' },
-  { id: 'replay', label: '🔄 Rejeu' },
-  { id: 'promenade', label: '🚶 Promenade' },
+  { id: 'river', label: '🌊 River' },
+  { id: 'galaxy', label: '🌌 Galaxy' },
+  { id: 'replay', label: '🔄 Replay' },
+  { id: 'promenade', label: '🚶 Walk' },
 ];
 
 export function App() {
   const [tab, setTab] = useState<TabId>('loops');
   const [focusedMemory, setFocusedMemory] = useState<string | null>(null);
 
-  // Cliquer une trace dans une visualisation renvoie vers l'onglet qui sait
-  // l'afficher, plutôt que de dupliquer la modale de détail dans chaque vue.
+  // Clicking a trace in a visualisation sends you to the tab that knows how to
+  // show it, rather than duplicating the detail modal in every view.
   const onSelectMemory = useCallback((id: string) => {
     setFocusedMemory(id);
     setTab('traces');
@@ -39,12 +39,12 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <h1>
-          <span aria-hidden="true">🧠</span> Palais de mémoire
+          <span aria-hidden="true">🧠</span> Memory palace
         </h1>
-        <p className="tagline">humemory — traces qui se dégradent, boucles qui reviennent</p>
+        <p className="tagline">humemory — traces that decay, loops that come back</p>
       </header>
 
-      <nav className="tab-nav" role="tablist" aria-label="Vues">
+      <nav className="tab-nav" role="tablist" aria-label="Views">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -67,7 +67,7 @@ export function App() {
         {tab === 'river' && (
           <ImperativeView
             viewKey="river"
-            label="la rivière du temps"
+            label="the river of time"
             height={600}
             load={() => import('./viz/river.js').then((m) => ({ mount: m.createMount({ onSelectMemory }) }))}
           />
@@ -76,7 +76,7 @@ export function App() {
         {tab === 'galaxy' && (
           <ImperativeView
             viewKey="galaxy"
-            label="la galaxie mnésique"
+            label="the memory galaxy"
             height={700}
             load={() => import('./viz/galaxy.js').then((m) => ({ mount: m.createMount({ onSelectMemory }) }))}
           />
@@ -85,7 +85,7 @@ export function App() {
         {tab === 'promenade' && (
           <ImperativeView
             viewKey="promenade"
-            label="la promenade 3D"
+            label="the 3D walk"
             height={700}
             load={() => import('./viz/promenade.js').then((m) => ({ mount: m.createMount({ onSelectMemory }) }))}
           />

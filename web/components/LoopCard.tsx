@@ -14,7 +14,7 @@ export interface LoopCardProps {
   onDelete: (id: string) => Promise<void>;
 }
 
-/** Durée lisible : « il y a 2j », « dans 3h ». */
+/** Readable duration: "2d ago", "in 3h". */
 function relative(from: Date, to: Date): string {
   const ms = to.getTime() - from.getTime();
   const future = ms > 0;
@@ -23,8 +23,8 @@ function relative(from: Date, to: Date): string {
   const hours = Math.floor(abs / 3_600_000);
   const days = Math.floor(hours / 24);
 
-  const value = days >= 1 ? `${days}j` : hours >= 1 ? `${hours}h` : `${Math.floor(abs / 60_000)}min`;
-  return future ? `dans ${value}` : `il y a ${value}`;
+  const value = days >= 1 ? `${days}d` : hours >= 1 ? `${hours}h` : `${Math.floor(abs / 60_000)}min`;
+  return future ? `in ${value}` : `${value} ago`;
 }
 
 export function LoopCard({ intention, cues, now, onClose, onFire, onDelete }: LoopCardProps) {
@@ -49,8 +49,8 @@ export function LoopCard({ intention, cues, now, onClose, onFire, onDelete }: Lo
         <code>{intention.loopId}</code>
         <LoopBadge status={intention.status} />
         {overdue && intention.status === 'armed' && (
-          <span className="loop-overdue" title="Échéance dépassée — sera expirée au prochain balai">
-            échéance dépassée
+          <span className="loop-overdue" title="Deadline passed — will expire on the next sweep">
+            deadline passed
           </span>
         )}
       </div>
@@ -59,13 +59,13 @@ export function LoopCard({ intention, cues, now, onClose, onFire, onDelete }: Lo
       <LoopTension intention={intention} now={now} />
 
       <p className="loop-meta">
-        {intention.directory} · armée {relative(intention.createdAt, now)}
-        {intention.expiresAt && ` · échéance ${relative(now, intention.expiresAt)}`}
-        {intention.closedByCommit && ` · fermée par ${intention.closedByCommit.slice(0, 7)}`}
+        {intention.directory} · armed {relative(intention.createdAt, now)}
+        {intention.expiresAt && ` · due ${relative(now, intention.expiresAt)}`}
+        {intention.closedByCommit && ` · closed by ${intention.closedByCommit.slice(0, 7)}`}
       </p>
 
       {cues.length > 0 && (
-        <ul className="cue-list" aria-label="Déclencheurs">
+        <ul className="cue-list" aria-label="Triggers">
           {cues.map((cue) => (
             <li key={cue.id} className="cue" data-status={cue.status}>
               <code>{formatTriggerSpec(cue.triggerSpec)}</code>
@@ -78,7 +78,7 @@ export function LoopCard({ intention, cues, now, onClose, onFire, onDelete }: Lo
       {intention.status !== 'closed' && (
         <div className="loop-actions">
           <button type="button" onClick={() => run(onClose)} disabled={busy}>
-            Fermer
+            Close
           </button>
           {intention.status === 'armed' && (
             <button
@@ -86,25 +86,25 @@ export function LoopCard({ intention, cues, now, onClose, onFire, onDelete }: Lo
               className="secondary"
               onClick={() => run(onFire)}
               disabled={busy || armedCues.length === 0}
-              title={armedCues.length === 0 ? 'Aucun cue armé à déclencher' : 'Forcer le réveil (debug)'}
+              title={armedCues.length === 0 ? 'No armed cue to fire' : 'Force the wake-up (debug)'}
             >
-              Réveiller
+              Wake
             </button>
           )}
 
-          {/* Suppression irréversible : jamais en un seul clic. */}
+          {/* Irreversible deletion: never a single click. */}
           {confirmingDelete ? (
             <>
               <button type="button" className="danger" onClick={() => run(onDelete)} disabled={busy}>
-                Confirmer la suppression
+                Confirm deletion
               </button>
               <button type="button" className="secondary" onClick={() => setConfirmingDelete(false)}>
-                Annuler
+                Cancel
               </button>
             </>
           ) : (
             <button type="button" className="secondary" onClick={() => setConfirmingDelete(true)} disabled={busy}>
-              Supprimer
+              Delete
             </button>
           )}
         </div>

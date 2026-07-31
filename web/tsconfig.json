@@ -1,5 +1,5 @@
 {
-  "//": "Front React. Séparé du tsconfig racine, qui compile la lib (src/ → dist/) et n'a ni DOM ni JSX. Ne produit rien : bun build fait le bundle, tsc ne sert qu'au typage.",
+  "//": "React front end. Separate from the root tsconfig, which compiles the library (src/ -> dist/) and has neither DOM nor JSX. Emits nothing: bun build produces the bundle, tsc only type-checks.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",

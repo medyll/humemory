@@ -4,12 +4,12 @@ import { api } from '../api/client.js';
 import { useAsync } from '../hooks/useAsync.js';
 
 /**
- * Traces similaires et fusion — portage de `showSimilar`/`confirmMerge`.
+ * Similar traces and merging — ported from `showSimilar`/`confirmMerge`.
  *
- * La fusion est irréversible : la trace source passe au niveau 4 et sa saillance
- * est reversée à la cible. L'original s'en remettait à `confirm()`, qui bloque
- * l'onglet et n'affiche que du texte brut ; ici la confirmation est inline et
- * montre les deux traces concernées, pour qu'on voie ce qu'on fusionne.
+ * A merge is irreversible: the source trace drops to level 4 and its salience is
+ * transferred to the target. The original relied on `confirm()`, which blocks the
+ * tab and can only render plain text; here the confirmation is inline and shows
+ * both traces, so you can see what you are merging.
  */
 
 export interface SimilarPanelProps {
@@ -45,9 +45,9 @@ export function SimilarPanel({ memory, onMerged }: SimilarPanelProps) {
 
   return (
     <div className="similar-panel">
-      <h4>Traces similaires</h4>
+      <h4>Similar traces</h4>
 
-      {similar.loading && <p role="status">Recherche en cours…</p>}
+      {similar.loading && <p role="status">Searching…</p>}
       {similar.error && (
         <p role="alert" className="error">
           {similar.error.message}
@@ -60,7 +60,7 @@ export function SimilarPanel({ memory, onMerged }: SimilarPanelProps) {
       )}
 
       {!similar.loading && results.length === 0 && (
-        <p className="empty">Aucune trace assez proche pour être fusionnée.</p>
+        <p className="empty">No trace close enough to merge.</p>
       )}
 
       {results.map(({ memory: candidate, score }) => (
@@ -71,27 +71,27 @@ export function SimilarPanel({ memory, onMerged }: SimilarPanelProps) {
           </p>
           <span className="score">Score {Math.round(score)}</span>
           <button type="button" className="secondary" onClick={() => setPending(candidate)} disabled={busy}>
-            🔀 Fusionner
+            🔀 Merge
           </button>
         </div>
       ))}
 
       {pending && (
-        <div className="merge-confirm" role="alertdialog" aria-label="Confirmer la fusion">
+        <div className="merge-confirm" role="alertdialog" aria-label="Confirm the merge">
           <p>
-            Fusionner cette trace <strong>dans</strong> :
+            Merge this trace <strong>into</strong>:
           </p>
           <blockquote>{pending.content.slice(0, 160)}</blockquote>
           <p className="merge-warning">
-            La trace courante passera au niveau 4 (fusionnée) et sa force sera reversée à la cible.
-            C&apos;est irréversible.
+            The current trace will drop to level 4 (merged) and its strength will be transferred
+            to the target. This is irreversible.
           </p>
           <div className="loop-actions">
             <button type="button" className="danger" onClick={() => merge(pending)} disabled={busy}>
-              {busy ? 'Fusion…' : 'Confirmer la fusion'}
+              {busy ? 'Merging…' : 'Confirm the merge'}
             </button>
             <button type="button" className="secondary" onClick={() => setPending(null)} disabled={busy}>
-              Annuler
+              Cancel
             </button>
           </div>
         </div>

@@ -15,7 +15,9 @@
       "Bash(pnpm remove *)",
       "Bash(node \"C:\\\\Users\\\\Mydde\\\\.claude\\\\skills\\\\bmad-method\\\\scripts\\\\engine.mjs\" init)",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "Bash(grep -i \"\\\\.db$\")",
+      "Bash(bun -e \"const y=await Bun.file\\('bmad/status.yaml'\\).text\\(\\); const {parse}=await import\\('yaml'\\).catch\\(\\(\\)=>\\({}\\)\\); if\\(parse\\){const d=parse\\(y\\); console.log\\('YAML OK — sprints:',d.sprints.map\\(s=>s.id+':'+s.status\\).join\\(' | '\\)\\); console.log\\('bugs:',d.qa.bugs.map\\(b=>b.id+'='+b.status\\).join\\(' '\\)\\); console.log\\('backlog:',d.backlog.map\\(b=>b.id+'='+\\(b.status||'open'\\)\\).join\\(' '\\)\\);} else console.log\\('yaml pkg absent'\\)\")"
     ]
   }
 }

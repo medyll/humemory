@@ -1,6 +1,6 @@
 import type { DecayLevel } from '../../src/core/types.js';
 
-/** Couleurs des niveaux de dégradation — vert (frais) vers gris (perdu). */
+/** Decay level colours — green (fresh) to grey (lost). */
 export const LEVEL_COLORS: Record<DecayLevel, string> = {
   0: '#22c55e',
   1: '#eab308',
@@ -10,19 +10,19 @@ export const LEVEL_COLORS: Record<DecayLevel, string> = {
 };
 
 export const LEVEL_LABELS = [
-  'L0 — Encodage',
+  'L0 — Encoding',
   'L1 — Consolidation',
   'L2 — Stable',
   'L3 — Fragile',
-  'L4 — Sommeil',
+  'L4 — Dormant',
 ] as const;
 
-/** Nom court du niveau, sans le préfixe. */
+/** Short level name, without the prefix. */
 export function levelName(level: DecayLevel): string {
   return LEVEL_LABELS[level].split('—')[1]?.trim() ?? String(level);
 }
 
-/** Contexte passé aux vues impératives : ce dont elles ont besoin du reste de l'app. */
+/** Context handed to imperative views: what they need from the rest of the app. */
 export interface VizContext {
   onSelectMemory?: (id: string) => void;
 }

@@ -19,13 +19,13 @@ const __dirname = dirname(__filename);
 const DEFAULT_DB_PATH = join(__dirname, '../../data/humemory.db');
 
 export interface StoreOptions {
-  /** Source de temps. Défaut : `systemClock`. Les tests passent une `FakeClock`. */
+  /** Time source. Defaults to `systemClock`; tests pass a `FakeClock`. */
   clock?: Clock;
 }
 
 /**
- * Garde-fou : sous NODE_ENV=test, ouvrir la DB de prod est un bug, pas une option.
- * Les suites doivent passer ':memory:' ou un fichier temporaire (cf. docs/TESTING.md).
+ * Guard: under NODE_ENV=test, opening the production database is a bug, not an
+ * option. Suites must pass ':memory:' or a temporary file (see docs/TESTING.md).
  */
 function assertNotProdDbUnderTest(dbPath: string): void {
   if (process.env.NODE_ENV !== 'test') return;
@@ -33,8 +33,8 @@ function assertNotProdDbUnderTest(dbPath: string): void {
   const resolved = resolve(dbPath);
   if (resolved === resolve(DEFAULT_DB_PATH)) {
     throw new Error(
-      `Refus d'ouvrir la DB de production (${resolved}) sous NODE_ENV=test. ` +
-        `Utilise freshStore() / ':memory:' — voir docs/TESTING.md.`
+      `Refusing to open the production database (${resolved}) under NODE_ENV=test. ` +
+        `Use freshStore() / ':memory:' — see docs/TESTING.md.`
     );
   }
 }
@@ -109,10 +109,10 @@ class AdvisoryLock {
 }
 
 /**
- * Lock inerte pour une DB privée au process (`:memory:`) : il n'y a pas d'autre
- * process avec qui se synchroniser, et `':memory:' + '.lock'` n'est de toute façon
- * pas un nom de fichier valide sous Windows. La sérialisation intra-process reste
- * assurée par `enqueueWrite`.
+ * Inert lock for a process-private database (`:memory:`): there is no other
+ * process to synchronise with, and `':memory:' + '.lock'` is not a valid file
+ * name on Windows anyway. Intra-process serialisation still runs through
+ * `enqueueWrite`.
  */
 class NoopLock {
   async withLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -150,13 +150,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     this.db.exec('PRAGMA busy_timeout=5000');
     this.db.exec('PRAGMA synchronous=NORMAL');
     this.db.exec('PRAGMA cache_size=-16000');
-    // Sans ce pragma (off par défaut dans SQLite), le ON DELETE CASCADE de `cues`
-    // vers `intentions` serait purement décoratif et laisserait des cues orphelins.
+    // Without this pragma (off by default in SQLite), the ON DELETE CASCADE from
+    // `cues` to `intentions` would be decorative and leave orphans behind.
     this.db.exec('PRAGMA foreign_keys=ON');
     this.searchEngine = new InverseSearchEngine({ clock: this.clock });
     
     // Initialize advisory lock for cross-process synchronization.
-    // Une DB :memory: n'est partagée avec personne → lock inerte.
+    // A :memory: database is shared with nobody, so the lock is inert.
     this.advisoryLock = dbPath === ':memory:' ? new NoopLock() : new AdvisoryLock(dbPath + '.lock');
     
     this.initSchema();
@@ -210,8 +210,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   /**
-   * Schéma de la mémoire prospective (Phase 5.1). Idempotent : CREATE ... IF NOT
-   * EXISTS, donc rejouable sur une base existante sans migration manuelle.
+   * Prospective memory schema (Phase 5.1). Idempotent: CREATE ... IF NOT EXISTS,
+   * so it replays on an existing database without a manual migration.
    */
   private initProspectiveSchema(): void {
     this.db.exec(`
@@ -427,7 +427,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     }
 
     if (levels !== undefined && levels.length > 0) {
-      // Placeholders générés depuis l'index, valeurs liées — pas de SQL concaténé.
+      // Placeholders generated from the index, values bound — no concatenated SQL.
       const keys = levels.map((l, i) => {
         params[`$level_in${i}`] = l;
         return `$level_in${i}`;
@@ -561,10 +561,10 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Mémoire prospective (Phase 5.1) — intentions & cues
-  // Couche données uniquement : armer, lister, changer de statut. La logique de
-  // déclenchement (resolveTimeCues / resolveEventCues / expireStale) arrive en
-  // Phase 5.2 dans src/core/cues.ts.
+  // Prospective memory (Phase 5.1) — intentions and cues
+  // Data layer only: arm, list, change status. The firing logic
+  // (resolveTimeCues / resolveEventCues / expireStale) is Phase 5.2, in
+  // src/core/cues.ts.
   // ───────────────────────────────────────────────────────────────────────────
 
   private rowToIntention(row: any): Intention {
@@ -596,9 +596,9 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   /**
-   * Arme une intention, et optionnellement ses cues dans la foulée — les deux
-   * écritures passent par le même verrou, pour qu'une intention ne puisse jamais
-   * être observée sans les cues censés la réveiller.
+   * Arms an intention, and optionally its cues in the same breath — both writes
+   * go through the same lock, so an intention can never be observed without the
+   * cues meant to wake it.
    */
   async addIntention(intention: NewIntention, cues: TriggerSpec[] = []): Promise<Intention> {
     const id = crypto.randomUUID();
@@ -676,8 +676,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
 
     if (status !== undefined) {
       const statuses = Array.isArray(status) ? status : [status];
-      // Placeholders nommés générés depuis l'index, jamais depuis la valeur —
-      // le statut reste une valeur liée, pas du SQL concaténé.
+      // Named placeholders generated from the index, never from the value — the
+      // status stays a bound value, not concatenated SQL.
       const keys = statuses.map((s, i) => {
         params[`$status${i}`] = s;
         return `$status${i}`;
@@ -700,9 +700,9 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   /**
-   * Transitions de statut. Les horodatages sont posés par l'horloge injectée :
-   * `fired` pose `fired_at`, `closed` pose `closed_at` (+ SHA éventuel).
-   * `expired` est un soft-delete — la ligne reste, pour l'historique.
+   * Status transitions. Timestamps come from the injected clock: `fired` sets
+   * `fired_at`, `closed` sets `closed_at` (plus the SHA when given). `expired` is
+   * a soft delete — the row stays, for the record.
    */
   async updateIntentionStatus(
     id: string,
@@ -729,7 +729,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     return intention;
   }
 
-  /** Supprime l'intention ; ses cues partent en cascade (PRAGMA foreign_keys=ON). */
+  /** Deletes the intention; its cues go with it (PRAGMA foreign_keys=ON). */
   async deleteIntention(id: string): Promise<void> {
     await this.enqueueWriteWithLock(async () => {
       this.db.query('DELETE FROM intentions WHERE id = $id').run({ $id: id });
@@ -799,9 +799,9 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   /**
-   * Marque un cue comme tiré. `rearm: true` le laisse `armed` tout en enregistrant
-   * `fired_at` — c'est ce dont un cue récurrent (cron) a besoin : sans ça, une
-   * récurrence ne serait qu'un one-shot déguisé.
+   * Marks a cue as fired. `rearm: true` leaves it `armed` while still recording
+   * `fired_at` — what a recurring (cron) cue needs: without it, a recurrence would
+   * be a one-shot in disguise.
    */
   async markCueFired(id: string, options: { rearm?: boolean } = {}): Promise<Cue> {
     const now = this.clock.now();

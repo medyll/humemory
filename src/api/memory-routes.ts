@@ -1,9 +1,9 @@
 /**
- * Routes HTTP de la mémoire rétrospective.
+ * HTTP routes for retrospective memory.
  *
- * Extraites de `server.ts` pour la même raison que les routes prospectives :
- * elles reçoivent leur store en paramètre, donc elles se testent sans ouvrir la
- * base de production ni lever un serveur (BUG-08).
+ * Extracted from `server.ts` for the same reason as the prospective routes: they
+ * take their store as a parameter, so they can be tested without opening the
+ * production database or raising a server (BUG-08).
  */
 
 import { Hono } from 'hono';

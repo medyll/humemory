@@ -4,17 +4,17 @@ export interface AsyncState<T> {
   data: T | null;
   error: Error | null;
   loading: boolean;
-  /** Relance la requête. Stable : utilisable en dépendance d'effet. */
+  /** Re-runs the request. Stable, so it can be used as an effect dependency. */
   reload: () => void;
 }
 
 /**
- * Charge une valeur asynchrone et suit son état.
+ * Loads an asynchronous value and tracks its state.
  *
- * Deux précautions qui évitent les bugs classiques :
- * - un composant démonté ne reçoit plus de `setState` (pas d'avertissement React) ;
- * - une réponse arrivée après une requête plus récente est ignorée, sinon un
- *   chargement lent écraserait un résultat plus frais.
+ * Two precautions that avoid the classic bugs:
+ * - an unmounted component receives no more `setState` (no React warning);
+ * - a response arriving after a newer request is ignored, otherwise a slow load
+ *   would overwrite a fresher result.
  */
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
   const [data, setData] = useState<T | null>(null);

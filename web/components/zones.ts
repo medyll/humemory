@@ -1,28 +1,27 @@
 import type { Memory, DecayLevel } from '../../src/core/types.js';
 
 /**
- * Zones temporelles du palais — portage de `public/js/dashboard.js`.
+ * Temporal zones of the palace — ported from `public/js/dashboard.js`.
  *
- * Une zone n'est pas un niveau de dégradation : c'est une lecture croisée de
- * l'âge, du niveau et de la force. Une trace jeune mais déjà exsangue tombe en
- * « fragile », pas en « encodage ».
+ * A zone is not a decay level: it reads age, level and strength together. A
+ * young but already drained trace lands in "fragile", not in "encoding".
  */
 export const ZONES = {
-  encoding: { label: 'Encodage récent', maxHours: 24 },
-  consolidating: { label: 'En consolidation', maxHours: 24 * 7 },
-  consolidated: { label: 'Consolidé', maxHours: 24 * 30 },
+  encoding: { label: 'Recently encoded', maxHours: 24 },
+  consolidating: { label: 'Consolidating', maxHours: 24 * 7 },
+  consolidated: { label: 'Consolidated', maxHours: 24 * 30 },
   fragile: { label: 'Fragile', maxHours: 24 * 90 },
-  dormant: { label: 'En sommeil', maxHours: Infinity },
+  dormant: { label: 'Dormant', maxHours: Infinity },
 } as const;
 
 export type Zone = keyof typeof ZONES;
 
 export const ZONE_ORDER: Zone[] = ['encoding', 'consolidating', 'consolidated', 'fragile', 'dormant'];
 
-const CONSOLIDATION_LABELS = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
+const CONSOLIDATION_LABELS = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
 
 export function consolidationLabel(level: DecayLevel): string {
-  return CONSOLIDATION_LABELS[level] ?? 'Inconnu';
+  return CONSOLIDATION_LABELS[level] ?? 'Unknown';
 }
 
 export function memoryZone(memory: Memory, now: Date = new Date()): Zone {
@@ -44,26 +43,26 @@ export function countByZone(memories: Memory[], now: Date = new Date()): Record<
 }
 
 const TYPE_META = {
-  episodic: { icon: '📅', label: 'Épisodique' },
-  semantic: { icon: '📖', label: 'Sémantique' },
-  procedural: { icon: '⚡', label: 'Procédurale' },
+  episodic: { icon: '📅', label: 'Episodic' },
+  semantic: { icon: '📖', label: 'Semantic' },
+  procedural: { icon: '⚡', label: 'Procedural' },
 } as const;
 
 export function typeMeta(type: Memory['memoryType']) {
   return TYPE_META[type] ?? TYPE_META.semantic;
 }
 
-/** « il y a 3j », « à l'instant ». */
+/** "3d ago", "just now". */
 export function relativeTime(date: Date | string, now: Date = new Date()): string {
   const ms = now.getTime() - new Date(date).getTime();
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `il y a ${minutes}min`;
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}min ago`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `il y a ${hours}h`;
+  if (hours < 24) return `${hours}h ago`;
 
   const days = Math.floor(hours / 24);
-  if (days < 30) return `il y a ${days}j`;
-  return `il y a ${Math.floor(days / 30)} mois`;
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)} months ago`;
 }

@@ -1,10 +1,10 @@
 /**
- * Réhydratation des DTO.
+ * DTO rehydration.
  *
- * L'API sérialise les dates en ISO. Les fonctions du domaine (`intentionSaillance`,
- * règles de décay) attendent de vraies `Date` : on rend au front des objets du
- * même type que le back, ce qui permet de réutiliser la logique métier telle
- * quelle au lieu de la réécrire en JavaScript de formulaire.
+ * The API serialises dates as ISO strings. Domain functions (`intentionSaillance`,
+ * the decay rules) expect real `Date` objects: the front end gets back the same
+ * shapes the backend uses, so the business logic can be reused as is instead of
+ * being rewritten in form JavaScript.
  */
 
 import type { Intention, Cue } from '../../src/core/types.js';
@@ -15,9 +15,9 @@ function date(value: string | undefined): Date | undefined {
 }
 
 /**
- * Une intention côté front : le modèle du back, plus l'identifiant court que
- * l'API ajoute. `loopId` n'appartient pas au modèle — c'est une commodité
- * d'affichage, elle reste donc en dehors de `Intention`.
+ * An intention on the front end: the backend model plus the short id the API
+ * adds. `loopId` is not part of the model — it is a display convenience, so it
+ * stays outside `Intention`.
  */
 export type IntentionView = Intention & { loopId: string };
 

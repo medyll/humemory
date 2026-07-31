@@ -1,16 +1,15 @@
 /**
- * Promenade mnésique — parcours 3D du palais (three.js).
+ * Memory walk — a 3D stroll through the palace (three.js).
  *
- * Portage de `public/js/promenade.js`. La scène est reprise telle quelle : du
- * three.js impératif dans un `useEffect` est la pratique normale, le réécrire en
- * JSX n'apporterait rien.
+ * Ported from `public/js/promenade.js`. The scene is taken as is: imperative
+ * three.js inside a `useEffect` is the normal practice, and rewriting it in JSX
+ * would gain nothing.
  *
- * Ce qui change tient au démontage. L'original attachait cinq écouteurs à
- * `document` et `window` et ne les retirait jamais : changer d'onglet laissait
- * les touches ZQSD piloter une caméra invisible, et chaque retour en rajoutait
- * une couche. Ici tout passe par un `AbortController`, et les géométries,
- * matériaux et textures sont libérés — la mémoire GPU ne se ramasse pas toute
- * seule.
+ * What changes is the teardown. The original attached five listeners to
+ * `document` and `window` and removed none: switching tabs left the movement keys
+ * driving an invisible camera, and every return added another layer. Everything
+ * now hangs off an `AbortController`, and geometries, materials and textures are
+ * disposed — GPU memory is not garbage collected.
  */
 
 import * as THREE from 'three';
@@ -48,7 +47,7 @@ export function createMount(ctx: VizContext = {}) {
     lamp.position.set(0, 10, 0);
     scene.add(lamp);
 
-    // Tout ce qui devra être libéré au démontage.
+    // Everything that will need disposing on teardown.
     const disposables: Array<{ dispose: () => void }> = [];
     const track = <T extends { dispose: () => void }>(item: T): T => {
       disposables.push(item);
@@ -67,12 +66,12 @@ export function createMount(ctx: VizContext = {}) {
     scene.add(grid);
     disposables.push(grid);
 
-    // Un pilier par lieu mental, ses traces en orbite autour.
+    // One pillar per mental place, its traces orbiting around it.
     const directories = [...new Set(memories.map((m) => m.directory))];
     const angleStep = (2 * Math.PI) / Math.max(1, directories.length);
     const radius = 40;
 
-    /** Une sphère porte sa trace et sa hauteur de repos dans `userData`. */
+    /** A sphere carries its trace and its resting height in `userData`. */
     interface MemorySphere extends THREE.Mesh {
       material: THREE.MeshStandardMaterial;
       userData: { memory: Memory; originalY: number };
@@ -114,8 +113,8 @@ export function createMount(ctx: VizContext = {}) {
         const memRadius = 8 + (j % 3) * 3;
         const x = centerX + memRadius * Math.cos(memAngle);
         const z = centerZ + memRadius * Math.sin(memAngle);
-        // Hauteur dérivée de l'index, pas aléatoire : la scène doit être la même
-        // d'une visite à l'autre, sinon le palais n'est plus un lieu de mémoire.
+        // Height derives from the index rather than being random: the scene must be
+        // the same from one visit to the next, or the palace stops being a place.
         const y = 2 + ((j * 7) % 30) / 10;
 
         const size = 0.5 + (memory.saillance / 100) * 1.5;
@@ -157,16 +156,16 @@ export function createMount(ctx: VizContext = {}) {
     const hud = document.createElement('div');
     hud.className = 'promenade-hud';
     hud.innerHTML = `
-      <div style="font-weight:600;margin-bottom:.5rem;">🚶 Promenade mnésique</div>
+      <div style="font-weight:600;margin-bottom:.5rem;">🚶 Memory walk</div>
       <div style="color:var(--muted);font-size:.85rem;">
-        <div>ZQSD / Flèches : se déplacer</div>
-        <div>Clic : capturer la souris</div>
-        <div>Double-clic sur une sphère : détail</div>
+        <div>WASD / arrows: move</div>
+        <div>Click: capture the mouse</div>
+        <div>Double-click a sphere: detail</div>
       </div>
       <div style="margin-top:1rem;"><button type="button" data-role="autoplay">🎬 Auto-play</button></div>`;
     container.appendChild(hud);
 
-    // ── Contrôles ───────────────────────────────────────────────────────────
+    // ── Controls ────────────────────────────────────────────────────────────
     const abort = new AbortController();
     const on = <K extends keyof DocumentEventMap>(
       target: Document | Window | HTMLElement,
@@ -241,7 +240,7 @@ export function createMount(ctx: VizContext = {}) {
       renderer.setSize(w, HEIGHT);
     });
 
-    // ── Boucle d'animation ──────────────────────────────────────────────────
+    // ── Animation loop ──────────────────────────────────────────────────────
     let frame = 0;
     const speed = 0.3;
 
@@ -270,7 +269,7 @@ export function createMount(ctx: VizContext = {}) {
         camera.rotation.set(pitch, yaw, 0, 'YXZ');
       }
 
-      // La proximité réactive la trace : s'approcher d'un souvenir le ravive.
+      // Proximity reactivates the trace: getting closer to a memory revives it.
       const t = Date.now() * 0.001;
       for (const sphere of spheres) {
         const distance = camera.position.distanceTo(sphere.position);
@@ -296,7 +295,7 @@ export function createMount(ctx: VizContext = {}) {
 
     return () => {
       cancelAnimationFrame(frame);
-      abort.abort(); // retire les cinq écouteurs d'un coup
+      abort.abort(); // removes all five listeners at once
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
 
       for (const item of disposables) item.dispose();

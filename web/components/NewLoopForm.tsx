@@ -8,11 +8,11 @@ export interface NewLoopFormProps {
 }
 
 /**
- * Armement d'une boucle.
+ * Arming a loop.
  *
- * Les cues se saisissent au même format qu'en ligne de commande
- * (`event:file_open:src/a.ts`, `cron:0 9 * * 1`) et passent par le même parseur.
- * Une seule syntaxe à apprendre, un seul parseur à tester.
+ * Cues are typed in the same syntax as on the command line
+ * (`event:file_open:src/a.ts`, `cron:0 9 * * 1`) and go through the same parser.
+ * One syntax to learn, one parser to test.
  */
 export function NewLoopForm({ defaultDirectory, onSubmit }: NewLoopFormProps) {
   const [content, setContent] = useState('');
@@ -27,11 +27,11 @@ export function NewLoopForm({ defaultDirectory, onSubmit }: NewLoopFormProps) {
     setError(null);
 
     if (!content.trim()) {
-      setError('Décris la boucle : c\'est ce que tu reliras dans trois semaines.');
+      setError('Describe the loop: this is what you will reread in three weeks.');
       return;
     }
 
-    // Validé avant l'envoi : un cue mal formé serait stocké et ne réveillerait rien.
+    // Validated before sending: a malformed cue would be stored and would never wake anything.
     let cues: TriggerSpec[];
     try {
       cues = cuesRaw
@@ -65,22 +65,22 @@ export function NewLoopForm({ defaultDirectory, onSubmit }: NewLoopFormProps) {
   return (
     <form className="new-loop" onSubmit={handleSubmit}>
       <div className="field">
-        <label htmlFor="loop-content">Boucle à ouvrir</label>
+        <label htmlFor="loop-content">Loop to open</label>
         <input
           id="loop-content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="refactorer la validation de token"
+          placeholder="refactor token validation"
         />
       </div>
 
       <div className="field-row">
         <div className="field">
-          <label htmlFor="loop-directory">Lieu mental</label>
+          <label htmlFor="loop-directory">Mental place</label>
           <input id="loop-directory" value={directory} onChange={(e) => setDirectory(e.target.value)} />
         </div>
         <div className="field">
-          <label htmlFor="loop-expires">Échéance (facultative)</label>
+          <label htmlFor="loop-expires">Deadline (optional)</label>
           <input
             id="loop-expires"
             type="date"
@@ -91,7 +91,7 @@ export function NewLoopForm({ defaultDirectory, onSubmit }: NewLoopFormProps) {
       </div>
 
       <div className="field">
-        <label htmlFor="loop-cues">Déclencheurs — un par ligne</label>
+        <label htmlFor="loop-cues">Triggers — one per line</label>
         <textarea
           id="loop-cues"
           rows={3}
@@ -108,7 +108,7 @@ export function NewLoopForm({ defaultDirectory, onSubmit }: NewLoopFormProps) {
       )}
 
       <button type="submit" disabled={busy}>
-        {busy ? 'Armement…' : 'Armer la boucle'}
+        {busy ? 'Arming…' : 'Arm the loop'}
       </button>
     </form>
   );

@@ -12,8 +12,8 @@ import { readFileSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Store partagé. HUMEMORY_DB permet de viser une autre base — même convention
-// que les hooks, et indispensable pour exercer la CLI sans toucher la prod.
+// Shared store. HUMEMORY_DB points at another database — same convention as the
+// hooks, and required to exercise the CLI without touching production.
 const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
 let store: SQLiteStore;
 
@@ -26,30 +26,30 @@ function getStore(): SQLiteStore {
 
 const program = new Command();
 
-// Version lue du paquet : codée en dur, elle dérivait à chaque release.
+// Version read from the package: hard-coded, it drifted at every release.
 const { version } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as {
   version: string;
 };
 
 program
   .name('humemory')
-  .description('Palais de mémoire — Système de traces mnésiques avec dégradation progressive')
+  .description('Memory palace — mnemonic traces with progressive decay')
   .version(version);
 
 // === ADD ===
 program
   .command('encode <content>')
   .alias('add')
-  .description('Encoder une nouvelle trace mnésique')
-  .option('-d, --directory <dir>', 'Lieu mental (projet)', process.cwd())
+  .description('Encode a new mnemonic trace')
+  .option('-d, --directory <dir>', 'Mental place (project)', process.cwd())
   .option('-s, --session <id>', 'Contexte d\'encodage', 'default')
-  .option('-k, --keywords <tags>', 'Indices de récupération (comma-separated)', '')
-  .option('-l1, --level1 <summary>', 'Résumé pour consolidation N1')
-  .option('-l2, --level2 <essential>', 'Essentiel pour consolidation N2')
-  .option('-l3, --level3 <keywords>', 'Trace pour recherche rapide N3')
-  .option('-t, --type <type>', 'Type de mémoire (episodic/semantic/procedural)', 'semantic')
-  .option('--auto', 'Auto-générer N1/N2/N3 via LLM (nécessite ANTHROPIC_API_KEY)')
-  .option('--photographic', 'Mode photographique — désactiver la dégradation')
+  .option('-k, --keywords <tags>', 'Retrieval cues (comma-separated)', '')
+  .option('-l1, --level1 <summary>', 'Summary for consolidation level 1')
+  .option('-l2, --level2 <essential>', 'Gist for consolidation level 2')
+  .option('-l3, --level3 <keywords>', 'Keywords for fast level 3 retrieval')
+  .option('-t, --type <type>', 'Memory type (episodic/semantic/procedural)', 'semantic')
+  .option('--auto', 'Auto-generate levels 1-3 through the LLM (needs ANTHROPIC_API_KEY)')
+  .option('--photographic', 'Photographic mode — disable decay')
   .action(async (content, options) => {
     const s = getStore();
 
@@ -57,13 +57,13 @@ program
     const memoryType = validTypes.includes(options.type) ? options.type : 'semantic';
 
     if (options.auto) {
-      console.log('⏳ Génération des niveaux de consolidation via LLM...');
+      console.log('⏳ Generating consolidation levels through the LLM…');
     }
 
     const memory = await s.add({
       content,
-      // Résolu en absolu, comme pour les intentions : le hook SessionStart
-      // filtre par `process.cwd()`, un chemin relatif ne matcherait jamais.
+      // Resolved to absolute, as for intentions: the SessionStart hook filters by
+      // `process.cwd()`, and a relative path would never match.
       directory: resolve(options.directory),
       day: new Date().toISOString().split('T')[0],
       keywords: options.keywords ? options.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : [],
@@ -75,28 +75,28 @@ program
       photographic: options.photographic ?? false,
     }, { autoGenerate: options.auto });
 
-    const typeLabels = { episodic: 'Épisodique', semantic: 'Sémantique', procedural: 'Procédurale' };
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-    console.log(`✓ Trace encodée: ${memory.id}`);
+    const typeLabels = { episodic: 'Episodic', semantic: 'Semantic', procedural: 'Procedural' };
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
+    console.log(`✓ Trace encoded: ${memory.id}`);
     console.log(`  Type: ${typeLabels[memory.memoryType]}`);
-    console.log(`  État: ${states[memory.currentLevel]}`);
-    console.log(`  Force mnésique: ${memory.saillance}/100`);
+    console.log(`  State: ${states[memory.currentLevel]}`);
+    console.log(`  Mnemonic strength: ${memory.saillance}/100`);
   });
 
 // === SEARCH ===
 program
   .command('search <query>')
   .alias('find')
-  .description('Rechercher par indices de récupération (recherche inversée)')
-  .option('-d, --directory <dir>', 'Filtrer par lieu mental')
-  .option('-s, --session <id>', 'Filtrer par contexte')
-  .option('-l, --level <max>', 'État max de consolidation (0-4)', '4')
-  .option('-n, --limit <n>', 'Nombre de traces', '10')
-  .option('-t, --type <type>', 'Filtrer par type (episodic/semantic/procedural)')
-  .option('--from <date>', 'Date début YYYY-MM-DD')
-  .option('--to <date>', 'Date fin YYYY-MM-DD')
-  .option('--min-saillance <n>', 'Force mnésique minimum (0-100)')
-  .option('--min-recalls <n>', 'Réactivations minimum')
+  .description('Search by retrieval cues (inverse search)')
+  .option('-d, --directory <dir>', 'Filter by mental place')
+  .option('-s, --session <id>', 'Filter by context')
+  .option('-l, --level <max>', 'Maximum consolidation state (0-4)', '4')
+  .option('-n, --limit <n>', 'Number of traces', '10')
+  .option('-t, --type <type>', 'Filter by type (episodic/semantic/procedural)')
+  .option('--from <date>', 'Start date YYYY-MM-DD')
+  .option('--to <date>', 'End date YYYY-MM-DD')
+  .option('--min-saillance <n>', 'Minimum mnemonic strength (0-100)')
+  .option('--min-recalls <n>', 'Minimum recall count')
   .action(async (query, options) => {
     const s = getStore();
 
@@ -114,34 +114,34 @@ program
     });
 
     if (results.length === 0) {
-      console.log('Aucune trace trouvée.');
+      console.log('No trace found.');
       return;
     }
 
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-    console.log(`\n🧠 ${results.length} trace(s) retrouvée(s):\n`);
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
+    console.log(`\n🧠 ${results.length} trace(s) found:\n`);
     
     for (const result of results) {
       console.log(`🔍 [${states[result.matchLevel]}] Score: ${Math.round(result.score)}`);
       console.log(`   ID: ${result.memory.id}`);
-      console.log(`   Lieu: ${result.memory.directory}`);
-      console.log(`   Contexte: ${result.memory.sessionId}`);
-      console.log(`   Encodage: ${new Date(result.memory.createdAt).toLocaleDateString('fr-FR')}`);
-      console.log(`   Réactivations: ${result.memory.recallCount}`);
+      console.log(`   Place: ${result.memory.directory}`);
+      console.log(`   Context: ${result.memory.sessionId}`);
+      console.log(`   Encoded: ${new Date(result.memory.createdAt).toLocaleDateString()}`);
+      console.log(`   Recalls: ${result.memory.recallCount}`);
       
-      // Afficher le contenu selon le niveau de match
+      // Show the content at the level where the match happened
       let displayContent = result.memory.content;
       if (result.matchLevel === 4 && result.memory.level3Keywords) {
         displayContent = `Trace: ${result.memory.level3Keywords}`;
       } else if (result.matchLevel === 3 && result.memory.level3Keywords) {
-        displayContent = `Mots-clés: ${result.memory.level3Keywords}`;
+        displayContent = `Keywords: ${result.memory.level3Keywords}`;
       } else if (result.matchLevel === 2 && result.memory.level2Essential) {
         displayContent = result.memory.level2Essential;
       } else if (result.matchLevel === 1 && result.memory.level1Summary) {
         displayContent = result.memory.level1Summary;
       }
       
-      console.log(`   Contenu: ${displayContent.slice(0, 200)}${displayContent.length > 200 ? '...' : ''}`);
+      console.log(`   Content: ${displayContent.slice(0, 200)}${displayContent.length > 200 ? '...' : ''}`);
       console.log();
     }
   });
@@ -150,26 +150,26 @@ program
 program
   .command('recall <id>')
   .alias('reactivate')
-  .description('Réactiver une trace (renforcement mnésique)')
+  .description('Recall a trace (mnemonic reinforcement)')
   .action(async (id) => {
     const s = getStore();
     
     const memory = await s.recall(id);
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-    console.log(`✓ Trace réactivée: ${memory.id}`);
-    console.log(`  Réactivations totales: ${memory.recallCount}`);
-    console.log(`  Force mnésique: ${memory.saillance}/100`);
-    console.log(`  État: ${states[memory.currentLevel]}`);
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
+    console.log(`✓ Trace recalled: ${memory.id}`);
+    console.log(`  Total recalls: ${memory.recallCount}`);
+    console.log(`  Mnemonic strength: ${memory.saillance}/100`);
+    console.log(`  State: ${states[memory.currentLevel]}`);
   });
 
 // === LIST ===
 program
   .command('list')
   .alias('traces')
-  .description('Lister les traces mnésiques')
-  .option('-n, --limit <n>', 'Nombre de traces', '20')
-  .option('-l, --level <level>', 'Filtrer par état (0-4)')
-  .option('-t, --type <type>', 'Filtrer par type (episodic/semantic/procedural)')
+  .description('List mnemonic traces')
+  .option('-n, --limit <n>', 'Number of traces', '20')
+  .option('-l, --level <level>', 'Filter by state (0-4)')
+  .option('-t, --type <type>', 'Filter by type (episodic/semantic/procedural)')
   .action(async (options) => {
     const s = getStore();
     
@@ -180,17 +180,17 @@ program
     });
 
     if (memories.length === 0) {
-      console.log('Aucune trace.');
+      console.log('No trace.');
       return;
     }
 
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
     console.log(`\n📋 ${memories.length} trace(s):\n`);
     
     for (const m of memories) {
       console.log(`🧠 ${m.id.slice(0, 8)}... | ${states[m.currentLevel]} | ${m.directory}`);
       console.log(`   ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`);
-      console.log(`   Réactivations: ${m.recallCount} | Force: ${m.saillance}`);
+      console.log(`   Recalls: ${m.recallCount} | Strength: ${m.saillance}`);
       console.log();
     }
   });
@@ -199,22 +199,22 @@ program
 program
   .command('decay')
   .alias('consolidate')
-  .description('Mettre à jour la consolidation de toutes les traces')
+  .description('Update consolidation for every trace')
   .action(async () => {
     const s = getStore();
     
     await s.updateDecay();
-    console.log('✓ Consolidation mise à jour');
+    console.log('✓ Consolidation updated');
     
-    // Afficher un résumé
+    // Print a summary
     const all = await s.list({ limit: 1000 });
     const byLevel = [0, 0, 0, 0, 0];
     for (const m of all) {
       byLevel[m.currentLevel]++;
     }
     
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-    console.log('\nRépartition:');
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
+    console.log('\nDistribution:');
     console.log(`  🟢 ${states[0]}: ${byLevel[0]}`);
     console.log(`  🟡 ${states[1]}: ${byLevel[1]}`);
     console.log(`  🟠 ${states[2]}: ${byLevel[2]}`);
@@ -225,20 +225,20 @@ program
 // === PHOTOGRAPHIC ===
 program
   .command('photo <id>')
-  .description('Basculer le mode photographique (désactive la dégradation)')
-  .option('--off', 'Désactiver le mode photographique')
+  .description('Toggle photographic mode (disables decay)')
+  .option('--off', 'Turn photographic mode off')
   .action(async (id, options) => {
     const s = getStore();
     const memory = await s.setPhotographic(id, !options.off);
-    console.log(`✓ Mode photographique: ${memory.photographic ? '🔒 ACTIF' : '🔓 désactivé'}`);
+    console.log(`✓ Photographic mode: ${memory.photographic ? '🔒 ON' : '🔓 off'}`);
     console.log(`  ID: ${memory.id}`);
   });
 
 // === SIMILAR ===
 program
   .command('similar <id>')
-  .description('Trouver des traces similaires à fusionner')
-  .option('-n, --limit <n>', 'Nombre de résultats', '5')
+  .description('Find similar traces to merge')
+  .option('-n, --limit <n>', 'Number of results', '5')
   .option('-t, --threshold <n>', 'Score minimum (0-100)', '50')
   .action(async (id, options) => {
     const s = getStore();
@@ -248,7 +248,7 @@ program
     });
 
     if (results.length === 0) {
-      console.log('Aucune trace similaire trouvée.');
+      console.log('No similar trace found.');
       return;
     }
 
@@ -275,11 +275,11 @@ program
 
     const result = await s.merge(sourceId, targetId, { autoMergeContent: options.auto });
 
-    console.log(`✓ Fusion effectuée`);
-    console.log(`  Source ${sourceId.slice(0, 8)}... → Niveau 4 (fusionné)`);
-    console.log(`  Target ${targetId.slice(0, 8)}... absorbé`);
+    console.log(`✓ Merge done`);
+    console.log(`  Source ${sourceId.slice(0, 8)}… → level 4 (merged)`);
+    console.log(`  Target ${targetId.slice(0, 8)}… absorbed it`);
     if (result.mergedContent) {
-      console.log(`  Contenu fusionné: ${result.mergedContent.slice(0, 150)}...`);
+      console.log(`  Merged content: ${result.mergedContent.slice(0, 150)}…`);
     }
   });
 
@@ -287,17 +287,17 @@ program
 program
   .command('delete <id>')
   .alias('forget')
-  .description('Oublier une trace mnésique')
+  .description('Forget a mnemonic trace')
   .action(async (id) => {
     const s = getStore();
     await s.delete(id);
-    console.log(`✓ Trace oubliée: ${id}`);
+    console.log(`✓ Trace forgotten: ${id}`);
   });
 
 // === STATUS ===
 program
   .command('status')
-  .description('Afficher l\'état du palais de mémoire')
+  .description('Show the state of the memory palace')
   .action(async () => {
     const s = getStore();
     const all = await s.list({ limit: 1000 });
@@ -310,8 +310,8 @@ program
       byLevel[m.currentLevel]++;
     }
     
-    const states = ['Encodage', 'Consolidation', 'Stable', 'Fragile', 'Sommeil'];
-    console.log('\nPar état de consolidation:');
+    const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
+    console.log('\nBy consolidation state:');
     console.log(`  🟢 ${states[0]}: ${byLevel[0]}`);
     console.log(`  🟡 ${states[1]}: ${byLevel[1]}`);
     console.log(`  🟠 ${states[2]}: ${byLevel[2]}`);
@@ -322,8 +322,8 @@ program
     const avgRecalls = all.reduce((sum, m) => sum + m.recallCount, 0) / (all.length || 1);
     
     console.log(`\nMoyennes:`);
-    console.log(`  Force mnésique: ${Math.round(avgSaillance)}/100`);
-    console.log(`  Réactivations par trace: ${avgRecalls.toFixed(1)}`);
+    console.log(`  Mnemonic strength: ${Math.round(avgSaillance)}/100`);
+    console.log(`  Recalls per trace: ${avgRecalls.toFixed(1)}`);
   });
 
 // === IMPORT SESSION ===
@@ -331,7 +331,7 @@ program
   .command('import-session <file>')
   .description('Importer une session Claude Code et extraire les apprentissages')
   .option('-d, --directory <dir>', 'Lieu mental du projet', process.cwd())
-  .option('-n, --max <n>', 'Max apprentissages à extraire', '5')
+  .option('-n, --max <n>', 'Maximum learnings to extract', '5')
   .action(async (file, options) => {
     const { readFileSync } = await import('fs');
     const { processSession } = await import('../agent/claude-hook.js');
@@ -346,27 +346,27 @@ program
     });
 
     if (result.memoriesStored === 0) {
-      console.log('Aucun apprentissage trouvé dans cette session.');
+      console.log('No learning found in this session.');
       return;
     }
 
-    console.log(`\n✓ ${result.memoriesStored} apprentissage(s) mémorisé(s):\n`);
+    console.log(`\n✓ ${result.memoriesStored} learning(s) stored:\n`);
     for (const l of result.learnings) {
       console.log(`  • ${l}`);
     }
   });
 
-// === INTENT (mémoire prospective) ===
+// === INTENT (prospective memory) ===
 const intent = program
   .command('intent')
-  .description('Boucles ouvertes (mémoire prospective) — armer, lister, fermer');
+  .description('Open loops (prospective memory) — arm, list, close');
 
 intent
   .command('add <content>')
-  .description('Armer une boucle ouverte')
-  .option('-d, --directory <dir>', 'Lieu mental (défaut: cwd)')
-  .option('-c, --cue <cue...>', "Déclencheur — 'time:2026-12-01', 'cron:0 9 * * 1', 'event:file_open:src/a.ts'")
-  .option('-e, --expires <date>', 'Échéance (ISO) au-delà de laquelle la boucle expire')
+  .description('Arm an open loop')
+  .option('-d, --directory <dir>', 'Mental place (defaults to cwd)')
+  .option('-c, --cue <cue...>', "Trigger — 'time:2026-12-01', 'cron:0 9 * * 1', 'event:file_open:src/a.ts'")
+  .option('-e, --expires <date>', 'Deadline (ISO) past which the loop expires')
   .action(async (content: string, options) => {
     const s = getStore();
 
@@ -383,15 +383,15 @@ intent
     if (options.expires) {
       expiresAt = new Date(options.expires);
       if (Number.isNaN(expiresAt.getTime())) {
-        console.error(`✗ échéance invalide: ${options.expires}`);
+        console.error(`x invalid deadline: ${options.expires}`);
         process.exitCode = 1;
         return;
       }
     }
 
-    // Le lieu mental est résolu en absolu : le hook SessionStart cherche par
-    // `process.cwd()`, donc une boucle armée sur './src/auth' ne remonterait
-    // jamais — un échec parfaitement silencieux.
+    // The mental place is resolved to absolute: the SessionStart hook looks up by
+    // `process.cwd()`, so a loop armed on './src/auth' would never surface — a
+    // perfectly silent failure.
     const intention = await s.addIntention(
       {
         content,
@@ -401,22 +401,22 @@ intent
       cues
     );
 
-    console.log(`\n🔁 Boucle armée — ${loopId(intention.id)}`);
+    console.log(`\n🔁 Loop armed — ${loopId(intention.id)}`);
     console.log(`   ${intention.content}`);
-    console.log(`   Lieu: ${intention.directory}`);
-    if (expiresAt) console.log(`   Échéance: ${expiresAt.toISOString()}`);
+    console.log(`   Place: ${intention.directory}`);
+    if (expiresAt) console.log(`   Due: ${expiresAt.toISOString()}`);
     for (const spec of cues) console.log(`   Cue: ${formatTriggerSpec(spec)}`);
-    console.log(`\n   Fermer: mentionner "Closes ${loopId(intention.id)}" dans un commit\n`);
+    console.log(`\n   To close: mention "Closes ${loopId(intention.id)}" in a commit\n`);
   });
 
 intent
   .command('list')
   .alias('ls')
-  .description('Lister les boucles')
+  .description('List loops')
   .option('-s, --status <status>', 'armed | fired | closed | expired', 'armed')
-  .option('-d, --directory <dir>', 'Filtrer par lieu mental')
-  .option('-n, --limit <n>', 'Nombre max', '20')
-  .option('-a, --all', 'Tous les statuts')
+  .option('-d, --directory <dir>', 'Filter by mental place')
+  .option('-n, --limit <n>', 'Maximum count', '20')
+  .option('-a, --all', 'Every status')
   .action(async (options) => {
     const s = getStore();
 
@@ -427,7 +427,7 @@ intent
     });
 
     if (intentions.length === 0) {
-      console.log('Aucune boucle.');
+      console.log('No loop.');
       return;
     }
 
@@ -438,7 +438,7 @@ intent
       expired: '💤',
     };
 
-    console.log(`\n${intentions.length} boucle(s):\n`);
+    console.log(`\n${intentions.length} loop(s):\n`);
     for (const i of intentions) {
       const cues = await s.listCues({ intentionId: i.id });
       console.log(`${icons[i.status]} ${loopId(i.id)} | ${i.status} | ${i.directory}`);
@@ -446,21 +446,21 @@ intent
       if (cues.length) {
         console.log(`   Cues: ${cues.map((c) => `${formatTriggerSpec(c.triggerSpec)} (${c.status})`).join(', ')}`);
       }
-      if (i.expiresAt) console.log(`   Échéance: ${i.expiresAt.toISOString()}`);
-      if (i.closedByCommit) console.log(`   Fermée par: ${i.closedByCommit}`);
+      if (i.expiresAt) console.log(`   Due: ${i.expiresAt.toISOString()}`);
+      if (i.closedByCommit) console.log(`   Closed by: ${i.closedByCommit}`);
       console.log();
     }
   });
 
-/** Résout un identifiant court (`loop-a1b2c3d4`, `a1b2c3d4`) vers une intention. */
+/** Resolves a short id (`loop-a1b2c3d4`, `a1b2c3d4`) to an intention. */
 async function resolveIntentionArg(s: SQLiteStore, arg: string) {
   const short = arg.replace(/^loop-/i, '');
   const all = await s.listIntentions({ limit: 500 });
   const found = matchIntentionByShortId(all, short);
 
   if (!found) {
-    // Préfixe ambigu ou inconnu : on ne devine pas, fermer la mauvaise boucle est pire.
-    console.error(`✗ aucune boucle unique pour "${arg}"`);
+    // Ambiguous or unknown prefix: no guessing, closing the wrong loop is worse.
+    console.error(`x no single loop matches "${arg}"`);
     process.exitCode = 1;
   }
   return found;
@@ -468,8 +468,8 @@ async function resolveIntentionArg(s: SQLiteStore, arg: string) {
 
 intent
   .command('close <id>')
-  .description('Fermer une boucle (accepte loop-abc12345 ou le préfixe seul)')
-  .option('--commit <sha>', 'SHA du commit qui a fermé la boucle')
+  .description('Close a loop (accepts loop-abc12345 or the bare prefix)')
+  .option('--commit <sha>', 'SHA of the commit that closed the loop')
   .action(async (id: string, options) => {
     const s = getStore();
     const found = await resolveIntentionArg(s, id);
@@ -480,24 +480,24 @@ intent
       await s.updateCueStatus(cue.id, 'cancelled');
     }
 
-    console.log(`\n✅ ${loopId(closed.id)} fermée — ${closed.content}\n`);
+    console.log(`\n✅ ${loopId(closed.id)} closed — ${closed.content}\n`);
   });
 
 intent
   .command('fire <id>')
-  .description('Forcer le réveil d\'une boucle (debug)')
+  .description('Force a loop to wake (debug)')
   .action(async (id: string) => {
     const s = getStore();
     const found = await resolveIntentionArg(s, id);
     if (!found) return;
 
     const fired = await s.updateIntentionStatus(found.id, 'fired');
-    console.log(`\n⏰ ${loopId(fired.id)} réveillée — ${fired.content}\n`);
+    console.log(`\n⏰ ${loopId(fired.id)} woken — ${fired.content}\n`);
   });
 
 intent
   .command('resolve')
-  .description('Passer le balai : expirer les périmées, tirer les échéances atteintes')
+  .description('Sweep: expire overdue loops, fire deadlines that have come due')
   .action(async () => {
     const s = getStore();
     const resolver = new SqliteCueResolver(s);
@@ -508,12 +508,12 @@ intent
       fired.push(await resolver.fire(cue.id));
     }
 
-    console.log(`\n💤 ${expired} expirée(s) | ⏰ ${fired.length} réveillée(s)`);
+    console.log(`\n💤 ${expired} expired | ⏰ ${fired.length} woken`);
     for (const i of fired) console.log(`   ${loopId(i.id)} — ${i.content}`);
     console.log();
   });
 
-// Parse et exécution
+// Parse and run
 program.parse();
 
 // Cleanup

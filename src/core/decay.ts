@@ -1,31 +1,31 @@
 import type { Memory, DecayLevel } from './types.js';
 
 /**
- * Configuration de la dégradation
+ * Decay configuration.
  */
 export const DECAY_CONFIG = {
-  // Temps de base pour chaque niveau (en heures)
+  // Base time for each level, in hours
   levelThresholds: [0, 24, 168, 720, 2160], // 0h, 1j, 1sem, 1mois, 3mois
   
-  // Facteur de ralentissement par rappel
-  recallBonus: 0.3,        // Chaque rappel ajoute 30% de temps
+  // How much each recall slows decay
+  recallBonus: 0.3,        // every recall adds 30% more time
   
-  // Seuil de saillance pour ralentir la dégradation
-  saillanceThreshold: 70,  // Au-dessus de 70, dégradation ralentie
+  // Salience threshold above which decay slows down
+  saillanceThreshold: 70,
   
-  // Cycle de dégradation (vérification toutes les X heures)
+  // Decay cycle: how often the sweep runs, in hours
   decayCycleHours: 24,
 };
 
 /**
- * Calcule le niveau de dégradation actuel d'un souvenir
+ * Current decay level of a trace.
  */
 export function calculateDecayLevel(memory: Memory, now: Date = new Date()): DecayLevel {
   if (memory.photographic) {
     return 0; // Photographic mode — no decay
   }
   if (memory.currentLevel === 4 || memory.mergedIntoId) {
-    return 4; // Déjà perdu/fusionné
+    return 4; // already lost or merged
   }
   
   const hoursSinceCreation = (now.getTime() - memory.createdAt.getTime()) / (1000 * 60 * 60);
@@ -33,7 +33,7 @@ export function calculateDecayLevel(memory: Memory, now: Date = new Date()): Dec
     ? (now.getTime() - memory.lastRecalled.getTime()) / (1000 * 60 * 60)
     : Infinity;
   
-  // Utiliser le plus récent des deux
+  // Use whichever of the two is more recent
   const effectiveAge = Math.min(hoursSinceCreation, hoursSinceRecall);
   
   // Appliquer le bonus de rappel
@@ -44,7 +44,7 @@ export function calculateDecayLevel(memory: Memory, now: Date = new Date()): Dec
   const saillanceMultiplier = memory.saillance >= DECAY_CONFIG.saillanceThreshold ? 1.5 : 1;
   const finalAge = adjustedAge / saillanceMultiplier;
   
-  // Déterminer le niveau
+  // Determine the level
   for (let i = 3; i >= 0; i--) {
     if (finalAge >= DECAY_CONFIG.levelThresholds[i]) {
       return i as DecayLevel;
@@ -55,13 +55,13 @@ export function calculateDecayLevel(memory: Memory, now: Date = new Date()): Dec
 }
 
 /**
- * Calcule le score de saillance d'un souvenir
- * Basé sur : rappels récents, connexions, charge émotionnelle
+ * Salience score of a trace.
+ * Based on recent recalls, connections and emotional charge.
  */
 export function calculateSaillance(memory: Memory, now: Date = new Date()): number {
-  let score = 50; // Base
+  let score = 50; // baseline
   
-  // Bonus pour rappels récents (dans les 7 jours)
+  // Bonus for recent recalls (within 7 days)
   if (memory.lastRecalled) {
     const daysSinceRecall = (now.getTime() - memory.lastRecalled.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceRecall < 7) {
@@ -71,14 +71,19 @@ export function calculateSaillance(memory: Memory, now: Date = new Date()): numb
     }
   }
   
-  // Bonus pour nombre de rappels
+  // Bonus for how often it was recalled
   score += Math.min(memory.recallCount * 5, 20);
   
-  // Bonus pour mots-clés (plus de tags = plus connecté)
+  // Bonus for keywords: more tags means better connected
   score += Math.min(memory.keywords.length * 3, 15);
   
-  // Détection de charge émotionnelle (mots simples)
-  const emotionalWords = ['important', 'urgent', 'critical', 'attention', 'wow', 'super', 'génial', 'merde', 'problème', 'erreur'];
+  // Crude emotional-charge detection. The list stays bilingual on purpose: traces
+  // are written in whatever language the developer works in, and dropping the
+  // French markers would silently weaken salience on French content.
+  const emotionalWords = [
+    'important', 'urgent', 'critical', 'attention', 'wow', 'awesome', 'damn', 'problem', 'error', 'broken',
+    'génial', 'merde', 'problème', 'erreur', 'super',
+  ];
   const contentLower = memory.content.toLowerCase();
   const hasEmotion = emotionalWords.some(word => contentLower.includes(word));
   if (hasEmotion) {
@@ -89,21 +94,21 @@ export function calculateSaillance(memory: Memory, now: Date = new Date()): numb
 }
 
 /**
- * Détermine le taux de dégradation initial
- * 0.0 = très lent, 1.0 = très rapide
+ * Initial decay rate.
+ * 0.0 = very slow, 1.0 = very fast.
  */
 export function calculateDecayRate(content: string, keywords: string[]): number {
   // Base rate
   let rate = 0.5;
   
-  // Contenu long = dégradation plus lente (plus de détails à préserver)
+  // Long content decays more slowly: there is more detail worth keeping
   if (content.length > 500) {
     rate -= 0.1;
   } else if (content.length < 100) {
     rate += 0.1;
   }
   
-  // Beaucoup de mots-clés = plus connecté = dégradation plus lente
+  // Many keywords means better connected, so slower decay
   if (keywords.length > 5) {
     rate -= 0.1;
   }
@@ -119,12 +124,12 @@ export interface DecayCurvePoint {
 }
 
 /**
- * Projette la courbe d'oubli d'une trace sur `daysAhead` jours, un point toutes
- * les 6 heures.
+ * Projects a trace's forgetting curve over `daysAhead` days, one point every six
+ * hours.
  *
- * Vit ici, avec les règles qu'elle échantillonne, plutôt que dans le code de la
- * visualisation : une courbe tracée à partir d'une copie divergente de
- * l'algorithme raconterait une histoire que le système ne vit pas.
+ * It lives here, next to the rules it samples, rather than in the visualisation
+ * code: a curve drawn from a diverging copy of the algorithm would tell a story
+ * the system does not actually live.
  */
 export function projectDecayCurve(memory: Memory, daysAhead = 90): DecayCurvePoint[] {
   const points: DecayCurvePoint[] = [];
@@ -146,16 +151,16 @@ export function projectDecayCurve(memory: Memory, daysAhead = 90): DecayCurvePoi
 }
 
 /**
- * Met à jour tous les souvenirs d'une collection
+ * Updates every trace in a collection.
  */
 export function updateAllDecay(memories: Memory[], now: Date = new Date()): Memory[] {
   return memories.map(memory => {
     const newLevel = calculateDecayLevel(memory, now);
     const newSaillance = calculateSaillance(memory, now);
     
-    // Marquer comme fusionné/perdu si niveau 4
+    // Mark as lost/merged once level 4 is reached
     if (newLevel === 4 && memory.currentLevel !== 4) {
-      // TODO: Logique de fusion à implémenter
+      // TODO: merging logic still to implement
       console.log(`Memory ${memory.id} marked as decayed (level 4)`);
     }
     

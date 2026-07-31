@@ -2,31 +2,31 @@
  * API HTTP pour humemory
  * 
  * Endpoints:
- * POST   /memories          - Ajouter un souvenir
- * GET    /memories          - Lister les souvenirs
- * GET    /memories/:id      - Récupérer un souvenir
- * POST   /memories/:id/recall - Rappeler un souvenir
- * DELETE /memories/:id      - Supprimer un souvenir
- * GET    /search            - Rechercher
- * POST   /decay             - Mettre à jour la dégradation
- * GET    /status            - État de la mémoire
+ * POST   /memories          - Add a memory
+ * GET    /memories          - List memories
+ * GET    /memories/:id      - Fetch one memory
+ * POST   /memories/:id/recall - Recall a memory
+ * DELETE /memories/:id      - Delete a memory
+ * GET    /search            - Search
+ * POST   /decay             - Run the decay sweep
+ * GET    /status            - Memory state
  *
  * Fronts :
- * GET    /                  - App React (503 explicite si le bundle manque)
- * GET    /app               - Même app, URL historique
- * GET    /session           - Composition de contexte mnésique (page autonome)
+ * GET    /                  - React app (explicit 503 when the bundle is missing)
+ * GET    /app               - Same app, historical URL
+ * GET    /session           - Mnemonic context composer (standalone page)
  *
- * Mémoire prospective (src/api/intentions-routes.ts):
- * POST   /intentions        - Armer une boucle (+ ses cues)
- * GET    /intentions        - Lister (filtres status, directory)
- * GET    /intentions/:id    - Détail + cues
- * POST   /intentions/:id/close - Fermer (annule les cues restants)
+ * Prospective memory (src/api/intentions-routes.ts):
+ * POST   /intentions        - Arm a loop (and its cues)
+ * GET    /intentions        - List (status, directory filters)
+ * GET    /intentions/:id    - Detail plus cues
+ * POST   /intentions/:id/close - Close (cancels remaining cues)
  * POST   /intentions/:id/fire  - Force-fire (debug/dashboard)
- * DELETE /intentions/:id    - Supprimer (cues en cascade)
- * POST   /cues              - Attacher un cue
- * GET    /cues              - Lister (filtres intentionId, status, kind)
- * POST   /events            - Pousser un event → réveille les boucles qui matchent
- * POST   /cues/resolve      - Ménage : expire les périmées, tire les échéances
+ * DELETE /intentions/:id    - Delete (cues cascade)
+ * POST   /cues              - Attach a cue
+ * GET    /cues              - List (intentionId, status, kind filters)
+ * POST   /events            - Push an event, waking the loops that match
+ * POST   /cues/resolve      - Sweep: expire overdue loops, fire due deadlines
  */
 
 import { Hono } from 'hono';
@@ -54,8 +54,8 @@ function safeJoin(baseDir: string, ...segments: string[]): string | null {
   return full;
 }
 
-// HUMEMORY_DB : même convention que la CLI et les hooks. Sans ça, impossible de
-// lancer l'API sur une base de démo sans écrire dans celle de production.
+// HUMEMORY_DB: same convention as the CLI and the hooks. Without it, the API
+// cannot be pointed at a demo database without writing to production.
 const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
 const store = new SQLiteStore(DB_PATH);
 const PUBLIC_DIR = join(__dirname, '../../public');
@@ -79,11 +79,11 @@ app.use('*', cors({
 const APP_DIR = join(PUBLIC_DIR, 'app');
 
 /**
- * Page de l'app React, servie à `/` comme à `/app`.
+ * The React app page, served at `/` as well as `/app`.
  *
- * bun émet des références relatives (`./index-abc.js`). Servies ailleurs qu'à
- * `/app/`, le navigateur les résout contre la racine et ne trouve rien — il faut
- * donc les absolutiser vers `/app/`.
+ * bun emits relative references (`./index-abc.js`). Served anywhere other than
+ * `/app/`, the browser resolves them against the root and finds nothing — so they
+ * are absolutised to `/app/`.
  */
 function reactAppHtml(): string {
   const html = readFileSync(join(APP_DIR, 'index.html'), 'utf-8');
@@ -94,7 +94,7 @@ app.get('/', (c) => {
   try {
     return c.html(reactAppHtml());
   } catch {
-    // Bundle absent : dire quoi faire plutôt qu'une page morte.
+    // Missing bundle: say what to run rather than serve a dead page.
     return c.text('Front non construit. Lance `pnpm build:web`.', 503);
   }
 });
@@ -104,8 +104,7 @@ app.get('/session', (c) => {
   return c.html(html);
 });
 
-// Front React (web/ → public/app/ via `pnpm build:web`), servi à / et /app.
-// L'ancien dashboard reste joignable sur /legacy.
+// React front end (web/ → public/app/ through `pnpm build:web`), served at / and /app.
 const APP_MIME: Record<string, string> = {
   js: 'application/javascript',
   css: 'text/css',
@@ -120,7 +119,7 @@ app.get('/app', (c) => {
   try {
     return c.html(reactAppHtml());
   } catch {
-    // Bundle absent : dire quoi faire plutôt qu'un 404 muet.
+    // Missing bundle: say what to run rather than a silent 404.
     return c.text('Front non construit. Lance `pnpm build:web`.', 503);
   }
 });
@@ -139,13 +138,13 @@ app.get('/app/*', (c) => {
   }
 });
 
-// === MÉMOIRE RÉTROSPECTIVE ===
-// Sous-routeur testable (src/api/memory-routes.ts), monté ici.
+// === RETROSPECTIVE MEMORY ===
+// Testable sub-router (src/api/memory-routes.ts), mounted here.
 app.route('/', createMemoryRoutes(store));
 
-// === MÉMOIRE PROSPECTIVE (Phase 5.4) ===
-// Sous-routeur isolé : il reçoit le store en paramètre, donc il est testable
-// sans ouvrir la DB de production (voir tests/api-intentions.test.ts).
+// === PROSPECTIVE MEMORY (Phase 5.4) ===
+// Isolated sub-router: it takes the store as a parameter, so it is testable
+// without opening the production database (see tests/api-intentions.test.ts).
 app.route('/', createIntentionRoutes(store));
 
 // === HEALTH ===
@@ -155,8 +154,8 @@ app.get('/health', (c) => {
 
 export { app };
 
-// Démarrage seulement en exécution directe : importer ce module (test, outil)
-// ne doit pas lever un serveur ni saisir le port.
+// Only starts when run directly: importing this module (a test, a tool) must not
+// raise a server or seize the port.
 if (import.meta.main) {
   const port = parseInt(process.env.PORT || '3456');
 

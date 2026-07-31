@@ -1,13 +1,13 @@
 /**
- * Rivière du temps — les traces descendent les couloirs de dégradation.
+ * River of time — traces drift down the decay lanes.
  *
- * Portage de `public/js/river.js`. Le tracé d3 est repris tel quel ; ce qui
- * change est structurel :
- * - les niveaux viennent de `calculateDecayLevel`/`calculateSaillance`
- *   (src/core/decay.ts) et non d'une copie front de l'algorithme ;
- * - la lecture animée et la tooltip attachée au `body` sont désormais démontées.
- *   L'original laissait tourner son `setInterval` et abandonnait sa tooltip dans
- *   le document après un changement d'onglet.
+ * Ported from `public/js/river.js`. The d3 drawing is taken as is; what changes
+ * is structural:
+ * - levels come from `calculateDecayLevel`/`calculateSaillance`
+ *   (src/core/decay.ts) rather than a front-end copy of the algorithm;
+ * - the animated playback and the tooltip attached to `body` are now torn down.
+ *   The original left its `setInterval` running and abandoned its tooltip in the
+ *   document after a tab change.
  */
 
 import * as d3 from 'd3';
@@ -85,7 +85,7 @@ export function createMount(ctx: VizContext = {}) {
 
     const memoriesGroup = chart.append('g');
 
-    // Tooltip : créée ici et retirée au démontage, contrairement à l'original.
+    // Tooltip: created here and removed on teardown, unlike the original.
     const tooltip = document.createElement('div');
     tooltip.className = 'river-tooltip';
     tooltip.style.display = 'none';
@@ -102,10 +102,10 @@ export function createMount(ctx: VizContext = {}) {
         <div style="margin-bottom:.5rem;font-weight:600;">${LEVEL_LABELS[level]}</div>
         <div style="margin-bottom:.5rem;">${d.content.slice(0, 100)}${d.content.length > 100 ? '…' : ''}</div>
         <div style="color:var(--muted);font-size:.8rem;">
-          <div>Force: ${saillance}/100</div>
-          <div>Rappels: ${d.recallCount}</div>
-          <div>Encodé: ${new Date(d.createdAt).toLocaleDateString('fr-FR')}</div>
-          ${d.photographic ? '<div style="color:#8b5cf6;">🔒 Photographique</div>' : ''}
+          <div>Strength: ${saillance}/100</div>
+          <div>Recalls: ${d.recallCount}</div>
+          <div>Encoded: ${new Date(d.createdAt).toLocaleDateString()}</div>
+          ${d.photographic ? '<div style="color:#8b5cf6;">🔒 Photographic</div>' : ''}
         </div>`;
       tooltip.style.display = 'block';
       tooltip.style.left = `${event.pageX + 10}px`;
@@ -142,8 +142,8 @@ export function createMount(ctx: VizContext = {}) {
         .attr('dy', '0.35em');
 
       enter.merge(pills).each(function (d) {
-        // Le temps simulé avance depuis la création de chaque trace : c'est ce
-        // décalage qui fait « descendre » les traces d'un couloir à l'autre.
+        // Simulated time advances from each trace's creation: that offset is what
+        // makes traces drift from one lane to the next.
         const simulatedNow = new Date(new Date(d.createdAt).getTime() + offset);
         const level = calculateDecayLevel(d, simulatedNow);
         const saillance = calculateSaillance(d, simulatedNow);
@@ -170,13 +170,13 @@ export function createMount(ctx: VizContext = {}) {
 
     update(0);
 
-    // ── Contrôles de lecture ────────────────────────────────────────────────
+    // ── Playback controls ───────────────────────────────────────────────────
     const controls = document.createElement('div');
     controls.className = 'river-controls';
     controls.innerHTML = `
       <button type="button" data-role="play">▶ Play</button>
       <input type="range" data-role="slider" min="0" max="${HORIZON_MS}" value="0" step="${3600_000}">
-      <span data-role="label">Aujourd'hui</span>
+      <span data-role="label">Today</span>
       <button type="button" data-role="reset">↺ Reset</button>`;
     container.appendChild(controls);
 
@@ -191,7 +191,7 @@ export function createMount(ctx: VizContext = {}) {
       timeOffset = value;
       slider.value = String(value);
       const days = Math.floor(value / DAY_MS);
-      label.textContent = days === 0 ? "Aujourd'hui" : `J+${days} jours`;
+      label.textContent = days === 0 ? 'Today' : `D+${days} days`;
       update(value);
     };
 
