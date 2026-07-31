@@ -1,34 +1,24 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { SQLiteStore } from '../src/store/sqlite.js';
+import type { SQLiteStore } from '../src/store/sqlite.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, projectDecayCurve } from '../src/core/decay.js';
 import type { Memory, DecayLevel } from '../src/core/types.js';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { rmSync } from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// DB de test temporaire
-const TEST_DB = join(__dirname, 'test-humemory.db');
+import { freshStore } from './helpers/store.js';
+import { fakeClock } from './helpers/clock.js';
+import type { FakeClock } from '../src/core/clock.js';
 
 describe('humemory', () => {
   let store: SQLiteStore;
+  let clock: FakeClock;
 
+  // DB `:memory:` et horloge figée : plus de fichier temporaire à nettoyer,
+  // plus de dépendance à l'heure système (docs/TESTING.md, piliers 1 et 2).
   beforeEach(() => {
-    // Nettoyer la DB de test
-    try {
-      rmSync(TEST_DB);
-    } catch {}
-    
-    store = new SQLiteStore(TEST_DB);
+    clock = fakeClock();
+    store = freshStore({ clock });
   });
 
   afterEach(() => {
     store.close();
-    try {
-      rmSync(TEST_DB);
-    } catch {}
   });
 
   describe('add & get', () => {

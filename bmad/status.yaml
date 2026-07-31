@@ -405,10 +405,16 @@ sprints:
         notes: "Suppression du vanilla non faite : c'est une suppression, elle reste à la main de l'utilisateur."
       - id: S7-02
         title: "Dette : BUG-05 (suites héritées vers fixtures), BUG-06 (vitest orphelin), BUG-08 (createApp testable)"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 257 pass / 0 fail / 1002 expect (16 fichiers). Build et typecheck:web clean."
+        test_result: pass
+        delivered:
+          - "BUG-08 : src/api/memory-routes.ts extrait ; server.ts 469 → 217 lignes ; tests/api-memories.test.ts 19 tests"
+          - "BUG-05 : humemory.test.ts sur freshStore() + horloge figée, agent.test.ts sur ':memory:' — plus aucun .db écrit par les tests"
+          - "BUG-06 : vitest.config.ts supprimé"
+          - "docs/TESTING.md : la dette annoncée est soldée"
+        notes: "Les routes du Sprint 1 sont couvertes pour la première fois. Trois comportements relevés au passage et laissés tels quels, car voulus : un memoryType inconnu retombe sur semantic, une session inconnue renvoie une liste vide, une base vide ne divise pas par zéro."
 
 backlog:
   - id: B-VIZ-01
@@ -443,21 +449,22 @@ qa:
       title: "Suites héritées seedent des littéraux ad hoc au lieu de tests/fixtures/"
       severity: minor
       impact: "Viole docs/TESTING.md + CLAUDE.md ('Seed memories from tests/fixtures/, not ad hoc literals')."
-      status: partial
+      status: fixed
       target_story: S5-00b
-      fix: "S5-00b a créé tests/fixtures/ + tests/helpers/ et les utilise dans test-env.test.ts. Sévérité abaissée major → minor : la fondation existe et n'est plus bloquante pour Phase 5."
-      remaining: "Migrer les 3 suites héritées (humemory.test.ts, agent.test.ts, llm-generator.test.ts) vers freshStore()/seedMemories() — elles passent mais restent sur DB fichier + littéraux inline."
+      fix: "S5-00b a créé tests/fixtures/ + tests/helpers/ et les utilise dans test-env.test.ts. Soldé en S7-02 : humemory.test.ts passe sur freshStore() + horloge figée, agent.test.ts sur ':memory:'. llm-generator.test.ts n'a jamais touché de DB. Plus aucun fichier .db écrit par les tests."
+      notes: "Les littéraux inline subsistent là où le test porte sur ce contenu précis — c'est légitime. Les fixtures servent aux corpus partagés et aux scénarios décrits comme données."
     - id: BUG-08
       title: "server.ts crée son store au chargement du module — routes historiques (S1-04) non testables"
       severity: minor
       impact: "Les routes /memories, /search, /status, /sessions n'ont aucun test. Importer server.ts sous NODE_ENV=test lèverait via le garde prod-DB."
-      status: open
-      fix_suggested: "Extraire createApp(store) comme pour intentions-routes.ts ; réindentation de ~390 lignes, à faire hors story."
+      status: fixed
+      fix: "S7-02 : routes extraites dans src/api/memory-routes.ts (createMemoryRoutes(store)), montées par server.ts qui tombe de 469 à 217 lignes. tests/api-memories.test.ts couvre /memories, /search, similar, merge, /status, /sessions et /decay — 19 tests, première couverture de ces routes depuis le Sprint 1."
     - id: BUG-06
       title: "vitest.config.ts orphelin — toute la suite tourne sous bun test"
       severity: minor
       impact: "Runner ambigu ; un contributeur peut lancer vitest et croire la suite vide."
-      status: open
+      status: fixed
+      fix: "Fichier supprimé (S7-02). Référencé nulle part, et sa config était fausse depuis l'arrivée du front : environment 'node' et include limité aux .test.ts, donc aveugle aux .test.tsx."
     - id: BUG-07
       title: "Artefact de test orphelin tests/test-advisory-lock.db (32 Ko) laissé sur disque"
       severity: minor

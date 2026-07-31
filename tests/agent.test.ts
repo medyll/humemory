@@ -3,7 +3,6 @@ import { parseClaudeHookPayload } from '../src/agent/session-parser.js';
 import { extractLearnings } from '../src/agent/learning-extractor.js';
 import { processSession } from '../src/agent/claude-hook.js';
 import type { LLMClient } from '../src/core/llm-generator.js';
-import { rmSync } from 'fs';
 
 const SAMPLE_PAYLOAD = JSON.stringify({
   session_id: 'test-session-001',
@@ -103,10 +102,11 @@ describe('learning-extractor', () => {
 });
 
 describe('processSession (integration)', () => {
-  const DB = 'tests/test-hook.db';
+  // `:memory:` plutôt qu'un fichier temporaire : rien à nettoyer, rien à laisser
+  // traîner si un test échoue (docs/TESTING.md, pilier 1).
+  const DB = ':memory:';
 
   test('stocke les apprentissages extraits en DB', async () => {
-    try { rmSync(DB); } catch {}
     const client = makeMockClient(MOCK_LEARNINGS);
 
     const result = await processSession(SAMPLE_PAYLOAD, {
@@ -119,12 +119,9 @@ describe('processSession (integration)', () => {
     expect(result.memoriesStored).toBe(2);
     expect(result.sessionId).toBe('test-session-001');
     expect(result.learnings).toHaveLength(2);
-
-    try { rmSync(DB); } catch {}
   });
 
   test('retourne 0 si transcript vide', async () => {
-    try { rmSync(DB); } catch {}
     const emptyPayload = JSON.stringify({ session_id: 'empty', transcript: [] });
     const client = makeMockClient('[]');
 
@@ -136,6 +133,5 @@ describe('processSession (integration)', () => {
     });
 
     expect(result.memoriesStored).toBe(0);
-    try { rmSync(DB); } catch {}
   });
 });

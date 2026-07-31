@@ -1,12 +1,12 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [█████████▊] 97%
+> Phase: **development** | Progress: [██████████] 100%
 > Last updated: 2026-07-31 | Active role: scrum
-> Stories: 30/31 complete · Tests: 238 pass / 0 fail / 964 expect (15 fichiers, bun 1.3.14)
+> Stories: 31/31 complete · Tests: 257 pass / 0 fail / 1002 expect (16 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Sprint 7 — S7-02 : solder BUG-05/06/08, puis phase release
+- **Next action:** Phase release — CHANGELOG, métadonnées de paquet, version
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -55,16 +55,15 @@
       ✅ S6-02: Onglet prospectif — tension partagée avec le back, cues, armement, fermeture
       ⬚ S6-03: Portage des vues existantes ; three.js et canvas wrappés, jamais réécrits
 
-  🔨 Sprint 7: Bascule du front + dette avant release (1/2 stories)
+  ✅ Sprint 7: Bascule du front + dette avant release (2/2 stories)
       ✅ S7-01: App React servie à / ; vanilla conservé sur /legacy ; assets absolutisés
-      ⬚ S7-02: Solder BUG-05 (fixtures), BUG-06 (vitest orphelin), BUG-08 (createApp testable)
+      ✅ S7-02: Dette soldée — memory-routes extraites (+19 tests), suites hermétiques, vitest supprimé
 
 ## Bugs ouverts
 
-  - **BUG-05** [minor, partiel] fondation fixtures/helpers livrée en S5-00b ; reste à migrer les 3 suites héritées
-  - **BUG-08** [minor] server.ts crée son store au chargement — routes historiques (S1-04) non testables
-  - **BUG-06** [minor] vitest.config.ts orphelin — toute la suite tourne sous bun test
-  - **BUG-04** [minor] tsc global peut shadow le tsc local — toujours passer par pnpm build
+  - **BUG-04** [minor] tsc global peut shadow le tsc local — toujours passer par pnpm build (contrainte d'environnement, pas corrigeable dans le code)
+
+  _Soldés : BUG-03 (advisory lock), BUG-05 (suites hermétiques), BUG-06 (vitest), BUG-07 (artefact), BUG-08 (routes testables)._
 
 ## Backlog
 
@@ -82,7 +81,7 @@
 ## Product
 
   - Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard
-  - Sprints 1 à 6 livrés. Suite : 238 pass / 0 fail / 963 expect sur 15 fichiers (bun 1.3.14, vérifié 2026-07-31)
+  - Sprints 1 à 7 livrés. Suite : 257 pass / 0 fail / 1002 expect sur 16 fichiers (bun 1.3.14, vérifié 2026-07-31)
   - 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos
   - PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit
   - Sprint 5 TERMINÉ (7/7) — Phase 5 complète : mémoire prospective de bout en bout

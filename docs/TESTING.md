@@ -181,7 +181,11 @@ the schema it exercises.
 Checklist green as of 2026-07-30 — prospective/Zeigarnik logic can now be built on
 top and trusted.
 
-**Still open:** the three legacy suites (`humemory.test.ts`, `agent.test.ts`,
-`llm-generator.test.ts`) predate these helpers and still seed ad hoc literals against
-temp-file DBs. They pass, but they are not yet hermetic in the sense above.
-Migrating them is tracked as BUG-05 and should happen before the suite grows further.
+All suites are now hermetic in this sense (BUG-05 closed): `humemory.test.ts` runs
+on `freshStore()` with a frozen clock, `agent.test.ts` drives `processSession`
+against `':memory:'`, and `llm-generator.test.ts` never touched a database. No
+test writes a file, so nothing is left behind when one fails.
+
+Inline literals are still fine where the test *is about* that specific content —
+a photographic-mode test needs its own trace. Fixtures are for shared corpora and
+for scenarios described as data.
