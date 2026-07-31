@@ -7,6 +7,7 @@ import { parseCueArg, formatTriggerSpec } from '../core/cue-arg.js';
 import type { IntentionStatus, TriggerSpec } from '../core/types.js';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,10 +26,15 @@ function getStore(): SQLiteStore {
 
 const program = new Command();
 
+// Version lue du paquet : codée en dur, elle dérivait à chaque release.
+const { version } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as {
+  version: string;
+};
+
 program
   .name('humemory')
   .description('Palais de mémoire — Système de traces mnésiques avec dégradation progressive')
-  .version('0.1.0');
+  .version(version);
 
 // === ADD ===
 program

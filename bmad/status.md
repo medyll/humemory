@@ -1,21 +1,21 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [██████████] 100%
+> Phase: **release** | Progress: [██████████] 100%
 > Last updated: 2026-07-31 | Active role: scrum
-> Stories: 31/31 complete · Tests: 257 pass / 0 fail / 1002 expect (16 fichiers, bun 1.3.14)
+> Stories: 32/32 complete · Tests: 257 pass / 0 fail / 1003 expect (16 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Phase release — CHANGELOG, métadonnées de paquet, version
+- **Next action:** Décisions utilisateur : publier 0.2.0 sur npm ? choisir une licence ? supprimer le dashboard vanilla ?
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
 ## Phases
 
   ✅ planning
-  🔨 development
-  🔨 testing
-  ⬚ release
+  ✅ development
+  ✅ testing
+  🔨 release
 
 ## Sprints
 
@@ -55,9 +55,10 @@
       ✅ S6-02: Onglet prospectif — tension partagée avec le back, cues, armement, fermeture
       ⬚ S6-03: Portage des vues existantes ; three.js et canvas wrappés, jamais réécrits
 
-  ✅ Sprint 7: Bascule du front + dette avant release (2/2 stories)
+  ✅ Sprint 7: Bascule du front, dette soldée, release 0.2.0 préparée (3/3 stories)
       ✅ S7-01: App React servie à / ; vanilla conservé sur /legacy ; assets absolutisés
       ✅ S7-02: Dette soldée — memory-routes extraites (+19 tests), suites hermétiques, vitest supprimé
+      ✅ S7-03: Release 0.2.0 — métadonnées, CHANGELOG, entrée CLI réparée (était cassée sous node)
 
 ## Bugs ouverts
 

@@ -1,12 +1,51 @@
 {
   "name": "humemory",
-  "version": "0.1.0",
-  "description": "Human-like memory system with progressive degradation and inverse search",
+  "version": "0.2.0",
+  "description": "Memory for AI agents that forgets like a human — decaying traces, inverse search, and prospective loops that resurface on a cue",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "humemory": "./bin/humemory.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "public",
+    ".githooks",
+    "scripts/hook-session.ts",
+    "scripts/hook-session-start.ts",
+    "scripts/hook-post-commit.ts",
+    "scripts/consolidate.js",
+    "README.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "docs"
+  ],
+  "keywords": [
+    "memory",
+    "ai-agent",
+    "llm",
+    "claude",
+    "forgetting-curve",
+    "prospective-memory",
+    "zeigarnik",
+    "sqlite",
+    "bun",
+    "decay",
+    "mcp"
+  ],
+  "author": "medyll",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medyll/humemory.git"
+  },
+  "homepage": "https://github.com/medyll/humemory#readme",
+  "bugs": {
+    "url": "https://github.com/medyll/humemory/issues"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
   },
   "scripts": {
     "dev": "bun run --watch src/cli/index.ts",

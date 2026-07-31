@@ -1,9 +1,9 @@
 project: "humemory"
-phase: development
-progress: 97
+phase: release
+progress: 100
 last_updated: "2026-07-31"
 
-next_action: "Sprint 7 — S7-02 : solder BUG-05/06/08, puis phase release. Suppression du vanilla au choix de l utilisateur."
+next_action: "Release 0.2.0 prête (paquet vérifié, non publiée). Publication npm et suppression du dashboard vanilla : décisions utilisateur."
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -14,24 +14,24 @@ phases:
   - name: planning
     status: done
   - name: development
-    status: in_progress
+    status: done
   - name: testing
-    status: in_progress
+    status: done
   - name: release
-    status: upcoming
+    status: in_progress
 
 marketing:
   - "Système mémoire humain-like: dégradation progressive en 5 niveaux"
   - "Recherche inversée: trouve avec indices flous, remonte au détail si match"
-  - "Dashboard web 'Palais de Mémoire' avec visualisation consolidation"
+  - "Dashboard React : boucles ouvertes en tension, traces, rivière, galaxie, rejeu, promenade 3D"
   - "API HTTP + CLI + lib importable — intègre dans tout projet"
 
 product:
   - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard"
-  - "Sprints 1+2+3+4+5 livrés. Suite : 180 pass / 0 fail / 390 expect sur 11 fichiers (bun 1.3.14, vérifié 2026-07-31)"
+  - "Sprints 1 à 7 livrés. Suite : 257 pass / 0 fail / 1003 expect sur 16 fichiers (bun 1.3.14, vérifié 2026-07-31)"
   - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 TERMINÉ (7/7) — Phase 5 complète : mémoire prospective de bout en bout (intentions, cues, resolver, hooks SessionStart + post-commit, CLI, API)"
+  - "Phase 5 complète (mémoire prospective de bout en bout) + front React à parité servi à / — release 0.2.0 préparée, non publiée"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -403,6 +403,23 @@ sprints:
           - "Les assets étaient référencés en relatif (./index-abc.js) : servie à /app sans slash final, la page les cherchait à la racine et ne les trouvait pas. L'app React était donc cassée en navigateur réel, ce que mes vérifications HTTP n'avaient pas montré (elles tapaient les assets par leur chemin direct). Les références sont désormais absolutisées vers /app/."
         verification: "Les trois routes servent des assets qui répondent 200 depuis l'URL telle qu'écrite dans la page ; les 5 chunks dynamiques (dont three.js) sont joignables ; #root présent."
         notes: "Suppression du vanilla non faite : c'est une suppression, elle reste à la main de l'utilisateur."
+      - id: S7-03
+        title: "Préparation de la release 0.2.0 : métadonnées de paquet, CHANGELOG, entrée CLI"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 257 pass / 0 fail / 1003 expect (16 fichiers). Build et typecheck:web clean. npm pack --dry-run : 89 fichiers, 1,1 Mo."
+        test_result: pass
+        delivered:
+          - "package.json 0.2.0 : description, keywords, repository, homepage, bugs, engines.bun, files"
+          - "CHANGELOG.md — 0.2.0 (mémoire prospective, front React, env de test) et 0.1.0"
+          - "files affiné : scripts/engine.mjs (runner interne bmad, 38 Ko) exclu du paquet ; le bundle React public/app est inclus"
+        fixes:
+          - "bin/humemory.js était cassé sous node : shebang node alors que le store importe bun:sqlite. Un npm i -g humemory plantait sur ERR_UNSUPPORTED_ESM_URL_SCHEME. Shebang bun + garde explicite avec message lisible."
+          - "Version de la CLI codée en dur (0.1.0) et dérivée : elle est lue de package.json."
+        blocked:
+          - "Champ license absent, et aucun fichier LICENSE : choix juridique qui appartient à l'auteur, pas inventé ici."
+        notes: "Paquet vérifié mais NON publié : publier est une action sortante et irréversible."
+
       - id: S7-02
         title: "Dette : BUG-05 (suites héritées vers fixtures), BUG-06 (vitest orphelin), BUG-08 (createApp testable)"
         status: complete
