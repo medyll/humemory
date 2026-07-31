@@ -111,6 +111,40 @@ export function calculateDecayRate(content: string, keywords: string[]): number 
   return Math.max(0.1, Math.min(1.0, rate));
 }
 
+export interface DecayCurvePoint {
+  time: Date;
+  level: DecayLevel;
+  saillance: number;
+  hoursElapsed: number;
+}
+
+/**
+ * Projette la courbe d'oubli d'une trace sur `daysAhead` jours, un point toutes
+ * les 6 heures.
+ *
+ * Vit ici, avec les règles qu'elle échantillonne, plutôt que dans le code de la
+ * visualisation : une courbe tracée à partir d'une copie divergente de
+ * l'algorithme raconterait une histoire que le système ne vit pas.
+ */
+export function projectDecayCurve(memory: Memory, daysAhead = 90): DecayCurvePoint[] {
+  const points: DecayCurvePoint[] = [];
+  const createdAt = new Date(memory.createdAt).getTime();
+  const totalMs = daysAhead * 24 * 3600_000;
+  const stepMs = 6 * 3600_000;
+
+  for (let t = 0; t <= totalMs; t += stepMs) {
+    const at = new Date(createdAt + t);
+    points.push({
+      time: at,
+      level: calculateDecayLevel(memory, at),
+      saillance: calculateSaillance(memory, at),
+      hoursElapsed: t / 3600_000,
+    });
+  }
+
+  return points;
+}
+
 /**
  * Met à jour tous les souvenirs d'une collection
  */

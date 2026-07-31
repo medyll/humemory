@@ -100,9 +100,53 @@ export const api = {
     });
   },
 
-  listMemories(params: { limit?: number } = {}) {
-    const query = params.limit ? `?limit=${params.limit}` : '';
-    return request<{ success: boolean; memories: Memory[] }>(`/memories${query}`);
+  listMemories(params: { limit?: number; level?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.level !== undefined) query.set('level', String(params.level));
+
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<{ success: boolean; memories: Memory[] }>(`/memories${suffix}`);
+  },
+
+  search(q: string, filters: { limit?: number; maxLevel?: number; directory?: string } = {}) {
+    const query = new URLSearchParams({ q });
+    if (filters.limit) query.set('limit', String(filters.limit));
+    if (filters.maxLevel !== undefined) query.set('maxLevel', String(filters.maxLevel));
+    if (filters.directory) query.set('directory', filters.directory);
+
+    return request<{ success: boolean; results: Array<{ memory: Memory; matchLevel: number; score: number }> }>(
+      `/search?${query}`
+    );
+  },
+
+  getMemory(id: string) {
+    return request<{ success: boolean; memory: Memory }>(`/memories/${id}`);
+  },
+
+  recallMemory(id: string) {
+    return request<{ success: boolean; memory: Memory }>(`/memories/${id}/recall`, { method: 'POST' });
+  },
+
+  deleteMemory(id: string) {
+    return request<{ success: boolean }>(`/memories/${id}`, { method: 'DELETE' });
+  },
+
+  setPhotographic(id: string, enable: boolean) {
+    return request<{ success: boolean; memory: Memory }>(`/memories/${id}/photo`, {
+      method: 'POST',
+      body: JSON.stringify({ enable }),
+    });
+  },
+
+  listSessions() {
+    return request<{ success: boolean; sessions: Array<{ sessionId: string; count: number; firstEvent: string }> }>(
+      '/sessions'
+    );
+  },
+
+  getSession(id: string) {
+    return request<Record<string, any>>(`/sessions/${encodeURIComponent(id)}`);
   },
 
   status() {

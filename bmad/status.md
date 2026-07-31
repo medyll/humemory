@@ -2,11 +2,11 @@
 
 > Phase: **development** | Progress: [█████████▋] 96%
 > Last updated: 2026-07-31 | Active role: scrum
-> Stories: 27/28 complete · Tests: 200 pass / 0 fail / 425 expect (13 fichiers, bun 1.3.14)
+> Stories: 27/28 complete (+1 partielle) · Tests: 221 pass / 0 fail / 919 expect (14 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Sprint 6 — S6-03 : portage des vues existantes (three.js/canvas wrappés)
+- **Next action:** Sprint 6 — S6-04 : porter Replay + UI de fusion, puis retirer le dashboard vanilla
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -50,7 +50,7 @@
       ✅ S5-03b: Phase 5.3 — Hook post-commit : ferme sur marqueur explicite, suggère sur recoupement fichiers
       ✅ S5-04: Phase 5.4 — CLI 'intent' + routes HTTP intentions/cues/events (validation stricte)
 
-  🔨 Sprint 6: Front React — socle (bundler bun + @testing-library), onglet prospectif, portage progressif (2/3 stories)
+  🔨 Sprint 6: Front React — socle (bundler bun + @testing-library), onglet prospectif, portage progressif (2/3 + 1 partielle)
       ✅ S6-01: Socle bundler bun + React + TS + @testing-library, servi par Hono sur /app, types partagés
       ✅ S6-02: Onglet prospectif — tension partagée avec le back, cues, armement, fermeture
       ⬚ S6-03: Portage des vues existantes ; three.js et canvas wrappés, jamais réécrits
@@ -78,7 +78,7 @@
 ## Product
 
   - Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard
-  - Sprints 1+2+3+4+5 livrés. Suite : 200 pass / 0 fail / 425 expect sur 13 fichiers (bun 1.3.14, vérifié 2026-07-31)
+  - Sprints 1+2+3+4+5 livrés. Suite : 221 pass / 0 fail / 919 expect sur 14 fichiers (bun 1.3.14, vérifié 2026-07-31)
   - 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos
   - PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit
   - Sprint 5 TERMINÉ (7/7) — Phase 5 complète : mémoire prospective de bout en bout

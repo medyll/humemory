@@ -3,7 +3,7 @@ phase: development
 progress: 96
 last_updated: "2026-07-31"
 
-next_action: "Sprint 6 — S6-03 : portage des vues existantes (three.js et canvas wrappes, jamais reecrits)"
+next_action: "Sprint 6 — S6-04 : porter Replay et l UI de fusion, puis retirer le dashboard vanilla"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -349,10 +349,26 @@ sprints:
         notes: "Les cues sont charges par un appel de detail par boucle : l'API n'a pas de route de liste jointe, en inventer une pour l'ecran aurait ete premature. A revoir si la liste grossit."
       - id: S6-03
         title: "Portage des vues existantes ; three.js et canvas wrappés dans useEffect, jamais réécrits"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: partial
+        tests_executed: true
+        test_output: "bun test — 221 pass / 0 fail / 919 expect (14 fichiers), dont web-traces 17/17. typecheck:web clean, build splitté clean."
+        test_result: pass
+        delivered:
+          - "web/components/ImperativeView.tsx — hote generique d'une vue impérative, import dynamique + démontage garanti"
+          - "web/viz/{river,galaxy,promenade,decay-curve}.ts — modules ESM convertis depuis public/js, tracés repris tels quels"
+          - "web/components/TracesTab.tsx + zones.ts — seul portage JSX (dashboard.js était fait d'innerHTML)"
+          - "Shell à 5 onglets ; cliquer une trace dans une viz renvoie vers l'onglet Traces"
+          - "projectDecayCurve ajouté à src/core/decay.ts (+4 tests) — le front ne réimplémente plus l'algorithme"
+          - "d3 et @types/three ajoutés ; les CDN d3js.org et jsdelivr disparaissent du chemin React"
+          - "Code splitting : entrée 204 Ko, three.js isolé dans un chunk de 0,54 Mo chargé à l'ouverture de l'onglet"
+          - "tests/web-traces.test.tsx — 17 tests (zones, contrat de montage/démontage, onglet Traces)"
+        fixes:
+          - "public/js/decay.js dupliquait calculateDecayLevel/calculateSaillance/calculateDecayRate du back : la duplication disparaît du chemin React"
+          - "promenade.js attachait 5 écouteurs à document/window jamais retirés — ZQSD continuait de piloter une caméra invisible après changement d'onglet. AbortController + dispose des géométries/matériaux/textures"
+          - "river.js laissait tourner son setInterval et abandonnait sa tooltip dans le body au démontage"
+          - "Hauteur des sphères de la promenade : Math.random() remplacé par une dérivation de l'index — le palais doit être le même d'une visite à l'autre"
+        remaining: "Vue Replay et UI de fusion/similaires non portées : elles restent dans le dashboard vanilla, toujours servi à /. C'est ce qui manque avant de pouvoir retirer l'ancien front."
+        notes: "4 vues sur 5 sont wrappées et non réécrites : river et galaxy sont pilotées par d3, qui possède son sous-arbre SVG. Seul dashboard.js, fait de chaînes innerHTML, méritait un portage JSX."
 
 backlog:
   - id: B-VIZ-01

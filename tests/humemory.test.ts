@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { SQLiteStore } from '../src/store/sqlite.js';
-import { calculateDecayLevel, calculateSaillance, calculateDecayRate } from '../src/core/decay.js';
+import { calculateDecayLevel, calculateSaillance, calculateDecayRate, projectDecayCurve } from '../src/core/decay.js';
 import type { Memory, DecayLevel } from '../src/core/types.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -450,5 +450,56 @@ describe('humemory', () => {
       const similar = await store.findSimilar(m.id, { limit: 10, threshold: 0 });
       expect(similar.every(r => r.memory.id !== m.id)).toBe(true);
     });
+  });
+});
+
+describe('projectDecayCurve', () => {
+  const trace = (overrides: Partial<Memory> = {}): Memory =>
+    ({
+      id: 'p1',
+      content: 'trace projetée',
+      directory: '/src',
+      day: '2026-01-01',
+      keywords: ['a'],
+      sessionId: 's',
+      memoryType: 'semantic',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      recallCount: 0,
+      decayRate: 0.5,
+      currentLevel: 0,
+      saillance: 50,
+      ...overrides,
+    }) as Memory;
+
+  test('échantillonne toutes les 6h sur la durée demandée', () => {
+    const curve = projectDecayCurve(trace(), 30);
+
+    expect(curve[0].hoursElapsed).toBe(0);
+    expect(curve[1].hoursElapsed).toBe(6);
+    expect(curve.at(-1)!.hoursElapsed).toBe(30 * 24);
+  });
+
+  test('la courbe descend : le niveau ne remonte jamais spontanément', () => {
+    const curve = projectDecayCurve(trace(), 90);
+
+    for (let i = 1; i < curve.length; i++) {
+      expect(curve[i].level).toBeGreaterThanOrEqual(curve[i - 1].level);
+    }
+    expect(curve.at(-1)!.level).toBeGreaterThan(curve[0].level);
+  });
+
+  test('une trace photographique reste à plat', () => {
+    const curve = projectDecayCurve(trace({ photographic: true }), 365);
+    expect(curve.every((p) => p.level === 0)).toBe(true);
+  });
+
+  test('elle échantillonne les mêmes règles que le store, pas une copie', () => {
+    // Garde-fou anti-divergence : c'est précisément la duplication que le
+    // portage du front a supprimée.
+    const memory = trace();
+    for (const point of projectDecayCurve(memory, 10)) {
+      expect(point.level).toBe(calculateDecayLevel(memory, point.time));
+      expect(point.saillance).toBe(calculateSaillance(memory, point.time));
+    }
   });
 });

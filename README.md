@@ -67,9 +67,17 @@ pnpm test           # bun test — backend and React components, one runner
 ```
 
 Two front-ends live side by side during the migration: the original vanilla
-dashboard at `/`, and the React app at `/app` — which is where open loops are
-managed: arm one (cues in the same syntax as the CLI), watch its tension, fire,
-close or delete it. Nothing is deleted until the port reaches parity.
+dashboard at `/`, and the React app at `/app`, which now carries five tabs —
+loops, traces, river, galaxy and promenade.
+
+The visualisations are **wrapped, not rewritten**: d3 owns its SVG subtree and
+three.js its WebGL canvas, so they stay imperative inside a `useEffect`. Only the
+trace dashboard, which was built from `innerHTML` strings, became JSX. Each
+visualisation is code-split and loaded on demand — three.js alone is half a
+megabyte, and nobody who never opens the promenade should download it.
+
+Still only in the vanilla dashboard: the replay view, and the merge/similar UI.
+Those are the remaining gap before `/` can be retired.
 
 A loop's tension is not recomputed in the front: it comes from
 `intentionSaillance`, the same function the backend uses. `armed` sits pinned at

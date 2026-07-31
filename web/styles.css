@@ -101,3 +101,64 @@ button.danger { background: #a3232f; }
 .loop[data-status="closed"], .loop[data-status="expired"] { opacity: 0.72; }
 .loop-overdue { font-size: 0.75rem; color: #ff9f43; }
 .notice { color: var(--closed); font-size: 0.85rem; }
+
+/* ── Navigation par onglets ────────────────────────────────────────────── */
+.tab-nav { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 1.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.6rem; }
+
+/* ── Zones temporelles ─────────────────────────────────────────────────── */
+.zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem; margin-bottom: 1.25rem; }
+.zone-card { display: grid; gap: 0.2rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; text-align: left; color: var(--text); }
+.zone-card.active { border-color: var(--accent); }
+.zone-count { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.zone-label { font-size: 0.78rem; color: var(--muted); }
+.zone-encoding .zone-count { color: #22c55e; }
+.zone-consolidating .zone-count { color: #eab308; }
+.zone-consolidated .zone-count { color: #f97316; }
+.zone-fragile .zone-count { color: #ef4444; }
+.zone-dormant .zone-count { color: #6b7280; }
+
+.search { width: 100%; margin-bottom: 1.25rem; }
+
+/* ── Liste des traces ──────────────────────────────────────────────────── */
+.memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.memory-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.memory-item.is-photographic { border-color: var(--accent); }
+.memory-open { display: flex; gap: 0.85rem; width: 100%; text-align: left; background: transparent; border: 0; padding: 0.85rem 1rem; color: var(--text); align-items: flex-start; }
+.memory-state { width: 9px; height: 9px; border-radius: 50%; margin-top: 0.4rem; flex-shrink: 0; background: var(--muted); }
+.memory-state.encoding { background: #22c55e; }
+.memory-state.consolidating { background: #eab308; }
+.memory-state.consolidated { background: #f97316; }
+.memory-state.fragile { background: #ef4444; }
+.memory-state.dormant { background: #6b7280; }
+.memory-body { display: grid; gap: 0.4rem; }
+.memory-text { line-height: 1.5; }
+.memory-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; font-size: 0.78rem; color: var(--muted); }
+.cue-tag { background: #23283a; border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.72rem; }
+.photo-badge { color: var(--accent); font-size: 0.75rem; }
+.strength-dots { display: inline-flex; gap: 2px; }
+.strength-dot { width: 6px; height: 6px; border-radius: 50%; background: #2c3244; }
+.strength-dot.active { background: var(--accent); }
+
+/* ── Modale de détail ──────────────────────────────────────────────────── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; padding: 1.5rem; z-index: 50; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; max-width: 620px; width: 100%; max-height: 85vh; overflow: auto; }
+.modal-head { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.9rem; }
+.modal-head button { margin-left: auto; }
+.modal-content { line-height: 1.6; }
+.modal-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem 1rem; margin: 1rem 0; }
+.modal-meta dt { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.modal-meta dd { margin: 0; font-size: 0.85rem; word-break: break-word; }
+.levels { border-left: 2px solid var(--border); padding-left: 0.8rem; margin: 1rem 0; font-size: 0.85rem; }
+.levels strong { color: var(--accent); margin-right: 0.4rem; }
+.decay-canvas { width: 100%; max-width: 520px; background: #12151d; border-radius: 8px; }
+.modal-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 1rem; }
+
+/* ── Vues impératives (d3 / three.js) ──────────────────────────────────── */
+.imperative-view { position: relative; }
+.imperative-canvas { width: 100%; background: #0d0f16; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; position: relative; }
+.galaxy-legend, .promenade-hud { position: absolute; top: 1rem; right: 1rem; background: rgba(23,26,35,.92); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; font-size: 0.82rem; }
+.galaxy-legend-item { display: flex; align-items: center; gap: 0.4rem; margin: 0.15rem 0; }
+.galaxy-legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+.river-controls, .promenade-controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.river-controls input[type="range"] { flex: 1; min-width: 180px; }
+.river-tooltip { position: absolute; background: rgba(23,26,35,.97); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem; max-width: 280px; font-size: 0.85rem; pointer-events: none; z-index: 60; }
