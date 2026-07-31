@@ -1,0 +1,3 @@
+[test]
+# DOM global pour les tests de composants React (@testing-library).
+preload = ["./tests/setup-dom.ts"]

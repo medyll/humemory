@@ -48,7 +48,9 @@ function safeJoin(baseDir: string, ...segments: string[]): string | null {
   return full;
 }
 
-const DB_PATH = join(__dirname, '../../data/humemory.db');
+// HUMEMORY_DB : même convention que la CLI et les hooks. Sans ça, impossible de
+// lancer l'API sur une base de démo sans écrire dans celle de production.
+const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
 const store = new SQLiteStore(DB_PATH);
 const PUBLIC_DIR = join(__dirname, '../../public');
 
@@ -76,6 +78,44 @@ app.get('/', (c) => {
 app.get('/session', (c) => {
   const html = readFileSync(join(PUBLIC_DIR, 'session.html'), 'utf-8');
   return c.html(html);
+});
+
+// Front React (web/ → public/app/ via `pnpm build:web`).
+// Servi sous /app tant que le portage n'est pas terminé : le dashboard vanilla
+// reste à la racine, pas de fenêtre cassée pendant la migration.
+const APP_DIR = join(PUBLIC_DIR, 'app');
+
+const APP_MIME: Record<string, string> = {
+  js: 'application/javascript',
+  css: 'text/css',
+  html: 'text/html',
+  json: 'application/json',
+  svg: 'image/svg+xml',
+  png: 'image/png',
+  woff2: 'font/woff2',
+};
+
+app.get('/app', (c) => {
+  try {
+    return c.html(readFileSync(join(APP_DIR, 'index.html'), 'utf-8'));
+  } catch {
+    // Bundle absent : dire quoi faire plutôt qu'un 404 muet.
+    return c.text('Front non construit. Lance `pnpm build:web`.', 503);
+  }
+});
+
+app.get('/app/*', (c) => {
+  const filePath = c.req.path.replace('/app/', '');
+  const fullPath = safeJoin(APP_DIR, filePath);
+  if (!fullPath) return c.notFound();
+
+  try {
+    const ext = filePath.split('.').pop() ?? '';
+    const content = readFileSync(fullPath);
+    return c.body(content, 200, { 'Content-Type': APP_MIME[ext] ?? 'application/octet-stream' });
+  } catch {
+    return c.notFound();
+  }
 });
 
 app.get('/css/*', (c) => {

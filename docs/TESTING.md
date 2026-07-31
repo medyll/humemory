@@ -120,6 +120,23 @@ clears both handlers and log.
 implemented yet — there is nothing to feed until the `intentions`/`cues` tables and
 the resolver exist. It lands with Phase 5.2 (S5-02).
 
+### 5. React components — same runner, no second stack
+
+The front (`web/`) is tested with `@testing-library/react` under **`bun test`**, not
+a separate runner. `bunfig.toml` preloads `tests/setup-dom.ts`, which registers
+happy-dom as a global DOM; backend suites simply ignore `window` and `document`.
+
+`fetch` is stubbed per test — no server, no network, same hermetic rule as
+everywhere else:
+
+```ts
+globalThis.fetch = (async () =>
+  new Response(JSON.stringify({ intentions: [], count: 0 }))) as typeof fetch;
+```
+
+Always restore the real `fetch` in `afterEach`, and `cleanup()` between renders,
+or one test's DOM leaks into the next.
+
 ## Fixtures
 
 Seed from `tests/fixtures/` (JSON sets) rather than inline literals, so scenarios are

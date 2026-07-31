@@ -6,3 +6,6 @@ data/
 *.db-wal
 .env
 .env.local
+
+# Bundle du front React (pnpm build:web)
+public/app/

@@ -1,0 +1,18 @@
+{
+  "//": "Front React. Séparé du tsconfig racine, qui compile la lib (src/ → dist/) et n'a ni DOM ni JSX. Ne produit rien : bun build fait le bundle, tsc ne sert qu'au typage.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["react", "react-dom"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../src/core/types.ts"]
+}

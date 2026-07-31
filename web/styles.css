@@ -1,0 +1,52 @@
+/* Reprend la palette du dashboard existant — public/css/styles.css — pour que
+   les deux fronts ne se ressemblent pas de loin seulement, le temps du portage. */
+:root {
+  --bg: #0f1117;
+  --surface: #171a23;
+  --border: #262b38;
+  --text: #e6e8ee;
+  --muted: #8b93a7;
+  --accent: #7c5cff;
+  --armed: #f0b429;
+  --fired: #4c9aff;
+  --closed: #35c46a;
+  --expired: #5a6070;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.app { max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+.app-header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+.tagline { margin: 0.25rem 0 2rem; color: var(--muted); }
+
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.section-head h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+button {
+  background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+  padding: 0.45rem 0.85rem; font: inherit; font-size: 0.9rem; cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+
+.loop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.loop { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; }
+.loop-head { display: flex; align-items: center; gap: 0.75rem; }
+.loop-head code { color: var(--accent); font-size: 0.85rem; }
+.loop-content { margin: 0.4rem 0 0.2rem; }
+.loop-meta { margin: 0; color: var(--muted); font-size: 0.82rem; }
+
+.loop-badge { font-size: 0.78rem; color: var(--muted); }
+.loop-badge[data-status="armed"] { color: var(--armed); }
+.loop-badge[data-status="fired"] { color: var(--fired); }
+.loop-badge[data-status="closed"] { color: var(--closed); }
+.loop-badge[data-status="expired"] { color: var(--expired); }
+
+.empty, .error { color: var(--muted); }
+.error { color: #ff6b6b; }

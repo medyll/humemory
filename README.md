@@ -60,10 +60,15 @@ queried.
 
 ```bash
 pnpm install
-pnpm start:api      # API + dashboard → http://localhost:3456
+pnpm build:web      # bundle the React front (bun's own bundler, no extra tooling)
+pnpm start:api      # API + dashboards → http://localhost:3456
 pnpm cli status     # state of the memory palace
-pnpm test           # bun test
+pnpm test           # bun test — backend and React components, one runner
 ```
+
+Two front-ends live side by side during the migration: the original vanilla
+dashboard at `/`, and the React app at `/app`. Nothing is deleted until the port
+reaches parity.
 
 Full command reference, concepts, and roadmap live in **[AGENTS.md](./AGENTS.md)**.
 The autonomous test environment spec lives in **[docs/TESTING.md](./docs/TESTING.md)**.

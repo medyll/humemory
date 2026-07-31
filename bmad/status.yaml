@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 89
+progress: 93
 last_updated: "2026-07-31"
 
-next_action: "Sprint 6 — socle React (bundler bun + @testing-library) + onglet prospectif dans le dashboard"
+next_action: "Sprint 6 — S6-02 : onglet prospectif (tension des boucles, cues, fermeture) consommant /intentions"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -303,15 +303,29 @@ sprints:
 
   - id: 6
     goal: "Front React — socle (bundler bun + @testing-library) puis onglet prospectif, portage progressif des vues"
-    status: planned
+    status: in_progress
     rationale: "Demande explicite (lisibilité recrutement). Bundler bun retenu plutôt que Vite : cohérent avec le runtime, zéro dépendance de build supplémentaire."
     stories:
       - id: S6-01
         title: "Socle : bundler bun + React + TS + @testing-library, servi par Hono, types partagés avec le back"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 187 pass / 0 fail / 403 expect (12 fichiers), dont tests/web-app.test.tsx 7/7. typecheck:web clean, build complet clean."
+        test_result: pass
+        delivered:
+          - "web/ — App.tsx, main.tsx, index.html, styles.css, api/client.ts, hooks/useAsync.ts, components/LoopBadge.tsx"
+          - "Bundler natif bun (bun build sur entrée HTML) — aucune dépendance de build ajoutée, 189 Ko en production"
+          - "web/tsconfig.json séparé (jsx, DOM) — le tsconfig racine ne compile que src/, le front ne peut pas casser le build de la lib"
+          - "Types partagés : web/api/client.ts importe Intention/Cue/Memory depuis src/core/types.ts — zéro type dupliqué"
+          - "Routes Hono /app et /app/* avec safeJoin (garde SEC-01 réutilisée) ; 503 explicite si le bundle manque"
+          - "bunfig.toml preload tests/setup-dom.ts (happy-dom) — @testing-library tourne sous bun test, un seul runner"
+          - "Scripts : build:web, dev:web (watch), typecheck:web ; pnpm build enchaîne tsc puis le bundle"
+          - "useAsync : ignore les réponses périmées et les setState après démontage"
+          - "public/app/ gitignoré — artefact de build"
+        verification: "API lancée sur base de démo : /app sert le HTML, les assets hashés sortent avec le bon Content-Type, /app/../../package.json → 404 (traversée bloquée), /intentions renvoie les 2 boucles armées. Les 180 tests backend restent verts avec le DOM préchargé."
+        fixes:
+          - "server.ts ignorait HUMEMORY_DB (contrairement à la CLI et aux hooks) — impossible de lancer l'API sur une base de démo sans écrire dans la production. Corrigé."
+        notes: "Front vanilla conservé à / pendant le portage. Pas de capture navigateur : l'extension Chrome n'était pas connectée ; le rendu est couvert par les tests de composants et le service des assets vérifié en HTTP."
       - id: S6-02
         title: "Onglet prospectif : boucles ouvertes (tension/saillance), cues, fermeture — consomme /intentions"
         status: pending
