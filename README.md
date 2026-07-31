@@ -66,25 +66,19 @@ pnpm cli status     # state of the memory palace
 pnpm test           # bun test — backend and React components, one runner
 ```
 
-Two front-ends live side by side during the migration: the original vanilla
-dashboard at `/`, and the React app at `/app`, which now carries five tabs —
-loops, traces, river, galaxy and promenade.
+Two front-ends live side by side: the original vanilla dashboard at `/`, and the
+React app at `/app`, which now carries six tabs — loops, traces, river, galaxy,
+replay and promenade, and has reached feature parity.
 
 The visualisations are **wrapped, not rewritten**: d3 owns its SVG subtree and
 three.js its WebGL canvas, so they stay imperative inside a `useEffect`. Only the
-trace dashboard, which was built from `innerHTML` strings, became JSX. Each
-visualisation is code-split and loaded on demand — three.js alone is half a
-megabyte, and nobody who never opens the promenade should download it.
+parts built from `innerHTML` strings — the trace dashboard, the replay player and
+the merge panel — became JSX. Each visualisation is code-split and loaded on
+demand; three.js alone is half a megabyte, and nobody who never opens the
+promenade should download it.
 
-Still only in the vanilla dashboard: the replay view, and the merge/similar UI.
-Those are the remaining gap before `/` can be retired.
-
-A loop's tension is not recomputed in the front: it comes from
-`intentionSaillance`, the same function the backend uses. `armed` sits pinned at
-100, `fired` relaxes by 10 points a day, `closed` and `expired` are flat.
-
-Full command reference, concepts, and roadmap live in **[AGENTS.md](./AGENTS.md)**.
-The autonomous test environment spec lives in **[docs/TESTING.md](./docs/TESTING.md)**.
+The vanilla dashboard is still served, and can be retired whenever you want it
+gone — nothing in the React app depends on it.
 
 ### Open loops (prospective memory)
 

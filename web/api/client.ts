@@ -6,7 +6,7 @@
  * compile plus, ce qui est exactement le comportement voulu.
  */
 
-import type { Intention, Cue, Memory, TriggerSpec, IntentionStatus } from '../../src/core/types.js';
+import type { Intention, Cue, Memory, MemoryType, TriggerSpec, IntentionStatus } from '../../src/core/types.js';
 
 /** Une intention telle que l'API la renvoie : avec son identifiant court. */
 export interface IntentionDTO extends Omit<Intention, 'createdAt' | 'expiresAt' | 'firedAt' | 'closedAt'> {
@@ -39,6 +39,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError((body as any)?.error ?? `HTTP ${res.status}`, res.status);
   }
   return body as T;
+}
+
+/** Filtres avancés de recherche — portage de l'ancien panneau ⚙️. */
+export interface SearchFilters {
+  limit?: number;
+  maxLevel?: number;
+  directory?: string;
+  type?: MemoryType;
+  dateFrom?: string;
+  dateTo?: string;
+  minSaillance?: number;
+  minRecalls?: number;
+}
+
+export interface CreateMemoryInput {
+  content: string;
+  directory?: string;
+  keywords?: string[];
+  memoryType?: MemoryType;
+  photographic?: boolean;
 }
 
 export interface CreateIntentionInput {
@@ -109,15 +129,27 @@ export const api = {
     return request<{ success: boolean; memories: Memory[] }>(`/memories${suffix}`);
   },
 
-  search(q: string, filters: { limit?: number; maxLevel?: number; directory?: string } = {}) {
+  search(q: string, filters: SearchFilters = {}) {
     const query = new URLSearchParams({ q });
     if (filters.limit) query.set('limit', String(filters.limit));
     if (filters.maxLevel !== undefined) query.set('maxLevel', String(filters.maxLevel));
     if (filters.directory) query.set('directory', filters.directory);
+    if (filters.type) query.set('type', filters.type);
+    if (filters.dateFrom) query.set('dateFrom', filters.dateFrom);
+    if (filters.dateTo) query.set('dateTo', filters.dateTo);
+    if (filters.minSaillance !== undefined) query.set('minSaillance', String(filters.minSaillance));
+    if (filters.minRecalls !== undefined) query.set('minRecalls', String(filters.minRecalls));
 
     return request<{ success: boolean; results: Array<{ memory: Memory; matchLevel: number; score: number }> }>(
       `/search?${query}`
     );
+  },
+
+  createMemory(input: CreateMemoryInput) {
+    return request<{ success: boolean; memory: Memory }>('/memories', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 
   getMemory(id: string) {
@@ -136,6 +168,25 @@ export const api = {
     return request<{ success: boolean; memory: Memory }>(`/memories/${id}/photo`, {
       method: 'POST',
       body: JSON.stringify({ enable }),
+    });
+  },
+
+  findSimilar(id: string, params: { limit?: number; threshold?: number } = {}) {
+    const query = new URLSearchParams();
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.threshold !== undefined) query.set('threshold', String(params.threshold));
+
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<{ success: boolean; results: Array<{ memory: Memory; score: number }> }>(
+      `/memories/${id}/similar${suffix}`
+    );
+  },
+
+  /** Fusionne `sourceId` dans `targetId`. Irréversible : la source passe au niveau 4. */
+  mergeMemories(sourceId: string, targetId: string) {
+    return request<{ success: boolean }>(`/memories/${sourceId}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ targetId }),
     });
   },
 

@@ -3,6 +3,9 @@ import type { Memory } from '../../src/core/types.js';
 import { api } from '../api/client.js';
 import { useAsync } from '../hooks/useAsync.js';
 import { renderDecayCurve } from '../viz/decay-curve.js';
+import { SimilarPanel } from './SimilarPanel.tsx';
+import { NewTraceForm } from './NewTraceForm.tsx';
+import type { SearchFilters } from '../api/client.js';
 import {
   ZONES,
   ZONE_ORDER,
@@ -49,14 +52,17 @@ function MemoryDetail({
   onRecall,
   onTogglePhoto,
   onDelete,
+  onMerged,
 }: {
   memory: Memory;
   onClose: () => void;
   onRecall: (id: string) => void;
   onTogglePhoto: (id: string, enable: boolean) => void;
   onDelete: (id: string) => void;
+  onMerged: () => void;
 }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showSimilar, setShowSimilar] = useState(false);
 
   // Échap ferme : une modale qui ne se ferme qu'à la souris est une impasse.
   useEffect(() => {
@@ -110,6 +116,9 @@ function MemoryDetail({
           <button type="button" className="secondary" onClick={() => onTogglePhoto(memory.id, !memory.photographic)}>
             {memory.photographic ? '🔓 Laisser se dégrader' : '🔒 Mode photographique'}
           </button>
+          <button type="button" className="secondary" onClick={() => setShowSimilar((v) => !v)}>
+            🔍 Similaires
+          </button>
           {confirmingDelete ? (
             <button type="button" className="danger" onClick={() => onDelete(memory.id)}>
               Confirmer la suppression
@@ -120,6 +129,8 @@ function MemoryDetail({
             </button>
           )}
         </div>
+
+        {showSimilar && <SimilarPanel memory={memory} onMerged={onMerged} />}
       </div>
     </div>
   );
@@ -135,6 +146,8 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [selected, setSelected] = useState<string | null>(initialSelection);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<SearchFilters>({});
 
   // Une nouvelle trace désignée depuis une visualisation ouvre son détail.
   useEffect(() => {
@@ -147,14 +160,18 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const activeFilters = Object.values(filters).filter((v) => v !== undefined && v !== '').length;
+
   const traces = useAsync(async () => {
-    if (debounced) {
-      const { results } = await api.search(debounced, { limit: 100 });
+    // Les filtres avancés passent par /search, qui sait les appliquer ; sans
+    // requête ni filtre, une simple liste suffit.
+    if (debounced || activeFilters > 0) {
+      const { results } = await api.search(debounced || '*', { limit: 100, ...filters });
       return results.map((r) => r.memory);
     }
     const { memories } = await api.listMemories({ limit: 200 });
     return memories;
-  }, [debounced]);
+  }, [debounced, JSON.stringify(filters)]);
 
   const now = useMemo(() => new Date(), [traces.data]);
   const all = traces.data ?? [];
@@ -171,8 +188,12 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
     [traces]
   );
 
+  const setFilter = (patch: SearchFilters) => setFilters((f) => ({ ...f, ...patch }));
+
   return (
     <div className="traces-tab">
+      <NewTraceForm onCreated={() => traces.reload()} />
+
       <div className="zones">
         {ZONE_ORDER.map((z) => (
           <button
@@ -188,13 +209,51 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
         ))}
       </div>
 
-      <input
-        className="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Rechercher par indice de récupération…"
-        aria-label="Rechercher une trace"
-      />
+      <div className="search-row">
+        <input
+          className="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher par indice de récupération…"
+          aria-label="Rechercher une trace"
+        />
+        <button
+          type="button"
+          className={activeFilters > 0 ? 'tab active' : 'tab'}
+          aria-expanded={showFilters}
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          ⚙️ Filtres{activeFilters > 0 ? ` (${activeFilters})` : ''}
+        </button>
+      </div>
+
+      {showFilters && (
+        <div className="advanced-filters">
+          <div className="field">
+            <label htmlFor="f-from">Encodée après</label>
+            <input id="f-from" type="date" value={filters.dateFrom ?? ''} onChange={(e) => setFilter({ dateFrom: e.target.value || undefined })} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-to">Encodée avant</label>
+            <input id="f-to" type="date" value={filters.dateTo ?? ''} onChange={(e) => setFilter({ dateTo: e.target.value || undefined })} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-saillance">Force minimale</label>
+            <input id="f-saillance" type="number" min={0} max={100} value={filters.minSaillance ?? ''} onChange={(e) => setFilter({ minSaillance: e.target.value ? Number(e.target.value) : undefined })} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-recalls">Réactivations minimales</label>
+            <input id="f-recalls" type="number" min={0} value={filters.minRecalls ?? ''} onChange={(e) => setFilter({ minRecalls: e.target.value ? Number(e.target.value) : undefined })} />
+          </div>
+          <div className="field">
+            <label htmlFor="f-directory">Lieu mental</label>
+            <input id="f-directory" value={filters.directory ?? ''} onChange={(e) => setFilter({ directory: e.target.value || undefined })} />
+          </div>
+          <button type="button" className="secondary" onClick={() => setFilters({})}>
+            Effacer les filtres
+          </button>
+        </div>
+      )}
 
       {traces.loading && <p role="status">Chargement…</p>}
       {traces.error && (
@@ -245,6 +304,7 @@ export function TracesTab({ initialSelection = null }: TracesTabProps) {
           onRecall={(id) => act(() => api.recallMemory(id))}
           onTogglePhoto={(id, enable) => act(() => api.setPhotographic(id, enable))}
           onDelete={(id) => act(() => api.deleteMemory(id))}
+          onMerged={() => act(async () => {})}
         />
       )}
     </div>

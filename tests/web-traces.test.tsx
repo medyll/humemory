@@ -273,3 +273,79 @@ describe('TracesTab', () => {
     expect(screen.getByRole('button', { name: /Confirmer/ })).toBeDefined();
   });
 });
+
+describe('Encodage et filtres avancés', () => {
+  test('le formulaire d\'encodage est replié par défaut', async () => {
+    stubFetch({ '/memories': { success: true, memories: [] } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
+    expect(screen.queryByLabelText('Contenu')).toBeNull();
+  });
+
+  test('encoder une trace envoie contenu, type et mots-clés', async () => {
+    const calls = stubFetch({ '/memories': { success: true, memories: [], memory: memory() } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
+    fireEvent.click(screen.getByText(/Encoder une trace/));
+
+    fireEvent.change(screen.getByLabelText('Contenu'), { target: { value: 'nouvelle trace' } });
+    fireEvent.change(screen.getByLabelText(/Indices de récupération/), { target: { value: 'a, b' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Encoder' }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.includes('/memories'));
+      expect(post).toBeDefined();
+    });
+  });
+
+  test('un contenu vide est refusé', async () => {
+    stubFetch({ '/memories': { success: true, memories: [] } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
+    fireEvent.click(screen.getByText(/Encoder une trace/));
+    fireEvent.click(screen.getByRole('button', { name: 'Encoder' }));
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/ne se rappelle pas/));
+  });
+
+  test('les filtres avancés sont repliés, et comptés une fois actifs', async () => {
+    stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
+    fireEvent.change(screen.getByLabelText('Force minimale'), { target: { value: '70' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Filtres \(1\)/ })).toBeDefined());
+  });
+
+  test('un filtre actif bascule la requête vers /search', async () => {
+    const calls = stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
+    fireEvent.change(screen.getByLabelText(/Réactivations minimales/), { target: { value: '2' } });
+
+    await waitFor(() => expect(calls.some((c) => c.includes('minRecalls=2'))).toBe(true));
+  });
+
+  test('effacer les filtres revient à la liste simple', async () => {
+    const calls = stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
+
+    render(<TracesTab />);
+    await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
+    fireEvent.change(screen.getByLabelText('Force minimale'), { target: { value: '70' } });
+    await waitFor(() => expect(calls.some((c) => c.includes('minSaillance=70'))).toBe(true));
+
+    fireEvent.click(screen.getByRole('button', { name: /Effacer/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^⚙️ Filtres$/ })).toBeDefined());
+  });
+});

@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 96
+progress: 100
 last_updated: "2026-07-31"
 
-next_action: "Sprint 6 — S6-04 : porter Replay et l UI de fusion, puis retirer le dashboard vanilla"
+next_action: "Décision utilisateur : retirer le dashboard vanilla (public/index.html + public/js) ; sinon Sprint 7 — BUG-05/06/08 et phase release"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -347,9 +347,24 @@ sprints:
           - "Une boucle fermee n'offre plus d'action"
           - "L'instant de reference est calcule une fois par rendu : deux boucles cote a cote sont evaluees au meme instant"
         notes: "Les cues sont charges par un appel de detail par boucle : l'API n'a pas de route de liste jointe, en inventer une pour l'ecran aurait ete premature. A revoir si la liste grossit."
+      - id: S6-04
+        title: "Parité : Replay, fusion/similaires, encodage manuel, filtres avancés"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 238 pass / 0 fail / 963 expect (15 fichiers), dont web-replay-merge 11/11 et web-traces 23/23. typecheck:web clean, build splitté clean."
+        test_result: pass
+        delivered:
+          - "web/components/ReplayTab.tsx — rejeu de session en JSX : curseur, lecture, compteurs déduits de l'index"
+          - "web/components/SimilarPanel.tsx — similaires + fusion, confirmation inline montrant la cible (l'original utilisait confirm() qui bloque l'onglet)"
+          - "web/components/NewTraceForm.tsx — encodage manuel (contenu, lieu, type, mots-clés, photographique)"
+          - "Filtres avancés dans TracesTab : dates, force min, réactivations min, lieu mental ; bascule automatique vers /search quand un filtre est actif"
+          - "tests/web-replay-merge.test.tsx 11 tests + 6 tests ajoutés à web-traces"
+        verification: "Contre l'API réelle : GET /sessions et /sessions/:id renvoient la session et ses 2 events ; GET similar trouve 1 candidat ; POST merge passe la source au niveau 4 avec mergedIntoId pointant la cible."
+        notes: "Le sélecteur de contexte du vanilla (liste déroulante des répertoires) devient un champ libre 'lieu mental' — moins restrictif, même usage. Parité atteinte : le dashboard vanilla peut être retiré, décision laissée à l'utilisateur, rien côté React n'en dépend."
+
       - id: S6-03
         title: "Portage des vues existantes ; three.js et canvas wrappés dans useEffect, jamais réécrits"
-        status: partial
+        status: complete
         tests_executed: true
         test_output: "bun test — 221 pass / 0 fail / 919 expect (14 fichiers), dont web-traces 17/17. typecheck:web clean, build splitté clean."
         test_result: pass
@@ -367,7 +382,7 @@ sprints:
           - "promenade.js attachait 5 écouteurs à document/window jamais retirés — ZQSD continuait de piloter une caméra invisible après changement d'onglet. AbortController + dispose des géométries/matériaux/textures"
           - "river.js laissait tourner son setInterval et abandonnait sa tooltip dans le body au démontage"
           - "Hauteur des sphères de la promenade : Math.random() remplacé par une dérivation de l'index — le palais doit être le même d'une visite à l'autre"
-        remaining: "Vue Replay et UI de fusion/similaires non portées : elles restent dans le dashboard vanilla, toujours servi à /. C'est ce qui manque avant de pouvoir retirer l'ancien front."
+        remaining: "Replay, fusion, encodage et filtres avancés livrés depuis en S6-04 — la parité est atteinte."
         notes: "4 vues sur 5 sont wrappées et non réécrites : river et galaxy sont pilotées par d3, qui possède son sous-arbre SVG. Seul dashboard.js, fait de chaînes innerHTML, méritait un portage JSX."
 
 backlog:

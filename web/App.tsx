@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { LoopsTab } from './components/LoopsTab.tsx';
 import { TracesTab } from './components/TracesTab.tsx';
+import { ReplayTab } from './components/ReplayTab.tsx';
 import { ImperativeView } from './components/ImperativeView.tsx';
 
 /**
@@ -12,13 +13,14 @@ import { ImperativeView } from './components/ImperativeView.tsx';
  * les servir à quelqu'un qui ne visite jamais la galaxie.
  */
 
-type TabId = 'loops' | 'traces' | 'river' | 'galaxy' | 'promenade';
+type TabId = 'loops' | 'traces' | 'river' | 'galaxy' | 'replay' | 'promenade';
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'loops', label: '🔁 Boucles' },
   { id: 'traces', label: '📊 Traces' },
   { id: 'river', label: '🌊 Rivière' },
   { id: 'galaxy', label: '🌌 Galaxie' },
+  { id: 'replay', label: '🔄 Rejeu' },
   { id: 'promenade', label: '🚶 Promenade' },
 ];
 
@@ -60,6 +62,7 @@ export function App() {
       <main>
         {tab === 'loops' && <LoopsTab />}
         {tab === 'traces' && <TracesTab initialSelection={focusedMemory} />}
+        {tab === 'replay' && <ReplayTab />}
 
         {tab === 'river' && (
           <ImperativeView
