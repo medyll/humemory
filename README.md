@@ -67,8 +67,8 @@ pnpm test           # bun test — backend and React components, one runner
 ```
 
 The React app is served at **`/`** (and `/app`). The original vanilla dashboard
-is kept at **`/legacy`** — nothing depends on it, it is a safety net while the
-React front proves itself, and it can be deleted whenever you want.
+has been removed — the React front reached parity first, and git keeps the old
+one if it is ever needed.
 
 The visualisations are **wrapped, not rewritten**: d3 owns its SVG subtree and
 three.js its WebGL canvas, so they stay imperative inside a `useEffect`. Only the
@@ -77,8 +77,7 @@ the merge panel — became JSX. Each visualisation is code-split and loaded on
 demand; three.js alone is half a megabyte, and nobody who never opens the
 promenade should download it.
 
-Run `pnpm build:web` before `pnpm start:api`, or `/` falls back to the legacy
-dashboard rather than serving a dead page.
+Run `pnpm build:web` before `pnpm start:api`, or `/` answers 503 telling you so.
 
 ### Open loops (prospective memory)
 

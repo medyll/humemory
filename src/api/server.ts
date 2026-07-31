@@ -12,9 +12,9 @@
  * GET    /status            - État de la mémoire
  *
  * Fronts :
- * GET    /                  - App React (repli sur le dashboard vanilla si non construite)
+ * GET    /                  - App React (503 explicite si le bundle manque)
  * GET    /app               - Même app, URL historique
- * GET    /legacy            - Ancien dashboard vanilla
+ * GET    /session           - Composition de contexte mnésique (page autonome)
  *
  * Mémoire prospective (src/api/intentions-routes.ts):
  * POST   /intentions        - Armer une boucle (+ ses cues)
@@ -94,14 +94,9 @@ app.get('/', (c) => {
   try {
     return c.html(reactAppHtml());
   } catch {
-    // Bundle absent : on retombe sur l'ancien dashboard plutôt que sur une page morte.
-    return c.html(readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8'));
+    // Bundle absent : dire quoi faire plutôt qu'une page morte.
+    return c.text('Front non construit. Lance `pnpm build:web`.', 503);
   }
-});
-
-/** Ancien dashboard vanilla — conservé le temps que le front React fasse ses preuves. */
-app.get('/legacy', (c) => {
-  return c.html(readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8'));
 });
 
 app.get('/session', (c) => {
@@ -139,51 +134,6 @@ app.get('/app/*', (c) => {
     const ext = filePath.split('.').pop() ?? '';
     const content = readFileSync(fullPath);
     return c.body(content, 200, { 'Content-Type': APP_MIME[ext] ?? 'application/octet-stream' });
-  } catch {
-    return c.notFound();
-  }
-});
-
-app.get('/css/*', (c) => {
-  const filePath = c.req.path.replace('/css/', '');
-  const fullPath = safeJoin(PUBLIC_DIR, 'css', filePath);
-  if (!fullPath) return c.notFound();
-  try {
-    const content = readFileSync(fullPath, 'utf-8');
-    return c.body(content, 200, { 'Content-Type': 'text/css' });
-  } catch {
-    return c.notFound();
-  }
-});
-
-app.get('/js/*', (c) => {
-  const filePath = c.req.path.replace('/js/', '');
-  const fullPath = safeJoin(PUBLIC_DIR, 'js', filePath);
-  if (!fullPath) return c.notFound();
-  try {
-    const content = readFileSync(fullPath, 'utf-8');
-    return c.body(content, 200, { 'Content-Type': 'application/javascript' });
-  } catch {
-    return c.notFound();
-  }
-});
-
-app.get('/assets/*', (c) => {
-  const filePath = c.req.path.replace('/assets/', '');
-  const fullPath = safeJoin(PUBLIC_DIR, filePath);
-  if (!fullPath) return c.notFound();
-  try {
-    const content = readFileSync(fullPath, 'utf-8');
-    const ext = filePath.split('.').pop();
-    const mimeTypes: Record<string, string> = {
-      css: 'text/css',
-      js: 'application/javascript',
-      json: 'application/json',
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      svg: 'image/svg+xml',
-    };
-    return c.body(content, 200, { 'Content-Type': mimeTypes[ext || 'text/plain'] });
   } catch {
     return c.notFound();
   }

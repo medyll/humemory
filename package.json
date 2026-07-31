@@ -55,9 +55,10 @@
     "start:api": "bun run src/api/server.ts",
     "cli": "bun run src/cli/index.ts",
     "consolidate": "bun run scripts/consolidate.js",
-    "build:web": "bun build web/index.html --outdir public/app --production --splitting",
+    "build:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\" && bun build web/index.html --outdir public/app --production --splitting",
     "dev:web": "bun build web/index.html --outdir public/app --splitting --watch",
-    "typecheck:web": "tsc -p web/tsconfig.json"
+    "typecheck:web": "tsc -p web/tsconfig.json",
+    "clean:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

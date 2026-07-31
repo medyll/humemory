@@ -1,11 +1,12 @@
 # ROADMAP.md — humemory demo / visualization
 
-> **STATUS: DONE (2026-07-30).** All five options below shipped — `public/js/river.js`,
-> `galaxy.js`, `replay.js`, `promenade.js`, `decay-curve.js`, wired into
-> `public/index.html`. Tracked as story S3-04; backlog item B-VIZ-01 closed.
+> **STATUS: DONE.** All five options below shipped (S3-04, B-VIZ-01 closed), then
+> moved to React in S6-03: `web/viz/{river,galaxy,promenade,decay-curve}.ts` plus
+> the replay tab. The vanilla files this document originally described
+> (`public/js/*`, `public/index.html`) were removed once the port reached parity.
 > Kept as the design rationale for those views.
 
-Goal: make humemory **demonstrable**. Today's dashboard (`public/index.html`) is a
+Goal: make humemory **demonstrable**. The dashboard of the time was a
 filterable card list with zone counters and a detail modal — functional, but it
 shows *state*, not *behavior*. A case study about a memory that decays, gets
 reinforced, and resurfaces itself needs a viz that shows **time and motion**, not

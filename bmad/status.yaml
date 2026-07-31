@@ -3,7 +3,7 @@ phase: release
 progress: 100
 last_updated: "2026-07-31"
 
-next_action: "Release 0.2.0 prête (paquet vérifié, non publiée). Publication npm et suppression du dashboard vanilla : décisions utilisateur."
+next_action: "Release 0.2.0 prête. Restent deux décisions utilisateur : choisir une licence, publier sur npm."
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -403,6 +403,22 @@ sprints:
           - "Les assets étaient référencés en relatif (./index-abc.js) : servie à /app sans slash final, la page les cherchait à la racine et ne les trouvait pas. L'app React était donc cassée en navigateur réel, ce que mes vérifications HTTP n'avaient pas montré (elles tapaient les assets par leur chemin direct). Les références sont désormais absolutisées vers /app/."
         verification: "Les trois routes servent des assets qui répondent 200 depuis l'URL telle qu'écrite dans la page ; les 5 chunks dynamiques (dont three.js) sont joignables ; #root présent."
         notes: "Suppression du vanilla non faite : c'est une suppression, elle reste à la main de l'utilisateur."
+      - id: S7-04
+        title: "Retrait du dashboard vanilla"
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 257 pass / 0 fail (16 fichiers). Build clean. Routes vérifiées en HTTP réel."
+        test_result: pass
+        delivered:
+          - "Supprimés : public/index.html, public/css/styles.css, public/js/*.js (8 fichiers, ~1750 lignes)"
+          - "Routes retirées : /legacy, /css/*, /js/*, /assets/* — la surface statique se réduit à /app/*"
+          - "Le repli de / sur l ancien dashboard devient un 503 explicite"
+          - "public/session.html conservé : page autonome, fonctionnalité distincte (S1-05)"
+        fixes:
+          - "build:web ne nettoyait pas sa sortie : public/app accumulait les chunks périmés (3 versions de galaxy-*.js) et le paquet npm les embarquait. Ajout de clean:web ; 27 fichiers -> 10."
+        verification: "/ , /app, /session et /health répondent 200 ; /legacy, /js/dashboard.js, /css/styles.css et /assets/* répondent 404 ; les assets de l app répondent 200 depuis l URL écrite dans la page."
+        notes: "Git conserve l ancien front si besoin. ROADMAP.md, README, CHANGELOG mis à jour."
+
       - id: S7-03
         title: "Préparation de la release 0.2.0 : métadonnées de paquet, CHANGELOG, entrée CLI"
         status: complete

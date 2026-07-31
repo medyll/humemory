@@ -45,7 +45,8 @@ remembers what happened; it resurfaces what you left unfinished.
   reimplemented on the client.
 - Visualisations are code-split and loaded on demand — three.js alone is half a
   megabyte.
-- The original vanilla dashboard remains at **`/legacy`**.
+- The original vanilla dashboard is removed once the React front reached parity;
+  `/css/*`, `/js/*` and `/assets/*` go with it, shrinking the static surface.
 
 ### Added — test environment
 
@@ -86,6 +87,9 @@ remembers what happened; it resurfaces what you left unfinished.
 
 ### Removed
 
+- The vanilla dashboard (`public/index.html`, `public/js/*`, `public/css/*`) and
+  the static routes that served it. `public/session.html` stays — it is a
+  separate, self-contained page.
 - `vitest.config.ts` — orphaned, and blind to `.test.tsx` since the front landed.
 
 ---
