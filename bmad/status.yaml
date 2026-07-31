@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 92
-last_updated: "2026-07-30"
+progress: 96
+last_updated: "2026-07-31"
 
-next_action: "Sprint 5 — Phase 5.3b : git hook post-commit (ferme les boucles via Closes loop-<id> + heuristique fichiers)"
+next_action: "Sprint 5 — Phase 5.3b : git hook post-commit (dernière story), puis socle React (bundler bun + testing-library) et onglet prospectif"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -28,10 +28,10 @@ marketing:
 
 product:
   - "Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard"
-  - "Sprints 1+2+3+4 livrés. Suite : 128 pass / 0 fail / 274 expect sur 8 fichiers (bun 1.3.14, vérifié 2026-07-30)"
+  - "Sprints 1+2+3+4 livrés. Suite : 160 pass / 0 fail / 353 expect sur 10 fichiers (bun 1.3.14, vérifié 2026-07-31)"
   - "5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos"
   - "PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit"
-  - "Sprint 5 en cours (5/7) : 5.0 + 5.1 + 5.2 + hook SessionStart livrés — la boucle prospective tourne de bout en bout. Restent le hook post-commit et la surface CLI/API"
+  - "Sprint 5 en cours (6/7) : 5.0 + 5.1 + 5.2 + hook SessionStart + CLI/API livrés. Reste le hook post-commit"
 
 far_vision:
   - "Mémoire prospective : intentions + cues + hook SessionStart → l'agent reçoit ses boucles ouvertes avant de chercher"
@@ -271,10 +271,23 @@ sprints:
         test_result: null
       - id: S5-04
         title: "Phase 5.4 — CLI 'intent {add,list,close,fire}' + API POST /intentions, POST /cues, POST /events"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 160 pass / 0 fail / 353 expect (10 fichiers), dont api-intentions 22/22 et cue-arg 10/10. Build tsc clean. CLI exercée bout-en-bout sur DB temporaire."
+        test_result: pass
+        delivered:
+          - "src/api/intentions-routes.ts — sous-routeur Hono recevant son store en paramètre (donc testable), monté par server.ts"
+          - "Routes : POST/GET /intentions, GET /intentions/:id (+cues), POST /intentions/:id/{close,fire}, DELETE /intentions/:id, POST/GET /cues, POST /events, POST /cues/resolve"
+          - "Validation stricte des entrées réseau (validateTriggerSpec / validateAppEvent) — 400 plutôt que stocker un cue qui ne réveillera jamais rien"
+          - "src/cli/cue-arg.ts — parseCueArg/formatTriggerSpec, aller-retour testé ; gère les ':' dans les regex et les chemins Windows"
+          - "CLI 'intent add|list|close|fire|resolve' — ids courts loop-xxxxxxxx acceptés, préfixe ambigu refusé (exit 1)"
+          - "CLI respecte HUMEMORY_DB (même convention que les hooks) — permet de l'exercer sans toucher la prod"
+          - "server.ts : serve() conditionné à import.meta.main + export de app — importer le module ne lève plus de serveur"
+          - "tests/api-intentions.test.ts 22 tests + tests/cue-arg.test.ts 10 tests"
+        verification: "CLI jouée en réel sur DB temporaire : add (2 cues + échéance) → resolve (échéance tirée) → close --commit → list. Id inconnu refusé avec exit 1."
+        fixes:
+          - "Chemins relatifs : le lieu mental est désormais résolu en absolu (encode, search, intent add/list, import-session). Une boucle armée sur './src/auth' n'aurait jamais matché le hook SessionStart qui filtre par process.cwd() — échec silencieux."
+        notes: "Les routes historiques de server.ts (S1-04) restent non testées : le store y est créé au chargement du module. Le sous-routeur prospectif contourne le problème sans réindenter 390 lignes ; refactor de server.ts non fait, tracé ci-dessous."
 
 backlog:
   - id: B-VIZ-01
@@ -313,6 +326,12 @@ qa:
       target_story: S5-00b
       fix: "S5-00b a créé tests/fixtures/ + tests/helpers/ et les utilise dans test-env.test.ts. Sévérité abaissée major → minor : la fondation existe et n'est plus bloquante pour Phase 5."
       remaining: "Migrer les 3 suites héritées (humemory.test.ts, agent.test.ts, llm-generator.test.ts) vers freshStore()/seedMemories() — elles passent mais restent sur DB fichier + littéraux inline."
+    - id: BUG-08
+      title: "server.ts crée son store au chargement du module — routes historiques (S1-04) non testables"
+      severity: minor
+      impact: "Les routes /memories, /search, /status, /sessions n'ont aucun test. Importer server.ts sous NODE_ENV=test lèverait via le garde prod-DB."
+      status: open
+      fix_suggested: "Extraire createApp(store) comme pour intentions-routes.ts ; réindentation de ~390 lignes, à faire hors story."
     - id: BUG-06
       title: "vitest.config.ts orphelin — toute la suite tourne sous bun test"
       severity: minor

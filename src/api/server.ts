@@ -10,11 +10,25 @@
  * GET    /search            - Rechercher
  * POST   /decay             - Mettre à jour la dégradation
  * GET    /status            - État de la mémoire
+ *
+ * Mémoire prospective (src/api/intentions-routes.ts):
+ * POST   /intentions        - Armer une boucle (+ ses cues)
+ * GET    /intentions        - Lister (filtres status, directory)
+ * GET    /intentions/:id    - Détail + cues
+ * POST   /intentions/:id/close - Fermer (annule les cues restants)
+ * POST   /intentions/:id/fire  - Force-fire (debug/dashboard)
+ * DELETE /intentions/:id    - Supprimer (cues en cascade)
+ * POST   /cues              - Attacher un cue
+ * GET    /cues              - Lister (filtres intentionId, status, kind)
+ * POST   /events            - Pousser un event → réveille les boucles qui matchent
+ * POST   /cues/resolve      - Ménage : expire les périmées, tire les échéances
  */
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { serve } from '@hono/node-server';
 import { SQLiteStore } from '../store/sqlite.js';
+import { createIntentionRoutes } from './intentions-routes.js';
 import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
@@ -366,21 +380,25 @@ app.get('/sessions/:id', async (c) => {
   });
 });
 
+// === MÉMOIRE PROSPECTIVE (Phase 5.4) ===
+// Sous-routeur isolé : il reçoit le store en paramètre, donc il est testable
+// sans ouvrir la DB de production (voir tests/api-intentions.test.ts).
+app.route('/', createIntentionRoutes(store));
+
 // === HEALTH ===
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Start server
-const port = parseInt(process.env.PORT || '3456');
+export { app };
 
-console.log(`🧠 humemory API running on http://localhost:${port}`);
-console.log(`📊 Dashboard: http://localhost:${port}/`);
+// Démarrage seulement en exécution directe : importer ce module (test, outil)
+// ne doit pas lever un serveur ni saisir le port.
+if (import.meta.main) {
+  const port = parseInt(process.env.PORT || '3456');
 
-// Start Hono server for Node.js
-import { serve } from '@hono/node-server';
+  console.log(`🧠 humemory API running on http://localhost:${port}`);
+  console.log(`📊 Dashboard: http://localhost:${port}/`);
 
-serve({
-  fetch: app.fetch,
-  port,
-});
+  serve({ fetch: app.fetch, port });
+}

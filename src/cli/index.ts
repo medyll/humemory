@@ -2,14 +2,18 @@
 import { Command } from 'commander';
 import { SQLiteStore } from '../store/sqlite.js';
 import { calculateDecayLevel } from '../core/decay.js';
-import { join, dirname } from 'path';
+import { SqliteCueResolver, loopId, matchIntentionByShortId } from '../core/cues.js';
+import { parseCueArg, formatTriggerSpec } from './cue-arg.js';
+import type { IntentionStatus, TriggerSpec } from '../core/types.js';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Store partagé
-const DB_PATH = join(__dirname, '../../data/humemory.db');
+// Store partagé. HUMEMORY_DB permet de viser une autre base — même convention
+// que les hooks, et indispensable pour exercer la CLI sans toucher la prod.
+const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
 let store: SQLiteStore;
 
 function getStore(): SQLiteStore {
@@ -52,7 +56,9 @@ program
 
     const memory = await s.add({
       content,
-      directory: options.directory,
+      // Résolu en absolu, comme pour les intentions : le hook SessionStart
+      // filtre par `process.cwd()`, un chemin relatif ne matcherait jamais.
+      directory: resolve(options.directory),
       day: new Date().toISOString().split('T')[0],
       keywords: options.keywords ? options.keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : [],
       sessionId: options.session,
@@ -90,7 +96,7 @@ program
 
     const results = await s.search({
       query,
-      directory: options.directory,
+      directory: options.directory ? resolve(options.directory) : undefined,
       sessionId: options.session,
       maxLevel: parseInt(options.level) as 0 | 1 | 2 | 3 | 4,
       limit: parseInt(options.limit),
@@ -329,7 +335,7 @@ program
 
     const result = await processSession(raw, {
       dbPath: DB_PATH,
-      directory: options.directory,
+      directory: options.directory ? resolve(options.directory) : undefined,
       maxLearnings: parseInt(options.max),
     });
 
@@ -342,6 +348,163 @@ program
     for (const l of result.learnings) {
       console.log(`  • ${l}`);
     }
+  });
+
+// === INTENT (mémoire prospective) ===
+const intent = program
+  .command('intent')
+  .description('Boucles ouvertes (mémoire prospective) — armer, lister, fermer');
+
+intent
+  .command('add <content>')
+  .description('Armer une boucle ouverte')
+  .option('-d, --directory <dir>', 'Lieu mental (défaut: cwd)')
+  .option('-c, --cue <cue...>', "Déclencheur — 'time:2026-12-01', 'cron:0 9 * * 1', 'event:file_open:src/a.ts'")
+  .option('-e, --expires <date>', 'Échéance (ISO) au-delà de laquelle la boucle expire')
+  .action(async (content: string, options) => {
+    const s = getStore();
+
+    let cues: TriggerSpec[] = [];
+    try {
+      cues = (options.cue ?? []).map((raw: string) => parseCueArg(raw));
+    } catch (err) {
+      console.error(`✗ ${err instanceof Error ? err.message : err}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    let expiresAt: Date | undefined;
+    if (options.expires) {
+      expiresAt = new Date(options.expires);
+      if (Number.isNaN(expiresAt.getTime())) {
+        console.error(`✗ échéance invalide: ${options.expires}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+
+    // Le lieu mental est résolu en absolu : le hook SessionStart cherche par
+    // `process.cwd()`, donc une boucle armée sur './src/auth' ne remonterait
+    // jamais — un échec parfaitement silencieux.
+    const intention = await s.addIntention(
+      {
+        content,
+        directory: resolve(options.directory ?? process.cwd()),
+        expiresAt,
+      },
+      cues
+    );
+
+    console.log(`\n🔁 Boucle armée — ${loopId(intention.id)}`);
+    console.log(`   ${intention.content}`);
+    console.log(`   Lieu: ${intention.directory}`);
+    if (expiresAt) console.log(`   Échéance: ${expiresAt.toISOString()}`);
+    for (const spec of cues) console.log(`   Cue: ${formatTriggerSpec(spec)}`);
+    console.log(`\n   Fermer: mentionner "Closes ${loopId(intention.id)}" dans un commit\n`);
+  });
+
+intent
+  .command('list')
+  .alias('ls')
+  .description('Lister les boucles')
+  .option('-s, --status <status>', 'armed | fired | closed | expired', 'armed')
+  .option('-d, --directory <dir>', 'Filtrer par lieu mental')
+  .option('-n, --limit <n>', 'Nombre max', '20')
+  .option('-a, --all', 'Tous les statuts')
+  .action(async (options) => {
+    const s = getStore();
+
+    const intentions = await s.listIntentions({
+      status: options.all ? undefined : (options.status as IntentionStatus),
+      directory: options.directory ? resolve(options.directory) : undefined,
+      limit: parseInt(options.limit),
+    });
+
+    if (intentions.length === 0) {
+      console.log('Aucune boucle.');
+      return;
+    }
+
+    const icons: Record<IntentionStatus, string> = {
+      armed: '🔁',
+      fired: '⏰',
+      closed: '✅',
+      expired: '💤',
+    };
+
+    console.log(`\n${intentions.length} boucle(s):\n`);
+    for (const i of intentions) {
+      const cues = await s.listCues({ intentionId: i.id });
+      console.log(`${icons[i.status]} ${loopId(i.id)} | ${i.status} | ${i.directory}`);
+      console.log(`   ${i.content}`);
+      if (cues.length) {
+        console.log(`   Cues: ${cues.map((c) => `${formatTriggerSpec(c.triggerSpec)} (${c.status})`).join(', ')}`);
+      }
+      if (i.expiresAt) console.log(`   Échéance: ${i.expiresAt.toISOString()}`);
+      if (i.closedByCommit) console.log(`   Fermée par: ${i.closedByCommit}`);
+      console.log();
+    }
+  });
+
+/** Résout un identifiant court (`loop-a1b2c3d4`, `a1b2c3d4`) vers une intention. */
+async function resolveIntentionArg(s: SQLiteStore, arg: string) {
+  const short = arg.replace(/^loop-/i, '');
+  const all = await s.listIntentions({ limit: 500 });
+  const found = matchIntentionByShortId(all, short);
+
+  if (!found) {
+    // Préfixe ambigu ou inconnu : on ne devine pas, fermer la mauvaise boucle est pire.
+    console.error(`✗ aucune boucle unique pour "${arg}"`);
+    process.exitCode = 1;
+  }
+  return found;
+}
+
+intent
+  .command('close <id>')
+  .description('Fermer une boucle (accepte loop-abc12345 ou le préfixe seul)')
+  .option('--commit <sha>', 'SHA du commit qui a fermé la boucle')
+  .action(async (id: string, options) => {
+    const s = getStore();
+    const found = await resolveIntentionArg(s, id);
+    if (!found) return;
+
+    const closed = await s.updateIntentionStatus(found.id, 'closed', { closedByCommit: options.commit });
+    for (const cue of await s.listCues({ intentionId: found.id, status: 'armed' })) {
+      await s.updateCueStatus(cue.id, 'cancelled');
+    }
+
+    console.log(`\n✅ ${loopId(closed.id)} fermée — ${closed.content}\n`);
+  });
+
+intent
+  .command('fire <id>')
+  .description('Forcer le réveil d\'une boucle (debug)')
+  .action(async (id: string) => {
+    const s = getStore();
+    const found = await resolveIntentionArg(s, id);
+    if (!found) return;
+
+    const fired = await s.updateIntentionStatus(found.id, 'fired');
+    console.log(`\n⏰ ${loopId(fired.id)} réveillée — ${fired.content}\n`);
+  });
+
+intent
+  .command('resolve')
+  .description('Passer le balai : expirer les périmées, tirer les échéances atteintes')
+  .action(async () => {
+    const s = getStore();
+    const resolver = new SqliteCueResolver(s);
+
+    const expired = await resolver.expireStale();
+    const fired = [];
+    for (const cue of await resolver.resolveTimeCues()) {
+      fired.push(await resolver.fire(cue.id));
+    }
+
+    console.log(`\n💤 ${expired} expirée(s) | ⏰ ${fired.length} réveillée(s)`);
+    for (const i of fired) console.log(`   ${loopId(i.id)} — ${i.content}`);
+    console.log();
   });
 
 // Parse et exécution

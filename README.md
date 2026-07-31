@@ -68,6 +68,30 @@ pnpm test           # bun test
 Full command reference, concepts, and roadmap live in **[AGENTS.md](./AGENTS.md)**.
 The autonomous test environment spec lives in **[docs/TESTING.md](./docs/TESTING.md)**.
 
+### Open loops (prospective memory)
+
+```bash
+# arm a loop, with a file cue and a weekly reminder
+pnpm cli intent add "refactor token validation" -d ./src/auth \
+  -c 'event:file_open:src/auth/service.ts' -c 'cron:0 9 * * 1' -e 2026-12-31
+
+pnpm cli intent list              # armed loops (--all for every status)
+pnpm cli intent close loop-a1b2c3d4 --commit deadbee
+pnpm cli intent resolve           # expire overdue loops, fire due deadlines
+```
+
+Cue formats: `time:<ISO>`, `cron:<5-field expr>`, `event:file_open:<path>`,
+`event:branch_switch:<branch>`, `event:error_pattern:<regex>`.
+
+Directories are resolved to absolute paths on write — a loop armed on a relative
+path would never match the `SessionStart` hook, which looks the project up by
+`process.cwd()`.
+
+Over HTTP: `POST /intentions`, `GET /intentions?status=armed&directory=…`,
+`GET /intentions/:id`, `POST /intentions/:id/close`, `POST /intentions/:id/fire`,
+`DELETE /intentions/:id`, `POST /cues`, `GET /cues`, `POST /events`,
+`POST /cues/resolve`.
+
 ### Wiring the Claude Code hooks
 
 Two hooks, both optional and both fail-open — neither will ever block a session:
@@ -401,8 +425,8 @@ keywords >5. `photographic: true` disables decay entirely.
 - [~] **5.3 Hooks** — `SessionStart` hook ✅ shipped (`scripts/hook-session-start.ts`,
       budget via `HUMEMORY_SESSION_BUDGET`); git `post-commit` closes loops via `Closes loop-<id>`
       explicit marker or file-overlap heuristic.
-- [ ] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire}`, `POST /intentions`,
-      `POST /cues`, `POST /events`.
+- [x] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire,resolve}`,
+      `POST /intentions`, `POST /cues`, `POST /events`, `POST /cues/resolve`.
 
 **Deferred to Phase 6** — Cognitive scripts (spec needed before code).
 

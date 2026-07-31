@@ -169,8 +169,10 @@ salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `cl
   `Closes loop-<id>` (explicit) or scores file overlap (heuristic fallback) to close
   intentions and cancel their cues.
 
-**CLI/API (5.4):** `pnpm cli intent {add,list,close,fire}` + `POST /intentions`,
-`POST /cues`, `POST /events`.
+**CLI/API (5.4): ✅ shipped (S5-04).** `pnpm cli intent {add,list,close,fire,resolve}`
+(cue args like `event:file_open:src/a.ts`, `cron:0 9 * * 1`) + `POST /intentions`,
+`GET /intentions`, `POST /intentions/:id/{close,fire}`, `POST /cues`, `POST /events`,
+`POST /cues/resolve` — in `src/api/intentions-routes.ts`, mounted by the server.
 
 **Deferred to Phase 6:** Cognitive scripts — currently underspecified (template?
 chained intentions? system prompt? tool bundle?). Spec first, then code.

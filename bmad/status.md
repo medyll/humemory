@@ -1,12 +1,12 @@
 # humemory — Status
 
-> Phase: **development** | Progress: [█████████▌] 92%
-> Last updated: 2026-07-30 | Active role: scrum
-> Stories: 23/25 complete · Tests: 128 pass / 0 fail / 274 expect (8 fichiers, bun 1.3.14)
+> Phase: **development** | Progress: [█████████▉] 96%
+> Last updated: 2026-07-31 | Active role: scrum
+> Stories: 24/25 complete · Tests: 160 pass / 0 fail / 353 expect (10 fichiers, bun 1.3.14)
 
 ## Chain Protocol
 
-- **Next action:** Sprint 5 — Phase 5.3b : git hook post-commit (ferme les boucles)
+- **Next action:** Sprint 5 — Phase 5.3b : git hook post-commit (dernière story)
 - **Next command:** `bmad-sprint-story`
 - **Next role:** architect
 
@@ -41,18 +41,19 @@
       ✅ S4-01: SQLite WAL mode + busy_timeout + PRAGMA optimizations
       ✅ S4-02: Write serialization layer (enqueueWrite promise queue)
       ✅ S4-03: Fix flaky list test + CLAUDE.md tsc/test doc update
-  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (5/7 stories)
+  🔨 Sprint 5: Mémoire prospective — intentions, cues, hooks SessionStart/post-commit (Phase 5, voir PHASE5_PLAN.md) (6/7 stories)
       ✅ S5-00a: Phase 5.0 — Advisory lock SQLite cross-process (closes Bug #3) — 8118e54
       ✅ S5-00b: Phase 5.0 — Env de test autonome : clock seam, event bus, helpers, fixtures, garde prod-DB
       ✅ S5-01: Phase 5.1 — Tables intentions + cues, CRUD, cascade, fixtures loops.open.json
       ✅ S5-02: Phase 5.2 — Cue resolver : cron maison, scoping par lieu mental, expireStale, règles décay
       ✅ S5-03a: Phase 5.3 — Hook SessionStart : contexte mnésique sur stdout, scoping par projet, budget
       ⬚ S5-03b: Phase 5.3 — Hook .githooks/post-commit : ferme intentions via 'Closes loop-<id>' + heuristique fichiers
-      ⬚ S5-04: Phase 5.4 — CLI 'intent {add,list,close,fire}' + API POST /intentions, POST /cues, POST /events
+      ✅ S5-04: Phase 5.4 — CLI 'intent' + routes HTTP intentions/cues/events (validation stricte)
 
 ## Bugs ouverts
 
   - **BUG-05** [minor, partiel] fondation fixtures/helpers livrée en S5-00b ; reste à migrer les 3 suites héritées
+  - **BUG-08** [minor] server.ts crée son store au chargement — routes historiques (S1-04) non testables
   - **BUG-06** [minor] vitest.config.ts orphelin — toute la suite tourne sous bun test
   - **BUG-04** [minor] tsc global peut shadow le tsc local — toujours passer par pnpm build
 
@@ -72,10 +73,10 @@
 ## Product
 
   - Core rétrospectif complet : decay 5 niveaux, search inversée, SQLite WAL + advisory lock, CLI, API, dashboard
-  - Sprints 1+2+3+4 livrés. Suite : 128 pass / 0 fail / 274 expect sur 8 fichiers (bun 1.3.14, vérifié 2026-07-30)
+  - Sprints 1+2+3+4 livrés. Suite : 160 pass / 0 fail / 353 expect sur 10 fichiers (bun 1.3.14, vérifié 2026-07-31)
   - 5 visualisations dashboard implémentées (river, galaxy, replay, promenade, decay curve) — B-VIZ-01 clos
   - PHASE5_PLAN.md écrit (2026-06-24) — plan Phase 5 corrigé : table intentions dédiée, cues typés, hooks SessionStart + post-commit
-  - Sprint 5 en cours (5/7) : 5.0 + 5.1 + 5.2 + hook SessionStart livrés — boucle prospective de bout en bout
+  - Sprint 5 en cours (6/7) : 5.0 + 5.1 + 5.2 + hook SessionStart + CLI/API livrés
 
 ## Far Vision
 
