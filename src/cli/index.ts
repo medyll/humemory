@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { SQLiteStore } from '../store/sqlite.js';
 import { calculateDecayLevel } from '../core/decay.js';
 import { SqliteCueResolver, loopId, matchIntentionByShortId } from '../core/cues.js';
-import { parseCueArg, formatTriggerSpec } from './cue-arg.js';
+import { parseCueArg, formatTriggerSpec } from '../core/cue-arg.js';
 import type { IntentionStatus, TriggerSpec } from '../core/types.js';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';

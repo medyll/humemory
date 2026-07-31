@@ -12,6 +12,7 @@ export { generateMemoryLevels, setLLMClient } from './core/llm-generator.js';
 export { systemClock, FakeClock } from './core/clock.js';
 export { InMemoryEventBus } from './core/event-bus.js';
 export { SqliteCueResolver, attachResolverToBus, intentionSaillance, parseCron, cronMatches, cronDueSince, eventTriggerMatches, loopId, extractLoopIds, matchIntentionByShortId } from './core/cues.js';
+export { parseCueArg, formatTriggerSpec, CueArgError } from './core/cue-arg.js';
 export { buildSessionContext, humanizeAge, DEFAULT_SESSION_BUDGET, DEFAULT_SAILLANCE_THRESHOLD } from './agent/session-context.js';
 export { processSession } from './agent/claude-hook.js';
 export { parseClaudeHookPayload } from './agent/session-parser.js';

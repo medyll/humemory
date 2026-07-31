@@ -80,7 +80,8 @@ describe('App', () => {
       expect(screen.getByText('Refactorer la validation de token')).toBeDefined();
     });
     expect(screen.getByText('loop-a1b2c3d4')).toBeDefined();
-    expect(screen.getByText('/src/auth')).toBeDefined();
+    // Le lieu mental partage sa ligne avec l'âge de la boucle.
+    expect(screen.getByText(/\/src\/auth/)).toBeDefined();
   });
 
   test('ne demande que les boucles armées', async () => {

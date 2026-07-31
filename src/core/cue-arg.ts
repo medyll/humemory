@@ -8,7 +8,8 @@
  *   event:branch_switch:feature/x        — changement de branche
  *   event:error_pattern:SQLITE_(BUSY)    — motif d'erreur (peut contenir des ':')
  *
- * Isolé du fichier CLI pour rester testable sans lancer commander.
+ * Vit dans core/ et non dans cli/ : le même format est saisi à la ligne de
+ * commande et dans le formulaire du front. Un seul parseur, testé une fois.
  */
 
 import type { TriggerSpec } from '../core/types.js';

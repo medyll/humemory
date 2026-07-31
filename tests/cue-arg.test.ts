@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { parseCueArg, formatTriggerSpec, CueArgError } from '../src/cli/cue-arg.js';
+import { parseCueArg, formatTriggerSpec, CueArgError } from '../src/core/cue-arg.js';
 
 /** Parsing des `--cue` de la CLI (story S5-04). */
 

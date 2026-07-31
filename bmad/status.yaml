@@ -1,9 +1,9 @@
 project: "humemory"
 phase: development
-progress: 93
+progress: 96
 last_updated: "2026-07-31"
 
-next_action: "Sprint 6 — S6-02 : onglet prospectif (tension des boucles, cues, fermeture) consommant /intentions"
+next_action: "Sprint 6 — S6-03 : portage des vues existantes (three.js et canvas wrappes, jamais reecrits)"
 next_command: "bmad-sprint-story"
 next_role: "architect"
 active_role: "scrum"
@@ -328,10 +328,25 @@ sprints:
         notes: "Front vanilla conservé à / pendant le portage. Pas de capture navigateur : l'extension Chrome n'était pas connectée ; le rendu est couvert par les tests de composants et le service des assets vérifié en HTTP."
       - id: S6-02
         title: "Onglet prospectif : boucles ouvertes (tension/saillance), cues, fermeture — consomme /intentions"
-        status: pending
-        tests_executed: false
-        test_output: null
-        test_result: null
+        status: complete
+        tests_executed: true
+        test_output: "bun test — 200 pass / 0 fail / 425 expect (13 fichiers), dont web-loops 13/13 et web-app 7/7. typecheck:web clean, build clean."
+        test_result: pass
+        delivered:
+          - "web/components/LoopTension.tsx — barre de tension alimentee par intentionSaillance, la fonction du back : la regle n'est pas reimplementee cote front"
+          - "web/components/LoopCard.tsx — identifiant court, tension, lieu, echeance, cues avec leur statut, actions"
+          - "web/components/NewLoopForm.tsx — armement, cues au format CLI valides avant envoi"
+          - "web/api/hydrate.ts — DTO ISO vers vraies Date, type IntentionView (modele + loopId d'affichage)"
+          - "App : filtres par statut, filtre par lieu mental, bouton de balai, notices"
+          - "src/cli/cue-arg.ts deplace vers src/core/cue-arg.ts — meme parseur pour la CLI et le formulaire"
+          - "tests/web-loops.test.tsx — 13 tests (tension, carte, formulaire)"
+        verification: "Cycle complet contre l'API reelle : POST /intentions (201, cue arme) puis detail puis close (cue passe cancelled) puis filtres armed=0 closed=1."
+        design:
+          - "Suppression a deux temps : confirmation obligatoire, jamais en un clic"
+          - "Reveiller desactive si aucun cue arme"
+          - "Une boucle fermee n'offre plus d'action"
+          - "L'instant de reference est calcule une fois par rendu : deux boucles cote a cote sont evaluees au meme instant"
+        notes: "Les cues sont charges par un appel de detail par boucle : l'API n'a pas de route de liste jointe, en inventer une pour l'ecran aurait ete premature. A revoir si la liste grossit."
       - id: S6-03
         title: "Portage des vues existantes ; three.js et canvas wrappés dans useEffect, jamais réécrits"
         status: pending

@@ -60,10 +60,12 @@ src/
 ├── core/
 │   ├── clock.ts              # Clock seam (systemClock / FakeClock)
 │   ├── event-bus.ts          # AppEvent + InMemoryEventBus
+│   ├── cue-arg.ts            # cue syntax, shared by the CLI and the React form
 │   └── cues.ts               # cue resolver, cron matcher, loop ids
 ├── api/server.ts         # Hono HTTP API + serves public/ dashboard
 ├── cli/index.ts          # commander CLI
 └── index.ts              # library exports
+web/                      # React front (bun bundler → public/app, served at /app)
 scripts/hook-session.ts        # Claude Code Stop hook → encode learnings
 scripts/hook-session-start.ts  # Claude Code SessionStart hook → inject context
 tests/                    # bun test (hermetic; helpers/ + fixtures/)
