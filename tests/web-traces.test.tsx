@@ -6,9 +6,9 @@ import { memoryZone, countByZone, relativeTime, consolidationLabel } from '../we
 import type { Memory } from '../src/core/types.js';
 
 /**
- * Portage des vues existantes (story S6-03).
- * Aucun réseau : `fetch` est stubbé. Les vues impératives sont testées par leur
- * contrat (montage / démontage), pas par leur pixel.
+ * Port of the existing views (story S6-03).
+ * No network: `fetch` is stubbed. Imperative views are tested through their
+ * contract (mount / unmount), not their pixels.
  */
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
@@ -17,7 +17,7 @@ const realFetch = globalThis.fetch;
 function memory(overrides: Partial<Memory> = {}): Memory {
   return {
     id: 'm1',
-    content: 'La race condition du worker se réglait avec un mutex async',
+    content: 'The worker race condition was fixed with an async mutex',
     directory: '/src/core',
     day: '2026-06-01',
     keywords: ['race', 'mutex'],
@@ -38,7 +38,7 @@ function stubFetch(routes: Record<string, unknown>) {
     const url = String(input);
     calls.push(url);
     const key = Object.keys(routes).find((k) => url.includes(k));
-    return new Response(JSON.stringify(key ? routes[key] : { error: 'non stubbé' }), {
+    return new Response(JSON.stringify(key ? routes[key] : { error: 'not stubbed' }), {
       status: key ? 200 : 404,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -52,21 +52,21 @@ afterEach(() => {
   cleanup();
 });
 
-describe('Zones temporelles', () => {
-  test('une trace fraîche est en encodage', () => {
+describe('Temporal zones', () => {
+  test('a fresh trace is in encoding', () => {
     expect(memoryZone(memory(), NOW)).toBe('encoding');
   });
 
-  test('le niveau 4 l\'emporte sur l\'âge', () => {
+  test('level 4 wins over age', () => {
     expect(memoryZone(memory({ currentLevel: 4 }), NOW)).toBe('dormant');
   });
 
-  test('une trace exsangue tombe en fragile, même récente', () => {
-    // La zone croise l'âge et la force : ce n'est pas un synonyme du niveau.
+  test('a drained trace lands in fragile, however recent', () => {
+    // The zone crosses age and strength: it is not a synonym for the level.
     expect(memoryZone(memory({ saillance: 10 }), NOW)).toBe('fragile');
   });
 
-  test('l\'âge fait glisser de zone en zone', () => {
+  test('age slides a trace from zone to zone', () => {
     const at = (hours: number) =>
       memoryZone(memory({ createdAt: new Date(NOW.getTime() - hours * 3600_000) }), NOW);
 
@@ -77,36 +77,36 @@ describe('Zones temporelles', () => {
     expect(at(24 * 200)).toBe('dormant');
   });
 
-  test('countByZone couvre toutes les zones', () => {
+  test('countByZone covers every zone', () => {
     const counts = countByZone([memory(), memory({ currentLevel: 4 }), memory({ saillance: 5 })], NOW);
     expect(counts.encoding).toBe(1);
     expect(counts.dormant).toBe(1);
     expect(counts.fragile).toBe(1);
   });
 
-  test('libellés de consolidation', () => {
-    expect(consolidationLabel(0)).toBe('Encodage');
-    expect(consolidationLabel(4)).toBe('Sommeil');
+  test('consolidation labels', () => {
+    expect(consolidationLabel(0)).toBe('Encoding');
+    expect(consolidationLabel(4)).toBe('Dormant');
   });
 
-  test('temps relatif', () => {
-    expect(relativeTime(new Date(NOW.getTime() - 30 * 60_000), NOW)).toBe('il y a 30min');
-    expect(relativeTime(new Date(NOW.getTime() - 3 * 24 * 3600_000), NOW)).toBe('il y a 3j');
+  test('relative time', () => {
+    expect(relativeTime(new Date(NOW.getTime() - 30 * 60_000), NOW)).toBe('30min ago');
+    expect(relativeTime(new Date(NOW.getTime() - 3 * 24 * 3600_000), NOW)).toBe('3d ago');
   });
 });
 
 describe('ImperativeView', () => {
-  test('monte la vue dans son conteneur', async () => {
+  test('mounts the view inside its container', async () => {
     let received: HTMLElement | null = null;
 
     render(
       <ImperativeView
         viewKey="v"
-        label="la vue"
+        label="the view"
         load={async () => ({
           mount: (container) => {
             received = container;
-            container.innerHTML = '<b>tracé</b>';
+            container.innerHTML = '<b>drawn</b>';
             return () => {};
           },
         })}
@@ -114,16 +114,16 @@ describe('ImperativeView', () => {
     );
 
     await waitFor(() => expect(received).not.toBeNull());
-    expect(received!.innerHTML).toContain('tracé');
+    expect(received!.innerHTML).toContain('drawn');
   });
 
-  test('appelle le démontage quand le composant disparaît', async () => {
+  test('calls the teardown when the component goes away', async () => {
     let disposed = false;
 
     const { unmount } = render(
       <ImperativeView
         viewKey="v"
-        label="la vue"
+        label="the view"
         load={async () => ({
           mount: () => () => {
             disposed = true;
@@ -135,18 +135,18 @@ describe('ImperativeView', () => {
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     unmount();
 
-    // Sans ça, une simulation d3 ou une boucle three.js survivrait à l'onglet.
+    // Without this, a d3 simulation or a three.js loop would outlive the tab.
     expect(disposed).toBe(true);
   });
 
-  test('démonte même si le composant part avant la fin du chargement', async () => {
+  test('tears down even when the component leaves mid-load', async () => {
     let disposed = false;
     let release: (() => void) | null = null;
 
     const { unmount } = render(
       <ImperativeView
         viewKey="v"
-        label="la vue"
+        label="the view"
         load={() =>
           new Promise((resolve) => {
             release = () =>
@@ -160,82 +160,82 @@ describe('ImperativeView', () => {
       />
     );
 
-    unmount(); // on part avant que le module soit prêt
+    unmount(); // leaving before the module is ready
     release!();
 
     await waitFor(() => expect(disposed).toBe(true));
   });
 
-  test('affiche l\'erreur au lieu d\'un cadre vide', async () => {
+  test('shows the error instead of an empty frame', async () => {
     render(
       <ImperativeView
         viewKey="v"
-        label="la galaxie"
+        label="the galaxy"
         load={async () => {
-          throw new Error('WebGL indisponible');
+          throw new Error('WebGL unavailable');
         }}
       />
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain('WebGL indisponible');
+      expect(screen.getByRole('alert').textContent).toContain('WebGL unavailable');
     });
   });
 });
 
 describe('TracesTab', () => {
-  test('liste les traces et compte les zones', async () => {
+  test('lists traces and counts the zones', async () => {
     stubFetch({
       '/memories': {
         success: true,
-        memories: [memory(), memory({ id: 'm2', content: 'trace endormie', currentLevel: 4 })],
+        memories: [memory(), memory({ id: 'm2', content: 'dormant trace', currentLevel: 4 })],
       },
     });
 
     render(<TracesTab />);
 
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
-    expect(screen.getByText('trace endormie')).toBeDefined();
+    expect(screen.getByText('dormant trace')).toBeDefined();
 
-    // Les compteurs de zone reflètent la répartition : une fraîche, une endormie.
-    const dormant = screen.getByText('En sommeil').closest('button')!;
+    // Zone counters reflect the split: one fresh, one dormant.
+    const dormant = screen.getByText('Dormant').closest('button')!;
     expect(dormant.textContent).toContain('1');
   });
 
-  test('filtrer par zone restreint la liste', async () => {
+  test('filtering by zone narrows the list', async () => {
     stubFetch({
       '/memories': {
         success: true,
-        memories: [memory(), memory({ id: 'm2', content: 'trace endormie', currentLevel: 4 })],
+        memories: [memory(), memory({ id: 'm2', content: 'dormant trace', currentLevel: 4 })],
       },
     });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
 
-    fireEvent.click(screen.getByText('En sommeil').closest('button')!);
+    fireEvent.click(screen.getByText('Dormant').closest('button')!);
 
     await waitFor(() => expect(screen.queryByText(/race condition/)).toBeNull());
-    expect(screen.getByText('trace endormie')).toBeDefined();
+    expect(screen.getByText('dormant trace')).toBeDefined();
   });
 
-  test('la recherche attend une pause dans la frappe', async () => {
+  test('the search waits for a pause in typing', async () => {
     const calls = stubFetch({
       '/memories': { success: true, memories: [memory()] },
-      '/search': { success: true, results: [{ memory: memory({ id: 'found', content: 'trouvée' }), matchLevel: 3, score: 90 }] },
+      '/search': { success: true, results: [{ memory: memory({ id: 'found', content: 'found it' }), matchLevel: 3, score: 90 }] },
     });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
 
-    fireEvent.change(screen.getByLabelText(/Rechercher/), { target: { value: 'mutex' } });
+    fireEvent.change(screen.getByLabelText(/Search a trace/), { target: { value: 'mutex' } });
 
     await waitFor(() => expect(calls.some((c) => c.includes('/search'))).toBe(true), { timeout: 2000 });
-    await waitFor(() => expect(screen.getByText('trouvée')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('found it')).toBeDefined());
   });
 
-  test('ouvrir une trace montre son détail et sa courbe', async () => {
-    stubFetch({ '/memories': { success: true, memories: [memory({ level1Summary: 'résumé L1' })] } });
+  test('opening a trace shows its detail and its curve', async () => {
+    stubFetch({ '/memories': { success: true, memories: [memory({ level1Summary: 'L1 summary' })] } });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
@@ -243,11 +243,11 @@ describe('TracesTab', () => {
     fireEvent.click(screen.getByText(/race condition/).closest('button')!);
 
     const dialog = await screen.findByRole('dialog');
-    expect(dialog.textContent).toContain('résumé L1');
+    expect(dialog.textContent).toContain('L1 summary');
     expect(dialog.querySelector('canvas')).not.toBeNull();
   });
 
-  test('Échap referme le détail', async () => {
+  test('Escape closes the detail', async () => {
     stubFetch({ '/memories': { success: true, memories: [memory()] } });
 
     render(<TracesTab />);
@@ -260,7 +260,7 @@ describe('TracesTab', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  test('la suppression demande confirmation', async () => {
+  test('deletion asks for confirmation', async () => {
     const calls = stubFetch({ '/memories': { success: true, memories: [memory()] } });
 
     render(<TracesTab />);
@@ -268,31 +268,31 @@ describe('TracesTab', () => {
     fireEvent.click(screen.getByText(/race condition/).closest('button')!);
     await screen.findByRole('dialog');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(calls.some((c) => c.includes('DELETE'))).toBe(false);
-    expect(screen.getByRole('button', { name: /Confirmer/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Confirm/ })).toBeDefined();
   });
 });
 
-describe('Encodage et filtres avancés', () => {
-  test('le formulaire d\'encodage est replié par défaut', async () => {
+describe('Encoding and advanced filters', () => {
+  test('the encoding form is collapsed by default', async () => {
     stubFetch({ '/memories': { success: true, memories: [] } });
 
     render(<TracesTab />);
-    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
-    expect(screen.queryByLabelText('Contenu')).toBeNull();
+    await waitFor(() => expect(screen.getByText(/Encode a trace/)).toBeDefined());
+    expect(screen.queryByLabelText('Content')).toBeNull();
   });
 
-  test('encoder une trace envoie contenu, type et mots-clés', async () => {
+  test('encoding a trace sends content, type and keywords', async () => {
     const calls = stubFetch({ '/memories': { success: true, memories: [], memory: memory() } });
 
     render(<TracesTab />);
-    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
-    fireEvent.click(screen.getByText(/Encoder une trace/));
+    await waitFor(() => expect(screen.getByText(/Encode a trace/)).toBeDefined());
+    fireEvent.click(screen.getByText(/Encode a trace/));
 
-    fireEvent.change(screen.getByLabelText('Contenu'), { target: { value: 'nouvelle trace' } });
-    fireEvent.change(screen.getByLabelText(/Indices de récupération/), { target: { value: 'a, b' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Encoder' }));
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'new trace' } });
+    fireEvent.change(screen.getByLabelText(/Retrieval cues/), { target: { value: 'a, b' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Encode' }));
 
     await waitFor(() => {
       const post = calls.find((c) => c.includes('/memories'));
@@ -300,52 +300,52 @@ describe('Encodage et filtres avancés', () => {
     });
   });
 
-  test('un contenu vide est refusé', async () => {
+  test('empty content is refused', async () => {
     stubFetch({ '/memories': { success: true, memories: [] } });
 
     render(<TracesTab />);
-    await waitFor(() => expect(screen.getByText(/Encoder une trace/)).toBeDefined());
-    fireEvent.click(screen.getByText(/Encoder une trace/));
-    fireEvent.click(screen.getByRole('button', { name: 'Encoder' }));
+    await waitFor(() => expect(screen.getByText(/Encode a trace/)).toBeDefined());
+    fireEvent.click(screen.getByText(/Encode a trace/));
+    fireEvent.click(screen.getByRole('button', { name: 'Encode' }));
 
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/ne se rappelle pas/));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/cannot be recalled/));
   });
 
-  test('les filtres avancés sont repliés, et comptés une fois actifs', async () => {
+  test('advanced filters are collapsed, and counted once active', async () => {
     stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
-    fireEvent.change(screen.getByLabelText('Force minimale'), { target: { value: '70' } });
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
+    fireEvent.change(screen.getByLabelText('Minimum strength'), { target: { value: '70' } });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Filtres \(1\)/ })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Filters \(1\)/ })).toBeDefined());
   });
 
-  test('un filtre actif bascule la requête vers /search', async () => {
+  test('an active filter switches the query to /search', async () => {
     const calls = stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
-    fireEvent.change(screen.getByLabelText(/Réactivations minimales/), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
+    fireEvent.change(screen.getByLabelText(/Minimum recalls/), { target: { value: '2' } });
 
     await waitFor(() => expect(calls.some((c) => c.includes('minRecalls=2'))).toBe(true));
   });
 
-  test('effacer les filtres revient à la liste simple', async () => {
+  test('clearing the filters returns to the plain list', async () => {
     const calls = stubFetch({ '/memories': { success: true, memories: [memory()] }, '/search': { success: true, results: [] } });
 
     render(<TracesTab />);
     await waitFor(() => expect(screen.getByText(/race condition/)).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filtres/ }));
-    fireEvent.change(screen.getByLabelText('Force minimale'), { target: { value: '70' } });
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }));
+    fireEvent.change(screen.getByLabelText('Minimum strength'), { target: { value: '70' } });
     await waitFor(() => expect(calls.some((c) => c.includes('minSaillance=70'))).toBe(true));
 
-    fireEvent.click(screen.getByRole('button', { name: /Effacer/ }));
-    await waitFor(() => expect(screen.getByRole('button', { name: /^⚙️ Filtres$/ })).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /Clear filters/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^⚙️ Filters$/ })).toBeDefined());
   });
 });

@@ -4,9 +4,9 @@ import { freshStore } from './helpers/store.js';
 import { fakeClock, T0 } from './helpers/clock.js';
 
 /**
- * Phase 5.4 — surface HTTP de la mémoire prospective (story S5-04).
- * Le sous-routeur reçoit son store en paramètre : chaque test a sa DB `:memory:`,
- * rien ne touche `data/humemory.db`.
+ * Phase 5.4 — HTTP surface of prospective memory (story S5-04).
+ * The sub-router takes its store as a parameter: each test gets its own
+ * `:memory:` database, nothing touches `data/humemory.db`.
  */
 
 function setup() {
@@ -30,8 +30,8 @@ function setup() {
   return { clock, store, call, post };
 }
 
-describe('Validation des entrées', () => {
-  test('un triggerSpec bien formé passe', () => {
+describe('Input validation', () => {
+  test('a well-formed triggerSpec passes', () => {
     expect(validateTriggerSpec({ kind: 'time', at: '2026-12-01T00:00:00Z' })).toEqual({
       kind: 'time',
       at: '2026-12-01T00:00:00Z',
@@ -43,8 +43,8 @@ describe('Validation des entrées', () => {
     });
   });
 
-  test('un triggerSpec douteux est rejeté, pas stocké', () => {
-    // Stocker un spec invalide donnerait un cue qui ne réveille jamais rien.
+  test('a dubious triggerSpec is rejected, not stored', () => {
+    // Storing an invalid spec would give a cue that never wakes anything.
     expect(() => validateTriggerSpec(null)).toThrow();
     expect(() => validateTriggerSpec({ kind: 'time' })).toThrow(/at.*cron|cron/i);
     expect(() => validateTriggerSpec({ kind: 'time', at: 'pas une date' })).toThrow(/ISO/);
@@ -53,7 +53,7 @@ describe('Validation des entrées', () => {
     expect(() => validateTriggerSpec({ kind: 'autre' })).toThrow();
   });
 
-  test('les events sont validés par variante', () => {
+  test('events are validated per variant', () => {
     expect(validateAppEvent({ type: 'branch_switch', branch: 'main', directory: '/x' })).toMatchObject({
       type: 'branch_switch',
     });
@@ -62,7 +62,7 @@ describe('Validation des entrées', () => {
     expect(() => validateAppEvent({ type: 'inconnu', directory: '/x' })).toThrow();
   });
 
-  test('un commit sans message ni fichiers reste accepté', () => {
+  test('a commit with neither message nor files is still accepted', () => {
     expect(validateAppEvent({ type: 'commit', sha: 'abc', directory: '/x' })).toEqual({
       type: 'commit',
       sha: 'abc',
@@ -74,7 +74,7 @@ describe('Validation des entrées', () => {
 });
 
 describe('POST /intentions', () => {
-  test('arme une boucle et renvoie son identifiant court', async () => {
+  test('arms a loop and returns its short id', async () => {
     const { post } = setup();
     const { status, body } = await post('/intentions', {
       content: 'refactor la validation de token',
@@ -87,7 +87,7 @@ describe('POST /intentions', () => {
     expect(body.intention.loopId).toMatch(/^loop-[0-9a-f]{8}$/);
   });
 
-  test('arme les cues fournis dans la foulée', async () => {
+  test('arms the supplied cues in the same breath', async () => {
     const { post, call } = setup();
     const { body } = await post('/intentions', {
       content: 'x',
@@ -102,7 +102,7 @@ describe('POST /intentions', () => {
     expect(detail.body.cues.length).toBe(2);
   });
 
-  test('rejette une entrée incomplète en 400', async () => {
+  test('rejects incomplete input with a 400', async () => {
     const { post } = setup();
     expect((await post('/intentions', { directory: '/src' })).status).toBe(400);
     expect((await post('/intentions', { content: '   ', directory: '/src' })).status).toBe(400);
@@ -110,7 +110,7 @@ describe('POST /intentions', () => {
     expect((await post('/intentions', { content: 'x', directory: '/s', expiresAt: 'nope' })).status).toBe(400);
   });
 
-  test('un cue invalide fait échouer la création entière', async () => {
+  test('an invalid cue fails the whole creation', async () => {
     const { post, call } = setup();
     const res = await post('/intentions', {
       content: 'x',
@@ -119,16 +119,16 @@ describe('POST /intentions', () => {
     });
 
     expect(res.status).toBe(400);
-    // Rien ne doit avoir été créé à moitié.
+    // Nothing must have been half-created.
     expect((await call('/intentions')).body.count).toBe(0);
   });
 });
 
 describe('GET /intentions', () => {
-  test('filtre par statut et par répertoire', async () => {
+  test('filters by status and by directory', async () => {
     const { post, call } = setup();
-    await post('/intentions', { content: 'ici', directory: '/src/auth' });
-    const autre = await post('/intentions', { content: 'ailleurs', directory: '/autre' });
+    await post('/intentions', { content: 'here', directory: '/src/auth' });
+    const autre = await post('/intentions', { content: 'elsewhere', directory: '/other' });
     await post(`/intentions/${autre.body.intention.id}/close`);
 
     expect((await call('/intentions')).body.count).toBe(2);
@@ -137,7 +137,7 @@ describe('GET /intentions', () => {
     expect((await call('/intentions?directory=/src/auth')).body.count).toBe(1);
   });
 
-  test('un statut ou une limite hors bornes sort en 400', async () => {
+  test('an out-of-range status or limit answers 400', async () => {
     const { call } = setup();
     expect((await call('/intentions?status=zombie')).status).toBe(400);
     expect((await call('/intentions?limit=0')).status).toBe(400);
@@ -145,14 +145,14 @@ describe('GET /intentions', () => {
     expect((await call('/intentions?limit=abc')).status).toBe(400);
   });
 
-  test('404 sur une intention inconnue', async () => {
+  test('404 on an unknown intention', async () => {
     const { call } = setup();
     expect((await call('/intentions/inexistante')).status).toBe(404);
   });
 });
 
-describe('Fermeture et suppression', () => {
-  test('close enregistre le commit et annule les cues restants', async () => {
+describe('Closing and deleting', () => {
+  test('close records the commit and cancels remaining cues', async () => {
     const { post, call } = setup();
     const { body } = await post('/intentions', {
       content: 'x',
@@ -165,11 +165,11 @@ describe('Fermeture et suppression', () => {
     expect(closed.body.intention.closedByCommit).toBe('deadbee');
 
     const detail = await call(`/intentions/${body.intention.id}`);
-    // Un cue survivant à sa boucle réveillerait un fantôme.
+    // A cue outliving its loop would wake a ghost.
     expect(detail.body.cues.every((c: any) => c.status === 'cancelled')).toBe(true);
   });
 
-  test('fire force le réveil', async () => {
+  test('fire forces the wake-up', async () => {
     const { post } = setup();
     const { body } = await post('/intentions', { content: 'x', directory: '/src' });
 
@@ -178,7 +178,7 @@ describe('Fermeture et suppression', () => {
     expect(fired.body.intention.firedAt).not.toBeNull();
   });
 
-  test('delete emporte les cues en cascade', async () => {
+  test('delete takes the cues with it', async () => {
     const { post, call } = setup();
     const { body } = await post('/intentions', {
       content: 'x',
@@ -191,7 +191,7 @@ describe('Fermeture et suppression', () => {
     expect((await call('/cues')).body.count).toBe(0);
   });
 
-  test('close, fire et delete répondent 404 sur une boucle inconnue', async () => {
+  test('close, fire and delete answer 404 on an unknown loop', async () => {
     const { post, call } = setup();
     expect((await post('/intentions/nope/close')).status).toBe(404);
     expect((await post('/intentions/nope/fire')).status).toBe(404);
@@ -200,7 +200,7 @@ describe('Fermeture et suppression', () => {
 });
 
 describe('Cues', () => {
-  test('POST /cues attache un cue à une boucle existante', async () => {
+  test('POST /cues attaches a cue to an existing loop', async () => {
     const { post, call } = setup();
     const { body } = await post('/intentions', { content: 'x', directory: '/src' });
 
@@ -214,7 +214,7 @@ describe('Cues', () => {
     expect((await call('/cues?kind=time')).body.count).toBe(1);
   });
 
-  test('404 si la boucle visée n\'existe pas, 400 si le spec est invalide', async () => {
+  test('404 when the target loop does not exist, 400 when the spec is invalid', async () => {
     const { post } = setup();
     expect(
       (await post('/cues', { intentionId: 'nope', triggerSpec: { kind: 'time', at: '2026-01-01T00:00:00Z' } }))
@@ -227,14 +227,14 @@ describe('Cues', () => {
     );
   });
 
-  test('filtre kind invalide en 400', async () => {
+  test('an invalid kind filter answers 400', async () => {
     const { call } = setup();
     expect((await call('/cues?kind=magique')).status).toBe(400);
   });
 });
 
 describe('POST /events', () => {
-  test('un event réveille les boucles qui matchent', async () => {
+  test('an event wakes the loops that match', async () => {
     const { post } = setup();
     await post('/intentions', {
       content: 'refactor auth',
@@ -253,7 +253,7 @@ describe('POST /events', () => {
     expect(res.body.fired[0].status).toBe('fired');
   });
 
-  test('un event d\'un autre projet ne réveille rien', async () => {
+  test('an event from another project wakes nothing', async () => {
     const { post } = setup();
     await post('/intentions', {
       content: 'auth',
@@ -265,7 +265,7 @@ describe('POST /events', () => {
     expect(res.body.count).toBe(0);
   });
 
-  test('un event mal formé sort en 400', async () => {
+  test('a malformed event answers 400', async () => {
     const { post } = setup();
     expect((await post('/events', { type: 'file_open', directory: '/src' })).status).toBe(400);
     expect((await post('/events', {})).status).toBe(400);
@@ -273,21 +273,21 @@ describe('POST /events', () => {
 });
 
 describe('POST /cues/resolve', () => {
-  test('expire les périmées et tire les échéances atteintes', async () => {
+  test('expires overdue loops and fires deadlines that came due', async () => {
     const { clock, post } = setup();
 
     await post('/intentions', {
-      content: 'échéance',
+      content: 'deadline',
       directory: '/src',
       cues: [{ kind: 'time', at: new Date(T0.getTime() + 3600_000).toISOString() }],
     });
     await post('/intentions', {
-      content: 'périmée',
+      content: 'overdue',
       directory: '/src',
       expiresAt: new Date(T0.getTime() + 1800_000).toISOString(),
     });
 
-    // Rien n'est encore dû.
+    // Nothing is due yet.
     expect((await post('/cues/resolve')).body).toMatchObject({ expired: 0, count: 0 });
 
     clock.advanceHours(2);

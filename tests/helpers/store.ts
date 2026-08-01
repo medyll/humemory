@@ -3,8 +3,8 @@ import type { Clock } from '../../src/core/clock.js';
 import { fakeClock } from './clock.js';
 
 /**
- * Store hermétique : DB `:memory:`, aucune trace disque, aucun partage entre tests.
- * Horloge figée sur T0 par défaut — passe la tienne pour piloter le temps.
+ * Hermetic store: `:memory:` database, nothing on disk, nothing shared between
+ * tests. The clock is frozen at T0 by default — pass your own to drive time.
  *
  * ```ts
  * const clock = fakeClock();

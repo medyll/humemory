@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Claude Code stop hook — lit le transcript depuis stdin, stocke les apprentissages.
+ * Claude Code Stop hook — reads the transcript from stdin and stores the learnings.
  *
  * Usage dans Claude Code settings.json:
  * {
@@ -9,10 +9,10 @@
  *   }
  * }
  *
- * Variables d'environnement:
- *   HUMEMORY_DB     — chemin DB (défaut: data/humemory.db relatif au script)
- *   HUMEMORY_DIR    — répertoire projet (défaut: cwd)
- *   HUMEMORY_MAX    — max apprentissages par session (défaut: 5)
+ * Environment variables:
+ *   HUMEMORY_DB     — database path (default: data/humemory.db, relative to this script)
+ *   HUMEMORY_DIR    — project directory (default: cwd)
+ *   HUMEMORY_MAX    — max learnings per session (default: 5)
  */
 
 import { join, dirname } from 'path';
@@ -47,7 +47,7 @@ async function main() {
     });
 
     if (result.memoriesStored > 0) {
-      console.error(`[humemory] ${result.memoriesStored} apprentissage(s) mémorisé(s) — session ${result.sessionId}`);
+      console.error(`[humemory] ${result.memoriesStored} learning(s) stored — session ${result.sessionId}`);
     }
   } catch (err) {
     // Never block Claude Code — log to stderr only

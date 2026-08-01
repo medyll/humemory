@@ -124,11 +124,11 @@ and prints candidates. It never closes on a guess — closing the wrong loop cos
 more than leaving one open.
 
 ```
-💡 Boucles peut-être concernées par ce commit :
-   loop-e99166cd — Refactorer le middleware auth
-      recoupe : auth, middleware
+💡 Loops this commit may have touched:
+   loop-e99166cd — Refactor the auth middleware
+      overlaps: auth, middleware
 
-   Fermer : pnpm cli intent close loop-e99166cd
+   To close: pnpm cli intent close loop-e99166cd
 ```
 
 ### Wiring the Claude Code hooks
@@ -419,7 +419,7 @@ pnpm consolidate
 
 ## Concepts
 
-| Field | Human term | Meaning |
+| Field | Cognitive term (French, as in the code) | Meaning |
 |-------|-----------|---------|
 | `createdAt` | Encodage | trace formation |
 | `lastRecalled` | Dernière réactivation | last conscious retrieval |

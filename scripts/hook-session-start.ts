@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Claude Code SessionStart hook — écrit le contexte mnésique sur stdout.
+ * Claude Code SessionStart hook — writes the mnemonic context to stdout.
  *
- * Ce que Claude Code lit sur stdout est injecté dans le contexte de la session :
- * l'agent démarre en sachant quelles boucles il avait laissées ouvertes sur ce
- * projet, au lieu de devoir aller les chercher.
+ * Whatever Claude Code reads on stdout is injected into the session context: the
+ * agent starts out knowing which loops it left open on this project, instead of
+ * having to go looking for them.
  *
  * Usage dans Claude Code settings.json:
  * {
@@ -13,12 +13,12 @@
  *   }
  * }
  *
- * Variables d'environnement:
- *   HUMEMORY_DB              — chemin DB (défaut: data/humemory.db relatif au script)
- *   HUMEMORY_DIR             — répertoire projet (défaut: cwd)
- *   HUMEMORY_SESSION_BUDGET  — nb max d'éléments par section (défaut: 10)
- *   HUMEMORY_SAILLANCE_MIN   — seuil de saillance des traces rappelées (défaut: 60)
- *   HUMEMORY_VERBOSE         — '1' pour tracer sur stderr
+ * Environment variables:
+ *   HUMEMORY_DB              — database path (default: data/humemory.db, relative to this script)
+ *   HUMEMORY_DIR             — project directory (default: cwd)
+ *   HUMEMORY_SESSION_BUDGET  — max items per section (default: 10)
+ *   HUMEMORY_SAILLANCE_MIN   — salience floor for recalled traces (default: 60)
+ *   HUMEMORY_VERBOSE         — '1' to log on stderr
  */
 
 import { join, dirname } from 'path';
@@ -39,7 +39,7 @@ function positiveInt(raw: string | undefined, fallback: number): number {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
-/** Branche git courante, ou undefined hors dépôt — jamais une exception. */
+/** Current git branch, or undefined outside a repository — never an exception. */
 async function currentBranch(cwd: string): Promise<string | undefined> {
   try {
     const proc = Bun.spawn(['git', 'branch', '--show-current'], {
@@ -70,17 +70,17 @@ async function main() {
       saillanceThreshold: positiveInt(process.env.HUMEMORY_SAILLANCE_MIN, DEFAULT_SAILLANCE_THRESHOLD),
     });
 
-    // Rien de pertinent : on n'écrit rien, plutôt que de polluer le contexte.
+    // Nothing relevant: write nothing rather than pollute the context.
     if (context.markdown) process.stdout.write(context.markdown);
 
     if (VERBOSE) {
       console.error(
-        `[humemory] ${context.openLoops.length} boucle(s) ouverte(s), ` +
-          `${context.traces.length} trace(s), ${context.firedNow.length} échéance(s) atteinte(s)`
+        `[humemory] ${context.openLoops.length} open loop(s), ` +
+          `${context.traces.length} trace(s), ${context.firedNow.length} deadline(s) reached`
       );
     }
   } catch (err) {
-    // Un hook ne doit jamais bloquer une session : on log et on sort proprement.
+    // A hook must never block a session: log it and exit cleanly.
     console.error(`[humemory] session-start hook error: ${err}`);
   } finally {
     store?.close();

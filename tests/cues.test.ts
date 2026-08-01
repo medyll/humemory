@@ -17,8 +17,8 @@ import type { Intention, TriggerSpec } from '../src/core/types.js';
 
 /**
  * Phase 5.2 — cue resolver (story S5-02).
- * Tout est piloté par la FakeClock et l'InMemoryEventBus : aucune attente réelle,
- * aucun accès FS, aucun appel git.
+ * Everything is driven by the FakeClock and the InMemoryEventBus: no real waiting,
+ * no filesystem access, no git call.
  */
 
 function setup() {
@@ -29,71 +29,71 @@ function setup() {
 }
 
 describe('Cron — parsing', () => {
-  test('accepte les formes usuelles', () => {
-    expect(parseCron('0 9 * * 1')).not.toBeNull(); // lundi 9h
+  test('accepts the usual forms', () => {
+    expect(parseCron('0 9 * * 1')).not.toBeNull(); // Monday 9am
     expect(parseCron('*/15 * * * *')).not.toBeNull();
     expect(parseCron('0 0-6/2 1,15 * *')).not.toBeNull();
   });
 
-  test('rejette les expressions invalides sans lever', () => {
-    expect(parseCron('0 9 * *')).toBeNull(); // 4 champs
-    expect(parseCron('60 * * * *')).toBeNull(); // minute hors bornes
-    expect(parseCron('0 9 * * 9')).toBeNull(); // jour de semaine hors bornes
+  test('rejects invalid expressions without throwing', () => {
+    expect(parseCron('0 9 * *')).toBeNull(); // 4 fields
+    expect(parseCron('60 * * * *')).toBeNull(); // minute out of range
+    expect(parseCron('0 9 * * 9')).toBeNull(); // day of week out of range
     expect(parseCron('abc * * * *')).toBeNull();
-    expect(parseCron('*/0 * * * *')).toBeNull(); // pas de step nul
+    expect(parseCron('*/0 * * * *')).toBeNull(); // no zero step
   });
 
-  test('un cron invalide n\'est jamais dû, plutôt que de planter', () => {
-    expect(cronDueSince('pas du cron', T0, new Date(T0.getTime() + 86_400_000))).toBe(false);
+  test('an invalid cron is never due, rather than crashing', () => {
+    expect(cronDueSince('not cron at all', T0, new Date(T0.getTime() + 86_400_000))).toBe(false);
   });
 });
 
 describe('Cron — matching', () => {
   const lundi9h = parseCron('0 9 * * 1')!;
 
-  test('matche la minute exacte', () => {
-    // 2026-01-05 est un lundi.
+  test('matches the exact minute', () => {
+    // 2026-01-05 is a Monday.
     expect(cronMatches(lundi9h, new Date('2026-01-05T09:00:00Z'))).toBe(true);
     expect(cronMatches(lundi9h, new Date('2026-01-05T09:01:00Z'))).toBe(false);
-    expect(cronMatches(lundi9h, new Date('2026-01-06T09:00:00Z'))).toBe(false); // mardi
+    expect(cronMatches(lundi9h, new Date('2026-01-06T09:00:00Z'))).toBe(false); // Tuesday
   });
 
-  test('jour-du-mois et jour-de-semaine se combinent en OU (cron standard)', () => {
-    const parsed = parseCron('0 9 1 * 1')!; // le 1er du mois OU le lundi
-    expect(cronMatches(parsed, new Date('2026-01-01T09:00:00Z'))).toBe(true); // jeudi 1er
-    expect(cronMatches(parsed, new Date('2026-01-05T09:00:00Z'))).toBe(true); // lundi 5
+  test('day-of-month and day-of-week combine with OR (standard cron)', () => {
+    const parsed = parseCron('0 9 1 * 1')!; // the 1st of the month OR on a Monday
+    expect(cronMatches(parsed, new Date('2026-01-01T09:00:00Z'))).toBe(true); // Thursday the 1st
+    expect(cronMatches(parsed, new Date('2026-01-05T09:00:00Z'))).toBe(true); // Monday the 5th
     expect(cronMatches(parsed, new Date('2026-01-06T09:00:00Z'))).toBe(false);
   });
 
-  test('cronDueSince rattrape une occurrence manquée entre deux sessions', () => {
-    const since = new Date('2026-01-04T00:00:00Z'); // dimanche
-    const now = new Date('2026-01-05T18:00:00Z'); // lundi soir, 9h est passé
+  test('cronDueSince catches an occurrence missed between two sessions', () => {
+    const since = new Date('2026-01-04T00:00:00Z'); // Sunday
+    const now = new Date('2026-01-05T18:00:00Z'); // Monday evening, 9am has passed
     expect(cronDueSince('0 9 * * 1', since, now)).toBe(true);
   });
 
-  test('mais ne remonte pas au-delà de la fenêtre de rattrapage', () => {
+  test('but does not reach past the catch-up window', () => {
     const since = new Date('2025-01-01T00:00:00Z');
     const now = new Date('2026-01-05T18:00:00Z');
-    // L'occurrence de lundi dernier reste dans la fenêtre → due.
+    // Last Monday's occurrence is still inside the window, so it is due.
     expect(cronDueSince('0 9 * * 1', since, now)).toBe(true);
 
-    // Une occurrence annuelle, elle, tombe hors fenêtre.
+    // A yearly occurrence, however, falls outside it.
     expect(cronDueSince('0 9 1 7 *', since, now)).toBe(false);
     expect(CRON_CATCHUP_MINUTES).toBe(7 * 24 * 60);
   });
 
-  test('rien n\'est dû si la référence est postérieure à l\'occurrence', () => {
-    const since = new Date('2026-01-05T12:00:00Z'); // après 9h
+  test('nothing is due when the reference is later than the occurrence', () => {
+    const since = new Date('2026-01-05T12:00:00Z'); // after 9am
     const now = new Date('2026-01-05T18:00:00Z');
     expect(cronDueSince('0 9 * * 1', since, now)).toBe(false);
   });
 });
 
 describe('resolveTimeCues', () => {
-  test('un cue daté ne remonte qu\'une fois l\'échéance atteinte', async () => {
+  test('a dated cue only surfaces once its deadline is reached', async () => {
     const { clock, store, resolver } = setup();
     const at = new Date(T0.getTime() + 24 * 3600_000).toISOString();
-    await store.addIntention({ content: 'demain', directory: '/src' }, [{ kind: 'time', at }]);
+    await store.addIntention({ content: 'tomorrow', directory: '/src' }, [{ kind: 'time', at }]);
 
     expect(await resolver.resolveTimeCues()).toEqual([]);
 
@@ -103,7 +103,7 @@ describe('resolveTimeCues', () => {
     store.close();
   });
 
-  test('un cue dont l\'intention n\'est plus armed ne remonte pas', async () => {
+  test('a cue whose intention is no longer armed does not surface', async () => {
     const { clock, store, resolver } = setup();
     const i = await store.addIntention({ content: 'x', directory: '/src' }, [
       { kind: 'time', at: T0.toISOString() },
@@ -115,10 +115,10 @@ describe('resolveTimeCues', () => {
     store.close();
   });
 
-  test('une date invalide n\'est jamais due', async () => {
+  test('an invalid date is never due', async () => {
     const { clock, store, resolver } = setup();
     await store.addIntention({ content: 'x', directory: '/src' }, [
-      { kind: 'time', at: 'pas une date' },
+      { kind: 'time', at: 'not a date' },
     ]);
 
     clock.advanceDays(365);
@@ -126,7 +126,7 @@ describe('resolveTimeCues', () => {
     store.close();
   });
 
-  test('les cues événementiels ne sortent pas par la voie temporelle', async () => {
+  test('event cues do not come out through the time path', async () => {
     const { clock, store, resolver } = setup();
     await store.addIntention({ content: 'x', directory: '/src' }, [
       { kind: 'event', type: 'branch_switch', branch: 'main' },
@@ -139,7 +139,7 @@ describe('resolveTimeCues', () => {
 });
 
 describe('resolveEventCues', () => {
-  test('branch_switch matche à l\'identique', async () => {
+  test('branch_switch matches exactly', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'doc', directory: '/src' }, [
       { kind: 'event', type: 'branch_switch', branch: 'feature/x' },
@@ -155,7 +155,7 @@ describe('resolveEventCues', () => {
     store.close();
   });
 
-  test('file_open matche le chemin exact ou en suffixe', async () => {
+  test('file_open matches the exact path or a suffix', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'refactor', directory: '/src/auth' }, [
       { kind: 'event', type: 'file_open', path: 'src/auth/service.ts' },
@@ -166,24 +166,24 @@ describe('resolveEventCues', () => {
       path: 'src/auth/service.ts',
       directory: '/src/auth',
     });
-    const absolu = await resolver.resolveEventCues({
+    const absolute = await resolver.resolveEventCues({
       type: 'file_open',
       path: '/home/dev/projet/src/auth/service.ts',
       directory: '/src/auth',
     });
-    const autre = await resolver.resolveEventCues({
+    const other = await resolver.resolveEventCues({
       type: 'file_open',
       path: 'src/auth/other.ts',
       directory: '/src/auth',
     });
 
     expect(exact.length).toBe(1);
-    expect(absolu.length).toBe(1);
-    expect(autre.length).toBe(0);
+    expect(absolute.length).toBe(1);
+    expect(other.length).toBe(0);
     store.close();
   });
 
-  test('les séparateurs Windows matchent comme les POSIX', async () => {
+  test('Windows separators match like POSIX ones', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'x', directory: '/src/auth' }, [
       { kind: 'event', type: 'file_open', path: 'src/auth/service.ts' },
@@ -198,12 +198,12 @@ describe('resolveEventCues', () => {
     store.close();
   });
 
-  test('error_pattern accepte une regex, et retombe en littéral si elle est invalide', async () => {
+  test('error_pattern accepts a regex, and falls back to a literal when invalid', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'regex', directory: '/src' }, [
       { kind: 'event', type: 'error_pattern', pattern: 'SQLITE_(BUSY|LOCKED)' },
     ]);
-    await store.addIntention({ content: 'littéral', directory: '/src' }, [
+    await store.addIntention({ content: 'literal', directory: '/src' }, [
       { kind: 'event', type: 'error_pattern', pattern: 'segfault((' },
     ]);
 
@@ -212,40 +212,40 @@ describe('resolveEventCues', () => {
       text: 'Error: SQLITE_BUSY: database is locked',
       directory: '/src',
     });
-    const litteral = await resolver.resolveEventCues({
+    const literal = await resolver.resolveEventCues({
       type: 'error_pattern',
       text: 'boom: segfault(( at 0x0',
       directory: '/src',
     });
 
     expect(regex.length).toBe(1);
-    expect(litteral.length).toBe(1); // pattern invalide → recherche littérale, pas de crash
+    expect(literal.length).toBe(1); // invalid pattern falls back to a literal search, no crash
     store.close();
   });
 
-  test('un event venu d\'un autre lieu mental ne réveille rien', async () => {
+  test('an event from another mental place wakes nothing', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'auth', directory: '/src/auth' }, [
       { kind: 'event', type: 'branch_switch', branch: 'main' },
     ]);
 
-    const ailleurs = await resolver.resolveEventCues({
+    const elsewhere = await resolver.resolveEventCues({
       type: 'branch_switch',
       branch: 'main',
       directory: '/autre/projet',
     });
-    const sousDossier = await resolver.resolveEventCues({
+    const subdirectory = await resolver.resolveEventCues({
       type: 'branch_switch',
       branch: 'main',
       directory: '/src/auth/middleware',
     });
 
-    expect(ailleurs.length).toBe(0); // DB partagée entre projets : pas de fuite
-    expect(sousDossier.length).toBe(1);
+    expect(elsewhere.length).toBe(0); // database shared across projects: no leak
+    expect(subdirectory.length).toBe(1);
     store.close();
   });
 
-  test('un commit ne réveille aucune intention — il les ferme (S5-03b)', async () => {
+  test('a commit wakes no intention — it closes them (S5-03b)', async () => {
     const { store, resolver } = setup();
     await store.addIntention({ content: 'x', directory: '/src' }, [
       { kind: 'event', type: 'file_open', path: 'src/a.ts' },
@@ -264,7 +264,7 @@ describe('resolveEventCues', () => {
 });
 
 describe('fire', () => {
-  test('marque cue et intention comme firés', async () => {
+  test('marks cue and intention as fired', async () => {
     const { clock, store, resolver } = setup();
     const i = await store.addIntention({ content: 'x', directory: '/src' }, [
       { kind: 'time', at: T0.toISOString() },
@@ -280,9 +280,9 @@ describe('fire', () => {
     store.close();
   });
 
-  test('un cue cron est ré-armé après tir — sinon la récurrence est un one-shot', async () => {
+  test('a cron cue is re-armed after firing — otherwise the recurrence is a one-shot', async () => {
     const { clock, store, resolver } = setup();
-    const i = await store.addIntention({ content: 'hebdo', directory: '/src' }, [
+    const i = await store.addIntention({ content: 'weekly', directory: '/src' }, [
       { kind: 'time', cron: '0 9 * * 1' },
     ]);
     const [cue] = await store.listCues({ intentionId: i.id });
@@ -291,14 +291,14 @@ describe('fire', () => {
     await resolver.fire(cue.id);
 
     const after = await store.getCue(cue.id);
-    expect(after!.status).toBe('armed'); // toujours armé pour la semaine suivante
-    expect(after!.firedAt).not.toBeUndefined(); // mais le tir est enregistré
+    expect(after!.status).toBe('armed'); // still armed for the following week
+    expect(after!.firedAt).not.toBeUndefined(); // but the firing is recorded
     store.close();
   });
 
-  test('un cron ne re-remonte pas dans la même minute, mais remonte la semaine d\'après', async () => {
+  test('a cron does not surface twice in the same minute, but does the week after', async () => {
     const { clock, store, resolver } = setup();
-    const i = await store.addIntention({ content: 'hebdo', directory: '/src' }, [
+    const i = await store.addIntention({ content: 'weekly', directory: '/src' }, [
       { kind: 'time', cron: '0 9 * * 1' },
     ]);
     const [cue] = await store.listCues({ intentionId: i.id });
@@ -306,18 +306,18 @@ describe('fire', () => {
     clock.set('2026-01-05T09:00:00Z');
     expect((await resolver.resolveTimeCues()).length).toBe(1);
     await resolver.fire(cue.id);
-    // L'intention est passée à fired → plus de réveil tant qu'elle n'est pas re-armée.
+    // The intention moved to fired: no more wake-ups until it is re-armed.
     expect((await resolver.resolveTimeCues()).length).toBe(0);
 
     await store.updateIntentionStatus(i.id, 'armed');
-    expect((await resolver.resolveTimeCues()).length).toBe(0); // même minute, déjà tiré
+    expect((await resolver.resolveTimeCues()).length).toBe(0); // same minute, already fired
 
-    clock.set('2026-01-12T09:00:00Z'); // lundi suivant
+    clock.set('2026-01-12T09:00:00Z'); // the following Monday
     expect((await resolver.resolveTimeCues()).length).toBe(1);
     store.close();
   });
 
-  test('firer un cue inconnu lève', async () => {
+  test('firing an unknown cue throws', async () => {
     const { store, resolver } = setup();
     await expect(resolver.fire('inexistant')).rejects.toThrow(/not found/);
     store.close();
@@ -325,47 +325,47 @@ describe('fire', () => {
 });
 
 describe('expireStale', () => {
-  test('passe en expired les intentions dont la deadline est dépassée, et annule leurs cues', async () => {
+  test('expires intentions past their deadline and cancels their cues', async () => {
     const { clock, store, resolver } = setup();
     const seeded = await seedIntentions(store, { now: clock.now() });
 
-    expect(await resolver.expireStale()).toBe(0); // rien n'est encore périmé
+    expect(await resolver.expireStale()).toBe(0); // nothing is overdue yet
 
-    clock.advanceHours(2); // expired-loop expire à +1h
+    clock.advanceHours(2); // expired-loop expires at +1h
     expect(await resolver.expireStale()).toBe(1);
 
-    const expiree = await store.getIntention(seeded['expired-loop'].id);
-    expect(expiree!.status).toBe('expired');
+    const expired = await store.getIntention(seeded['expired-loop'].id);
+    expect(expired!.status).toBe('expired');
 
-    const cues = await store.listCues({ intentionId: expiree!.id });
-    expect(cues.every((c) => c.status === 'cancelled')).toBe(true); // pas de réveil fantôme
+    const cues = await store.listCues({ intentionId: expired!.id });
+    expect(cues.every((c) => c.status === 'cancelled')).toBe(true); // no ghost wake-up
     store.close();
   });
 
-  test('une intention sans deadline n\'expire jamais', async () => {
+  test('an intention with no deadline never expires', async () => {
     const { clock, store, resolver } = setup();
-    await store.addIntention({ content: 'sans deadline', directory: '/src' });
+    await store.addIntention({ content: 'no deadline', directory: '/src' });
 
     clock.advanceDays(3650);
     expect(await resolver.expireStale()).toBe(0);
     store.close();
   });
 
-  test('expireStale est idempotent', async () => {
+  test('expireStale is idempotent', async () => {
     const { clock, store, resolver } = setup();
     await store.addIntention({
-      content: 'périmée',
+      content: 'overdue',
       directory: '/src',
       expiresAt: new Date(T0.getTime() + 3600_000),
     });
 
     clock.advanceHours(2);
     expect(await resolver.expireStale()).toBe(1);
-    expect(await resolver.expireStale()).toBe(0); // second passage : plus rien à faire
+    expect(await resolver.expireStale()).toBe(0); // second pass: nothing left to do
     store.close();
   });
 
-  test('un cue expiré ne remonte plus', async () => {
+  test('an expired cue no longer surfaces', async () => {
     const { clock, store, resolver } = setup();
     await store.addIntention(
       { content: 'x', directory: '/src', expiresAt: new Date(T0.getTime() + 3600_000) },
@@ -379,16 +379,16 @@ describe('expireStale', () => {
   });
 });
 
-describe('Règles décay × intention', () => {
-  test('armed → saillance figée à 100, quel que soit le temps écoulé', async () => {
+describe('Decay rules for intentions', () => {
+  test('armed → salience pinned at 100, however much time passes', async () => {
     const { store } = setup();
-    const i = await store.addIntention({ content: 'boucle ouverte', directory: '/src' });
+    const i = await store.addIntention({ content: 'open loop', directory: '/src' });
 
     expect(intentionSaillance(i, new Date(T0.getTime() + 365 * 86_400_000))).toBe(100);
     store.close();
   });
 
-  test('fired non closed → décline avec le temps (Zeigarnik qui faiblit)', async () => {
+  test('fired and not closed → declines over time (the Zeigarnik pull fading)', async () => {
     const { clock, store, resolver } = setup();
     const i = await store.addIntention({ content: 'x', directory: '/src' }, [
       { kind: 'time', at: T0.toISOString() },
@@ -402,7 +402,7 @@ describe('Règles décay × intention', () => {
     store.close();
   });
 
-  test('closed et expired → 0, archivées', async () => {
+  test('closed and expired → 0, archived', async () => {
     const { store } = setup();
     const base = await store.addIntention({ content: 'x', directory: '/src' });
 
@@ -415,19 +415,19 @@ describe('Règles décay × intention', () => {
   });
 });
 
-describe('Branchement sur l\'event bus', () => {
-  test('publier un event réveille les intentions qui matchent', async () => {
+describe('Wiring onto the event bus', () => {
+  test('publishing an event wakes the intentions that match', async () => {
     const { store, resolver } = setup();
     const bus = new InMemoryEventBus();
-    const reveillees: string[] = [];
+    const woken: string[] = [];
 
     const detach = attachResolverToBus(bus, resolver, {
       onFired: (intention) => {
-        reveillees.push(intention.content);
+        woken.push(intention.content);
       },
     });
 
-    await store.addIntention({ content: 'documenter le resolver', directory: '/src' }, [
+    await store.addIntention({ content: 'document the resolver', directory: '/src' }, [
       { kind: 'event', type: 'branch_switch', branch: 'feature/prospective-memory' },
     ]);
 
@@ -437,15 +437,15 @@ describe('Branchement sur l\'event bus', () => {
       directory: '/src',
     });
 
-    // publish() attend ses handlers : l'effet est observable ici, sans setTimeout.
-    expect(reveillees).toEqual(['documenter le resolver']);
+    // publish() awaits its handlers: the effect is observable here, no setTimeout.
+    expect(woken).toEqual(['document the resolver']);
     expect((await store.listIntentions({ status: 'fired' })).length).toBe(1);
 
     detach();
     store.close();
   });
 
-  test('après détachement, plus rien ne se réveille', async () => {
+  test('after detaching, nothing wakes any more', async () => {
     const { store, resolver } = setup();
     const bus = new InMemoryEventBus();
     const detach = attachResolverToBus(bus, resolver);
@@ -461,7 +461,7 @@ describe('Branchement sur l\'event bus', () => {
     store.close();
   });
 
-  test('bout-en-bout : boucle ouverte sur fixture, réveillée par un file_open', async () => {
+  test('end to end: a fixture open loop, woken by a file_open', async () => {
     const { store, resolver } = setup();
     const bus = new InMemoryEventBus();
     attachResolverToBus(bus, resolver);
@@ -474,11 +474,11 @@ describe('Branchement sur l\'event bus', () => {
       directory: '/src/auth',
     });
 
-    const reveillee = await store.getIntention(seeded['refactor-auth'].id);
-    expect(reveillee!.status).toBe('fired');
-    expect(reveillee!.firedAt).not.toBeUndefined();
+    const awoken = await store.getIntention(seeded['refactor-auth'].id);
+    expect(awoken!.status).toBe('fired');
+    expect(awoken!.firedAt).not.toBeUndefined();
 
-    // Les autres boucles dorment toujours.
+    // The other loops are still asleep.
     expect((await store.listIntentions({ status: 'armed' })).length).toBe(3);
     store.close();
   });

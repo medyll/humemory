@@ -18,7 +18,7 @@ const VALID_RESPONSE = JSON.stringify({
 });
 
 describe('generateMemoryLevels', () => {
-  test('génère 3 niveaux depuis le contenu', async () => {
+  test('generates 3 levels from the content', async () => {
     const client = makeMockClient(VALID_RESPONSE);
     const result = await generateMemoryLevels(
       'I implemented an authentication system using OAuth2 with JWT tokens and refresh rotation.',
@@ -43,7 +43,7 @@ describe('generateMemoryLevels', () => {
     expect(result.level1Summary.length).toBeGreaterThan(0);
   });
 
-  test('passe le type episodic dans le prompt', async () => {
+  test('passes the episodic type into the prompt', async () => {
     let capturedParams: any;
     const client: LLMClient = {
       messages: {
@@ -55,10 +55,10 @@ describe('generateMemoryLevels', () => {
     };
 
     await generateMemoryLevels('test content', 'episodic', client);
-    expect(capturedParams.messages[0].content).toContain('événement vécu');
+    expect(capturedParams.messages[0].content).toContain('a lived event');
   });
 
-  test('passe le type procedural dans le prompt', async () => {
+  test('passes the procedural type into the prompt', async () => {
     let capturedParams: any;
     const client: LLMClient = {
       messages: {
@@ -70,12 +70,12 @@ describe('generateMemoryLevels', () => {
     };
 
     await generateMemoryLevels('test content', 'procedural', client);
-    expect(capturedParams.messages[0].content).toContain('savoir-faire');
+    expect(capturedParams.messages[0].content).toContain('know-how');
   });
 });
 
 describe('SQLiteStore + autoGenerate', () => {
-  test('auto-génère les niveaux si option activée', async () => {
+  test('auto-generates the levels when the option is on', async () => {
     const { setLLMClient } = await import('../src/core/llm-generator.js');
     setLLMClient(makeMockClient(VALID_RESPONSE));
 
@@ -105,7 +105,7 @@ describe('SQLiteStore + autoGenerate', () => {
     try { rmSync(db); } catch {}
   });
 
-  test('ne génère pas si level1Summary déjà fourni', async () => {
+  test('does not generate when level1Summary is already provided', async () => {
     const { setLLMClient } = await import('../src/core/llm-generator.js');
     let called = false;
     setLLMClient({

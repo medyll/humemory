@@ -1,9 +1,9 @@
 {
-  "$comment": "Boucles ouvertes (effet Zeigarnik) pour la mémoire prospective. Les dates sont relatives à T0 via expiresInHours — jamais de timestamp absolu. Les cues sont déclarés inline et armés avec l'intention.",
+  "$comment": "Open loops (Zeigarnik effect) for prospective memory. Dates are relative to T0 through expiresInHours — never an absolute timestamp. Cues are declared inline and armed together with their intention.",
   "intentions": [
     {
       "key": "refactor-auth",
-      "content": "Refactorer la validation de token dans le middleware d'auth — le off-by-one est corrigé mais la fonction reste illisible.",
+      "content": "Refactor the token validation in the auth middleware — the off-by-one is fixed but the function is still unreadable.",
       "directory": "/src/auth",
       "expiresInHours": 168,
       "cues": [
@@ -12,14 +12,14 @@
     },
     {
       "key": "bench-decay",
-      "content": "Mesurer le coût d'updateDecay() sur 10k traces avant d'ouvrir la Phase 6.",
+      "content": "Measure the cost of updateDecay() over 10k traces before opening Phase 6.",
       "directory": "/src/core",
       "expiresInHours": 720,
       "cues": [{ "kind": "time", "at": "2026-01-08T09:00:00.000Z" }]
     },
     {
       "key": "doc-prospective",
-      "content": "Documenter le modèle intentions/cues dans AGENTS.md une fois le resolver livré.",
+      "content": "Document the intentions/cues model in AGENTS.md once the resolver ships.",
       "directory": "/docs",
       "cues": [
         { "kind": "event", "type": "branch_switch", "branch": "feature/prospective-memory" },
@@ -28,7 +28,7 @@
     },
     {
       "key": "expired-loop",
-      "content": "Boucle déjà périmée : sert à tester expireStale() sans fabriquer de date à la main.",
+      "content": "Already overdue loop: exercises expireStale() without hand-crafting a date.",
       "directory": "/src/core",
       "expiresInHours": 1,
       "cues": [{ "kind": "time", "at": "2026-01-01T00:30:00.000Z" }]

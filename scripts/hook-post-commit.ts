@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
- * Git post-commit hook — ferme les boucles que ce commit a purgées.
+ * Git post-commit hook — closes the loops this commit purged.
  *
- * Installation :
+ * Install with:
  *   git config core.hooksPath .githooks
  *
- * `.githooks/post-commit` appelle ce script. Il ne ferme automatiquement que
- * les boucles citées explicitement (`Closes loop-a1b2c3d4`) ; le reste est
- * proposé, jamais appliqué.
+ * `.githooks/post-commit` calls this script. It only closes loops named
+ * explicitly (`Closes loop-a1b2c3d4`); everything else is suggested, never
+ * applied.
  *
- * Variables d'environnement :
- *   HUMEMORY_DB   — chemin DB (défaut: data/humemory.db relatif au script)
- *   HUMEMORY_DIR  — lieu mental (défaut: racine du dépôt git)
+ * Environment variables:
+ *   HUMEMORY_DB   — database path (default: data/humemory.db, relative to this script)
+ *   HUMEMORY_DIR  — mental place (default: the git repository root)
  */
 
 import { join, dirname } from 'path';
@@ -24,7 +24,7 @@ const __dirname = dirname(__filename);
 
 const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../data/humemory.db');
 
-/** Exécute une commande git, renvoie stdout ou null si elle échoue. */
+/** Runs a git command, returning stdout or null when it fails. */
 async function git(args: string[]): Promise<string | null> {
   try {
     const proc = Bun.spawn(['git', ...args], { stdout: 'pipe', stderr: 'ignore' });
@@ -35,7 +35,7 @@ async function git(args: string[]): Promise<string | null> {
   }
 }
 
-/** Décrit le commit qui vient d'être créé. Null si on n'est pas dans un dépôt. */
+/** Describes the commit just created. Null when not inside a repository. */
 async function lastCommit(): Promise<CommitInfo | null> {
   const sha = await git(['rev-parse', 'HEAD']);
   if (!sha) return null;
@@ -43,7 +43,7 @@ async function lastCommit(): Promise<CommitInfo | null> {
   const message = (await git(['log', '-1', '--pretty=%B'])) ?? '';
   const root = (await git(['rev-parse', '--show-toplevel'])) ?? process.cwd();
 
-  // Fichiers du commit. Un commit initial n'a pas de parent : --root couvre le cas.
+  // Files in the commit. An initial commit has no parent; this form covers it.
   const raw = await git(['show', '--name-only', '--pretty=format:', '--no-renames', sha]);
   const files = (raw ?? '').split('\n').map((f) => f.trim()).filter(Boolean);
 
@@ -60,7 +60,7 @@ async function main() {
 
   try {
     const commit = await lastCommit();
-    if (!commit) return; // pas un dépôt git : rien à faire
+    if (!commit) return; // not a git repository: nothing to do
 
     store = new SQLiteStore(DB_PATH);
     const result = await applyCommitToLoops(store, commit);
@@ -68,7 +68,7 @@ async function main() {
     const report = renderCommitReport(result);
     if (report) process.stdout.write(`\n${report}`);
   } catch (err) {
-    // Un hook git ne doit jamais faire échouer un commit déjà écrit.
+    // A git hook must never fail a commit that is already written.
     console.error(`[humemory] post-commit hook error: ${err}`);
   } finally {
     store?.close();

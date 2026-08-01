@@ -10,8 +10,8 @@ describe('humemory', () => {
   let store: SQLiteStore;
   let clock: FakeClock;
 
-  // DB `:memory:` et horloge figée : plus de fichier temporaire à nettoyer,
-  // plus de dépendance à l'heure système (docs/TESTING.md, piliers 1 et 2).
+  // `:memory:` database and a frozen clock: no temporary file to clean up and no
+  // dependency on the system time (docs/TESTING.md, pillars 1 and 2).
   beforeEach(() => {
     clock = fakeClock();
     store = freshStore({ clock });
@@ -22,7 +22,7 @@ describe('humemory', () => {
   });
 
   describe('add & get', () => {
-    test('ajoute et récupère un souvenir', async () => {
+    test('adds and retrieves a memory', async () => {
       const memory = await store.add({
         content: 'Test memory content',
         directory: '/test/project',
@@ -41,19 +41,19 @@ describe('humemory', () => {
       expect(retrieved?.content).toBe('Test memory content');
     });
 
-    test('crée les niveaux de dégradation', async () => {
+    test('creates the decay levels', async () => {
       const memory = await store.add({
         content: 'Long content for testing degradation levels',
         directory: '/test',
         day: '2026-04-25',
         keywords: ['test'],
         sessionId: 's1',
-        level1Summary: 'Résumé du test',
+        level1Summary: 'Test summary',
         level2Essential: 'Essentiel',
         level3Keywords: 'test keywords',
       });
 
-      expect(memory.level1Summary).toBe('Résumé du test');
+      expect(memory.level1Summary).toBe('Test summary');
       expect(memory.level2Essential).toBe('Essentiel');
       expect(memory.level3Keywords).toBe('test keywords');
     });
@@ -81,7 +81,7 @@ describe('humemory', () => {
       expect(results[0].memory.id).toBe(memory.id);
     });
 
-    test('recherche inversée : match sur niveau dégradé', async () => {
+    test('inverse search: matching on a degraded level', async () => {
       const memory = await store.add({
         content: 'Detailed notes about the CSS grid system and flexbox layouts',
         directory: '/css-project',
@@ -91,7 +91,7 @@ describe('humemory', () => {
         level3Keywords: 'css grid flexbox layout',
       });
 
-      // Recherche sur les mots-clés (niveau 3)
+      // Search over the keywords (level 3)
       const results = await store.search({
         query: 'css',
         maxLevel: 3,
@@ -152,10 +152,10 @@ describe('humemory', () => {
   });
 
   describe('decay', () => {
-    test('calcule le niveau de dégradation', () => {
+    test('computes the decay level', () => {
       const now = new Date();
       
-      // Souvenir frais (créé maintenant)
+      // Fresh memory (created now)
       const fresh: Memory = {
         id: '1',
         content: 'test',
@@ -190,7 +190,7 @@ describe('humemory', () => {
       };
 
       const saillance = calculateSaillance(memory);
-      expect(saillance).toBeGreaterThan(50); // Bonus pour rappels + émotion
+      expect(saillance).toBeGreaterThan(50); // Bonus for recalls plus emotion
     });
 
     test('calcule le decay rate', () => {
@@ -263,7 +263,7 @@ describe('humemory', () => {
   });
 
   describe('photographic mode', () => {
-    test('encode --photographic désactive la dégradation', async () => {
+    test('encode --photographic disables decay', async () => {
       const memory = await store.add({
         content: 'Critical architecture decision: use event sourcing',
         directory: '/arch',
@@ -274,7 +274,7 @@ describe('humemory', () => {
       });
 
       expect(memory.photographic).toBe(true);
-      // calculateDecayLevel doit retourner 0 même si ancienne
+      // calculateDecayLevel must return 0 even for an old trace
       const { calculateDecayLevel } = await import('../src/core/decay.js');
       const futureDate = new Date('2030-01-01');
       expect(calculateDecayLevel(memory, futureDate)).toBe(0);
@@ -297,7 +297,7 @@ describe('humemory', () => {
       expect(disabled.photographic).toBe(false);
     });
 
-    test('mode photographic protège contre updateDecay', async () => {
+    test('photographic mode protects against updateDecay', async () => {
       const memory = await store.add({
         content: 'Photographic memory must never decay',
         directory: '/test',
@@ -447,7 +447,7 @@ describe('projectDecayCurve', () => {
   const trace = (overrides: Partial<Memory> = {}): Memory =>
     ({
       id: 'p1',
-      content: 'trace projetée',
+      content: 'projected trace',
       directory: '/src',
       day: '2026-01-01',
       keywords: ['a'],
@@ -461,7 +461,7 @@ describe('projectDecayCurve', () => {
       ...overrides,
     }) as Memory;
 
-  test('échantillonne toutes les 6h sur la durée demandée', () => {
+  test('samples every 6h across the requested span', () => {
     const curve = projectDecayCurve(trace(), 30);
 
     expect(curve[0].hoursElapsed).toBe(0);
@@ -469,7 +469,7 @@ describe('projectDecayCurve', () => {
     expect(curve.at(-1)!.hoursElapsed).toBe(30 * 24);
   });
 
-  test('la courbe descend : le niveau ne remonte jamais spontanément', () => {
+  test('the curve only goes down: the level never climbs back on its own', () => {
     const curve = projectDecayCurve(trace(), 90);
 
     for (let i = 1; i < curve.length; i++) {
@@ -478,14 +478,14 @@ describe('projectDecayCurve', () => {
     expect(curve.at(-1)!.level).toBeGreaterThan(curve[0].level);
   });
 
-  test('une trace photographique reste à plat', () => {
+  test('a photographic trace stays flat', () => {
     const curve = projectDecayCurve(trace({ photographic: true }), 365);
     expect(curve.every((p) => p.level === 0)).toBe(true);
   });
 
-  test('elle échantillonne les mêmes règles que le store, pas une copie', () => {
-    // Garde-fou anti-divergence : c'est précisément la duplication que le
-    // portage du front a supprimée.
+  test('it samples the same rules the store uses, not a copy', () => {
+    // Anti-divergence guard: this is exactly the duplication the front-end port
+    // removed.
     const memory = trace();
     for (const point of projectDecayCurve(memory, 10)) {
       expect(point.level).toBe(calculateDecayLevel(memory, point.time));

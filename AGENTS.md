@@ -19,7 +19,7 @@ humemory has two halves. The first is built. The second is the direction
    open loops that stay salient until a `commit` closes them, and context-triggered
    **scripts**. A memory that resurfaces *before* it is queried. See **Phase 5**.
 
-The conceptual source for the prospective half is `SCRATCHPAD.md` (mémoire
+The conceptual source for the prospective half is `SCRATCHPAD.md` (memoire
 prospective, scripts cognitifs, effet Zeigarnik).
 
 ---
@@ -76,7 +76,7 @@ data/humemory.db          # shared DB (created on first run)
 
 ## 🧠 Concepts (cognitive-neuroscience naming)
 
-| Field | Human term | Meaning |
+| Field | Cognitive term (French, as in the code) | Meaning |
 |-------|-----------|---------|
 | `createdAt` | Encodage | trace formation |
 | `lastRecalled` | Dernière réactivation | last conscious retrieval |

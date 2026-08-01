@@ -15,8 +15,8 @@ import type { Intention } from '../src/core/types.js';
 
 /**
  * Phase 5.3.2 — fermeture des boucles par commit (story S5-03b).
- * Aucun appel à git ici : on injecte un CommitInfo. Le script se charge de
- * l'interroger, ce module ne fait que décider.
+ * No git call here: a CommitInfo is injected. The script queries git; this module
+ * only decides.
  */
 
 const DIR = '/repo/projet';
@@ -30,7 +30,7 @@ function setup() {
 function commit(overrides: Partial<CommitInfo> = {}): CommitInfo {
   return {
     sha: 'deadbee',
-    message: 'chore: rien de spécial',
+    message: 'chore: nothing special',
     files: [],
     directory: DIR,
     ...overrides,
@@ -38,35 +38,35 @@ function commit(overrides: Partial<CommitInfo> = {}): CommitInfo {
 }
 
 describe('Tokenisation', () => {
-  test('ignore la casse, les accents et les mots trop courts', () => {
-    expect(tokenize('Refactorer la VALIDATION dé token')).toEqual(['refactorer', 'validation', 'token']);
+  test('ignores case, accents and words that are too short', () => {
+    expect(tokenize('Refactor the token VALIDATION layer')).toEqual(['refactor', 'token', 'validation', 'layer']);
   });
 
-  test('écarte les mots trop fréquents pour signaler quoi que ce soit', () => {
-    // 'src', 'index', 'test' apparaissent partout : les garder ferait matcher tout avec tout.
+  test('drops words too common to signal anything', () => {
+    // 'src', 'index', 'test' appear everywhere: keeping them would match everything with everything.
     expect(tokenize('src index test middleware')).toEqual(['middleware']);
   });
 
-  test('un chemin donne ses segments, sans extension', () => {
+  test('a path yields its segments, without the extension', () => {
     expect(tokenizePath('src/auth/service.ts')).toEqual(['auth', 'service']);
     expect(tokenizePath('D:\\repo\\src\\auth\\middleware.ts')).toContain('middleware');
   });
 });
 
-describe('Score de recoupement', () => {
-  test('recoupe le contenu de la boucle et les fichiers touchés', () => {
-    const intention = { content: 'Refactorer le middleware auth' } as Intention;
+describe('Overlap score', () => {
+  test('overlaps the loop content with the files touched', () => {
+    const intention = { content: 'Refactor the auth middleware' } as Intention;
     expect(scoreOverlap(intention, ['src/auth/middleware.ts']).sort()).toEqual(['auth', 'middleware']);
   });
 
-  test('aucun recoupement sur des fichiers étrangers', () => {
-    const intention = { content: 'Refactorer le middleware auth' } as Intention;
+  test('no overlap on unrelated files', () => {
+    const intention = { content: 'Refactor the auth middleware' } as Intention;
     expect(scoreOverlap(intention, ['docs/readme.md'])).toEqual([]);
   });
 });
 
-describe('Fermeture explicite', () => {
-  test('"Closes loop-<id>" ferme la boucle et enregistre le SHA', async () => {
+describe('Explicit closing', () => {
+  test('"Closes loop-<id>" closes the loop and records the SHA', async () => {
     const { store } = setup();
     const i = await store.addIntention({ content: 'refactor auth', directory: DIR });
 
@@ -81,7 +81,7 @@ describe('Fermeture explicite', () => {
     expect(closed!.closedByCommit).toBe('cafe123');
   });
 
-  test('les cues restants sont annulés — pas de réveil fantôme', async () => {
+  test('remaining cues are cancelled — no ghost wake-up', async () => {
     const { store } = setup();
     const i = await store.addIntention({ content: 'x', directory: DIR }, [
       { kind: 'event', type: 'file_open', path: 'src/a.ts' },
@@ -94,31 +94,31 @@ describe('Fermeture explicite', () => {
     expect(cues.every((c) => c.status === 'cancelled')).toBe(true);
   });
 
-  test('plusieurs boucles peuvent être fermées d\'un coup', async () => {
+  test('several loops can be closed at once', async () => {
     const { store } = setup();
     const a = await store.addIntention({ content: 'a', directory: DIR });
     const b = await store.addIntention({ content: 'b', directory: DIR });
 
     const result = await applyCommitToLoops(
       store,
-      commit({ message: `feat: gros morceau\n\nCloses ${loopId(a.id)}\nCloses ${loopId(b.id)}` })
+      commit({ message: `feat: big one\n\nCloses ${loopId(a.id)}\nCloses ${loopId(b.id)}` })
     );
 
     expect(result.closed.length).toBe(2);
     expect((await store.listIntentions({ status: 'armed' })).length).toBe(0);
   });
 
-  test('un marqueur explicite traverse les projets — l\'auteur sait ce qu\'il ferme', async () => {
+  test('an explicit marker crosses projects — the author knows what they are closing', async () => {
     const { store } = setup();
-    const i = await store.addIntention({ content: 'ailleurs', directory: '/autre/projet' });
+    const i = await store.addIntention({ content: 'elsewhere', directory: '/other/project' });
 
     const result = await applyCommitToLoops(store, commit({ message: `fix\n\nCloses ${loopId(i.id)}` }));
     expect(result.closed.length).toBe(1);
   });
 
-  test('un identifiant inconnu est signalé, rien n\'est fermé au hasard', async () => {
+  test('an unknown id is reported, nothing is closed at random', async () => {
     const { store } = setup();
-    await store.addIntention({ content: 'intacte', directory: DIR });
+    await store.addIntention({ content: 'untouched', directory: DIR });
 
     const result = await applyCommitToLoops(store, commit({ message: 'fix\n\nCloses loop-deadbeef' }));
 
@@ -127,17 +127,17 @@ describe('Fermeture explicite', () => {
     expect((await store.listIntentions({ status: 'armed' })).length).toBe(1);
   });
 
-  test('une suite non hexadécimale n\'est pas une référence de boucle', async () => {
+  test('a non-hexadecimal string is not a loop reference', async () => {
     const { store } = setup();
-    await store.addIntention({ content: 'intacte', directory: DIR });
+    await store.addIntention({ content: 'untouched', directory: DIR });
 
-    // Les ids sont des préfixes d'UUID : 'loop-zzzzzzzz' ne peut désigner aucune boucle.
+    // Ids are UUID prefixes: 'loop-zzzzzzzz' cannot point at any loop.
     const result = await applyCommitToLoops(store, commit({ message: 'fix\n\nCloses loop-zzzzzzzz' }));
     expect(result.unresolved).toEqual([]);
     expect(result.closed).toEqual([]);
   });
 
-  test('une boucle déjà fermée n\'est pas re-fermée', async () => {
+  test('an already closed loop is not closed again', async () => {
     const { store } = setup();
     const i = await store.addIntention({ content: 'x', directory: DIR });
     await store.updateIntentionStatus(i.id, 'closed');
@@ -148,54 +148,54 @@ describe('Fermeture explicite', () => {
   });
 });
 
-describe('Heuristique — suggère, ne ferme jamais', () => {
-  test('propose la boucle dont le contenu recoupe les fichiers touchés', async () => {
+describe('Heuristic — suggests, never closes', () => {
+  test('suggests the loop whose content overlaps the files touched', async () => {
     const { store } = setup();
-    const i = await store.addIntention({ content: 'Refactorer le middleware auth', directory: DIR });
+    const i = await store.addIntention({ content: 'Refactor the auth middleware', directory: DIR });
 
     const result = await applyCommitToLoops(store, commit({ files: ['src/auth/middleware.ts'] }));
 
     expect(result.suggestions.length).toBe(1);
     expect(result.suggestions[0].intention.id).toBe(i.id);
-    // Rien n'a bougé en base : c'est une proposition, pas une décision.
+    // Nothing moved in the database: this is a proposal, not a decision.
     expect((await store.getIntention(i.id))!.status).toBe('armed');
     expect(result.closed).toEqual([]);
   });
 
-  test('ne propose rien pour un commit sans rapport', async () => {
+  test('suggests nothing for an unrelated commit', async () => {
     const { store } = setup();
-    await store.addIntention({ content: 'Refactorer le middleware auth', directory: DIR });
+    await store.addIntention({ content: 'Refactor the auth middleware', directory: DIR });
 
     const result = await applyCommitToLoops(store, commit({ files: ['docs/readme.md'] }));
     expect(result.suggestions).toEqual([]);
   });
 
-  test('l\'heuristique reste bornée au projet du commit', async () => {
+  test('the heuristic stays bounded to the commit project', async () => {
     const { store } = setup();
-    await store.addIntention({ content: 'Refactorer le middleware auth', directory: '/autre/projet' });
+    await store.addIntention({ content: 'Refactor the auth middleware', directory: '/autre/projet' });
 
     const result = await applyCommitToLoops(store, commit({ files: ['src/auth/middleware.ts'] }));
     expect(result.suggestions).toEqual([]);
   });
 
-  test('les suggestions sont classées et plafonnées', async () => {
+  test('suggestions are ranked and capped', async () => {
     const { store } = setup();
     for (let n = 0; n < 6; n++) {
-      await store.addIntention({ content: `Refactorer middleware auth variante ${n}`, directory: DIR });
+      await store.addIntention({ content: `Refactor auth middleware variant ${n}`, directory: DIR });
     }
-    await store.addIntention({ content: 'Chantier middleware seul', directory: DIR });
+    await store.addIntention({ content: 'Standalone middleware work', directory: DIR });
 
     const result = await applyCommitToLoops(store, commit({ files: ['src/auth/middleware.ts'] }));
 
     expect(result.suggestions.length).toBe(MAX_SUGGESTIONS);
-    // Deux jetons recoupés passent devant un seul.
+    // Two overlapping tokens rank ahead of one.
     expect(result.suggestions[0].score).toBeGreaterThanOrEqual(result.suggestions[1].score);
     expect(result.suggestions[0].matched.sort()).toEqual(['auth', 'middleware']);
   });
 
-  test('une boucle fermée explicitement ne réapparaît pas en suggestion', async () => {
+  test('a loop closed explicitly does not come back as a suggestion', async () => {
     const { store } = setup();
-    const i = await store.addIntention({ content: 'Refactorer middleware auth', directory: DIR });
+    const i = await store.addIntention({ content: 'Refactor auth middleware', directory: DIR });
 
     const result = await applyCommitToLoops(
       store,
@@ -207,17 +207,17 @@ describe('Heuristique — suggère, ne ferme jamais', () => {
   });
 });
 
-describe('Compte rendu', () => {
-  test('rien à dire, rien d\'écrit', async () => {
+describe('Report', () => {
+  test('nothing to say, nothing written', async () => {
     const { store } = setup();
     const result = await applyCommitToLoops(store, commit());
     expect(renderCommitReport(result)).toBe('');
   });
 
-  test('annonce les fermetures et propose une commande pour les suggestions', async () => {
+  test('announces the closures and offers a command for the suggestions', async () => {
     const { store } = setup();
-    const closedLoop = await store.addIntention({ content: 'boucle fermée', directory: DIR });
-    await store.addIntention({ content: 'Refactorer middleware auth', directory: DIR });
+    const closedLoop = await store.addIntention({ content: 'closed loop', directory: DIR });
+    await store.addIntention({ content: 'Refactor auth middleware', directory: DIR });
 
     const result = await applyCommitToLoops(
       store,
@@ -226,12 +226,12 @@ describe('Compte rendu', () => {
     const report = renderCommitReport(result);
 
     expect(report).toContain('✅');
-    expect(report).toContain('boucle fermée');
+    expect(report).toContain('closed loop');
     expect(report).toContain('💡');
     expect(report).toContain('pnpm cli intent close loop-');
   });
 
-  test('signale un identifiant introuvable', async () => {
+  test('reports an id it cannot find', async () => {
     const { store } = setup();
     const result = await applyCommitToLoops(store, commit({ message: 'fix\n\nCloses loop-deadbeef' }));
 

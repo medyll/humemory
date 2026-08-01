@@ -1,18 +1,18 @@
 import { setLLMClient, type LLMClient, type GeneratedLevels } from '../../src/core/llm-generator.js';
 
 export interface StubLLMOptions {
-  /** Niveaux renvoyés. Par défaut dérivés du prompt, pour rester parlants. */
+  /** Levels returned. Derived from the prompt by default, so they stay meaningful. */
   levels?: Partial<GeneratedLevels>;
-  /** Force une erreur — pour tester les chemins de repli. */
+  /** Forces an error — to exercise the fallback paths. */
   fail?: Error;
 }
 
 /**
- * Client LLM déterministe, à la forme d'un client Anthropic (`messages.create`
- * renvoyant un bloc texte JSON), ce qu'attend `generateMemoryLevels`.
+ * Deterministic LLM client, shaped like an Anthropic one (`messages.create`
+ * returning a JSON text block), which is what `generateMemoryLevels` expects.
  *
- * Aucun test ne doit instancier un vrai client : la CI tourne sans
- * `ANTHROPIC_API_KEY`, un appel réseau est un bug (docs/TESTING.md → pilier 3).
+ * No test may instantiate a real client: CI runs without `ANTHROPIC_API_KEY`, and
+ * a network call is a bug (docs/TESTING.md → pillar 3).
  */
 export function stubLLMClient(options: StubLLMOptions = {}): LLMClient & { calls: any[] } {
   const calls: any[] = [];
@@ -23,13 +23,13 @@ export function stubLLMClient(options: StubLLMOptions = {}): LLMClient & { calls
         calls.push(params);
         if (options.fail) throw options.fail;
 
-        // Le contenu de la trace est le dernier message utilisateur.
+        // The trace content is the last user message.
         const prompt: string = params?.messages?.at(-1)?.content ?? '';
         const words = String(prompt).split(/\s+/).filter(Boolean);
 
         const levels: GeneratedLevels = {
-          level1Summary: options.levels?.level1Summary ?? `résumé: ${words.slice(0, 8).join(' ')}`,
-          level2Essential: options.levels?.level2Essential ?? `essentiel: ${words.slice(0, 3).join(' ')}`,
+          level1Summary: options.levels?.level1Summary ?? `summary: ${words.slice(0, 8).join(' ')}`,
+          level2Essential: options.levels?.level2Essential ?? `gist: ${words.slice(0, 3).join(' ')}`,
           level3Keywords: options.levels?.level3Keywords ?? words.slice(0, 3).join(', '),
         };
 
@@ -39,7 +39,7 @@ export function stubLLMClient(options: StubLLMOptions = {}): LLMClient & { calls
   };
 }
 
-/** Installe le stub globalement. À appeler dans un `beforeEach`. */
+/** Installs the stub globally. Call it from a `beforeEach`. */
 export function useStubLLM(options?: StubLLMOptions) {
   const client = stubLLMClient(options);
   setLLMClient(client);

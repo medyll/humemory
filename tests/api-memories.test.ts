@@ -6,12 +6,11 @@ import { seedMemories } from './helpers/fixtures.js';
 import { useStubLLM } from './helpers/llm.js';
 
 /**
- * Routes de la mémoire rétrospective (BUG-08).
+ * Retrospective memory routes (BUG-08).
  *
- * Ces routes datent du Sprint 1 et n'avaient jamais été testées : le store était
- * construit au chargement de `server.ts`, donc importer le module levait un
- * serveur et visait la base de production. L'extraction en sous-routeur lève
- * l'obstacle.
+ * These routes date from Sprint 1 and had never been tested: the store was built
+ * at `server.ts` load time, so importing the module raised a server and pointed at
+ * the production database. Extracting a sub-router removes the obstacle.
  */
 
 function setup() {
@@ -35,10 +34,10 @@ function setup() {
 }
 
 describe('POST /memories', () => {
-  test('encode une trace et la renvoie', async () => {
+  test('encodes a trace and returns it', async () => {
     const { post } = setup();
     const { status, body } = await post('/memories', {
-      content: 'une trace encodée par HTTP',
+      content: 'a trace encoded over HTTP',
       directory: '/src',
       keywords: ['http'],
       sessionId: 's1',
@@ -49,15 +48,15 @@ describe('POST /memories', () => {
     expect(body.memory.currentLevel).toBe(0);
   });
 
-  test('un type inconnu retombe sur semantic plutôt que d\'échouer', async () => {
+  test('an unknown type falls back to semantic instead of failing', async () => {
     const { post } = setup();
-    const { body } = await post('/memories', { content: 'x', memoryType: 'télépathique' });
+    const { body } = await post('/memories', { content: 'x', memoryType: 'telepathic' });
     expect(body.memory.memoryType).toBe('semantic');
   });
 });
 
 describe('GET /memories', () => {
-  test('liste et filtre par niveau', async () => {
+  test('lists and filters by level', async () => {
     const { store, call } = setup();
     await seedMemories(store);
 
@@ -68,14 +67,14 @@ describe('GET /memories', () => {
     expect(l0.body.memories.every((m: any) => m.currentLevel === 0)).toBe(true);
   });
 
-  test('404 sur une trace inconnue', async () => {
+  test('404 on an unknown trace', async () => {
     const { call } = setup();
     expect((await call('/memories/inexistante')).status).toBe(404);
   });
 });
 
-describe('Rappel, photographique, suppression', () => {
-  test('recall incrémente le compteur et remonte la saillance', async () => {
+describe('Recall, photographic mode, deletion', () => {
+  test('recall increments the counter and lifts salience', async () => {
     const { clock, store, post } = setup();
     const seeded = await seedMemories(store);
     const id = seeded['auth-bug'].id;
@@ -87,17 +86,17 @@ describe('Rappel, photographique, suppression', () => {
     expect(body.memory.saillance).toBe(100);
   });
 
-  test('photo bascule le mode photographique dans les deux sens', async () => {
+  test('photo toggles photographic mode both ways', async () => {
     const { store, post } = setup();
     const id = (await seedMemories(store))['auth-bug'].id;
 
     expect((await post(`/memories/${id}/photo`, { enable: true })).body.memory.photographic).toBe(true);
     expect((await post(`/memories/${id}/photo`, { enable: false })).body.memory.photographic).toBe(false);
-    // Corps vide : la route active par défaut.
+    // Empty body: the route enables it by default.
     expect((await post(`/memories/${id}/photo`)).body.memory.photographic).toBe(true);
   });
 
-  test('delete retire la trace', async () => {
+  test('delete removes the trace', async () => {
     const { store, call } = setup();
     const id = (await seedMemories(store))['auth-bug'].id;
 
@@ -107,14 +106,14 @@ describe('Rappel, photographique, suppression', () => {
 });
 
 describe('GET /search', () => {
-  test('exige une requête', async () => {
+  test('requires a query', async () => {
     const { call } = setup();
     const { status, body } = await call('/search');
     expect(status).toBe(400);
     expect(body.error).toMatch(/q/);
   });
 
-  test('retrouve une trace par ses mots-clés', async () => {
+  test('finds a trace through its keywords', async () => {
     const { store, call } = setup();
     await seedMemories(store);
 
@@ -123,18 +122,18 @@ describe('GET /search', () => {
     expect(body.results.length).toBeGreaterThan(0);
   });
 
-  test('les filtres avancés sont transmis au store', async () => {
+  test('advanced filters are passed through to the store', async () => {
     const { store, call } = setup();
     await seedMemories(store);
 
-    // minSaillance très haut : rien ne doit passer.
+    // minSaillance set very high: nothing should pass.
     const strict = await call('/search?q=sqlite&minSaillance=101');
     expect(strict.body.results.length).toBe(0);
   });
 });
 
-describe('Similaires et fusion', () => {
-  test('findSimilar ne renvoie jamais la trace elle-même', async () => {
+describe('Similar traces and merging', () => {
+  test('findSimilar never returns the trace itself', async () => {
     const { store, call } = setup();
     const id = (await seedMemories(store))['auth-bug'].id;
 
@@ -142,7 +141,7 @@ describe('Similaires et fusion', () => {
     expect(body.results.every((r: any) => r.memory.id !== id)).toBe(true);
   });
 
-  test('merge exige une cible', async () => {
+  test('merge requires a target', async () => {
     const { store, post } = setup();
     const id = (await seedMemories(store))['auth-bug'].id;
 
@@ -151,7 +150,7 @@ describe('Similaires et fusion', () => {
     expect(body.error).toMatch(/targetId/);
   });
 
-  test('merge passe la source au niveau 4 et la relie à la cible', async () => {
+  test('merge drops the source to level 4 and links it to the target', async () => {
     useStubLLM();
     const { store, post, call } = setup();
     const seeded = await seedMemories(store);
@@ -167,7 +166,7 @@ describe('Similaires et fusion', () => {
 });
 
 describe('GET /status', () => {
-  test('compte les traces par niveau et calcule les moyennes', async () => {
+  test('counts traces per level and computes the averages', async () => {
     const { store, call } = setup();
     await seedMemories(store);
 
@@ -177,7 +176,7 @@ describe('GET /status', () => {
     expect(body.status.averages.saillance).toBeGreaterThan(0);
   });
 
-  test('une base vide ne divise pas par zéro', async () => {
+  test('an empty database does not divide by zero', async () => {
     const { call } = setup();
     const { body } = await call('/status');
 
@@ -186,17 +185,17 @@ describe('GET /status', () => {
   });
 });
 
-describe('Sessions (rejeu)', () => {
-  test('regroupe les traces par session', async () => {
+describe('Sessions (replay)', () => {
+  test('groups traces by session', async () => {
     const { store, call } = setup();
-    await seedMemories(store); // deux sessions dans les fixtures
+    await seedMemories(store); // two sessions in the fixtures
 
     const { body } = await call('/sessions');
     expect(body.sessions.length).toBe(2);
     expect(body.sessions.reduce((n: number, s: any) => n + s.count, 0)).toBe(4);
   });
 
-  test('le détail d\'une session renvoie ses événements', async () => {
+  test('a session detail returns its events', async () => {
     const { store, call } = setup();
     await seedMemories(store);
 
@@ -206,9 +205,9 @@ describe('Sessions (rejeu)', () => {
     expect(body.events.every((e: any) => typeof e.type === 'string')).toBe(true);
   });
 
-  test('une session inconnue renvoie une liste vide, pas une erreur', async () => {
+  test('an unknown session returns an empty list, not an error', async () => {
     const { call } = setup();
-    const { status, body } = await call('/sessions/jamais-vue');
+    const { status, body } = await call('/sessions/never-seen');
 
     expect(status).toBe(200);
     expect(body.events).toEqual([]);
@@ -216,11 +215,11 @@ describe('Sessions (rejeu)', () => {
 });
 
 describe('POST /decay', () => {
-  test('fait avancer la dégradation de toutes les traces', async () => {
+  test('advances decay for every trace', async () => {
     const { clock, store, post, call } = setup();
     const id = (await seedMemories(store))['decay-curve'].id;
 
-    clock.advanceHours(200); // au-delà du seuil L2
+    clock.advanceHours(200); // past the L2 threshold
     expect((await post('/decay')).body.success).toBe(true);
 
     const { body } = await call(`/memories/${id}`);

@@ -1,26 +1,26 @@
 import { describe, test, expect } from 'bun:test';
 import { parseCueArg, formatTriggerSpec, CueArgError } from '../src/core/cue-arg.js';
 
-/** Parsing des `--cue` de la CLI (story S5-04). */
+/** Parsing of the CLI's `--cue` arguments (story S5-04). */
 
-describe('parseCueArg — formes valides', () => {
-  test('time: accepte une date ou un datetime ISO', () => {
+describe('parseCueArg — valid forms', () => {
+  test('time: accepts an ISO date or datetime', () => {
     expect(parseCueArg('time:2026-12-01')).toEqual({
       kind: 'time',
       at: '2026-12-01T00:00:00.000Z',
     });
-    // Une heure ISO contient des ':' — le découpage ne doit pas la tronquer.
+    // An ISO time contains ':' — splitting must not truncate it.
     expect(parseCueArg('time:2026-12-01T09:30:00Z')).toEqual({
       kind: 'time',
       at: '2026-12-01T09:30:00.000Z',
     });
   });
 
-  test('cron: garde l\'expression telle quelle', () => {
+  test('cron: keeps the expression as is', () => {
     expect(parseCueArg('cron:0 9 * * 1')).toEqual({ kind: 'time', cron: '0 9 * * 1' });
   });
 
-  test('event: les trois variantes', () => {
+  test('event: the three variants', () => {
     expect(parseCueArg('event:file_open:src/auth/service.ts')).toEqual({
       kind: 'event',
       type: 'file_open',
@@ -38,7 +38,7 @@ describe('parseCueArg — formes valides', () => {
     });
   });
 
-  test('un motif d\'erreur peut contenir des deux-points', () => {
+  test('an error pattern may contain colons', () => {
     expect(parseCueArg('event:error_pattern:Error: ENOENT')).toEqual({
       kind: 'event',
       type: 'error_pattern',
@@ -46,7 +46,7 @@ describe('parseCueArg — formes valides', () => {
     });
   });
 
-  test('un chemin Windows survit au parsing', () => {
+  test('a Windows path survives parsing', () => {
     expect(parseCueArg('event:file_open:D:\\projet\\src\\a.ts')).toEqual({
       kind: 'event',
       type: 'file_open',
@@ -55,27 +55,27 @@ describe('parseCueArg — formes valides', () => {
   });
 });
 
-describe('parseCueArg — formes rejetées', () => {
-  test('préfixe inconnu', () => {
+describe('parseCueArg — rejected forms', () => {
+  test('unknown prefix', () => {
     expect(() => parseCueArg('magie:demain')).toThrow(CueArgError);
   });
 
-  test('valeurs manquantes', () => {
-    expect(() => parseCueArg('')).toThrow(/vide/);
+  test('missing values', () => {
+    expect(() => parseCueArg('')).toThrow(/empty/);
     expect(() => parseCueArg('time:')).toThrow(/ISO/);
     expect(() => parseCueArg('cron:')).toThrow(/expression/);
-    expect(() => parseCueArg('event:file_open')).toThrow(/valeur/);
-    expect(() => parseCueArg('event:file_open:')).toThrow(/valeur/);
+    expect(() => parseCueArg('event:file_open')).toThrow(/value/);
+    expect(() => parseCueArg('event:file_open:')).toThrow(/value/);
   });
 
-  test('date et type d\'event invalides', () => {
-    expect(() => parseCueArg('time:demain matin')).toThrow(/invalide/);
-    expect(() => parseCueArg('event:telepathie:x')).toThrow(/inconnu/);
+  test('invalid date and event type', () => {
+    expect(() => parseCueArg('time:tomorrow morning')).toThrow(/invalid/);
+    expect(() => parseCueArg('event:telepathy:x')).toThrow(/unknown/);
   });
 });
 
 describe('formatTriggerSpec', () => {
-  test('fait l\'aller-retour avec parseCueArg', () => {
+  test('round-trips with parseCueArg', () => {
     const args = [
       'cron:0 9 * * 1',
       'event:file_open:src/a.ts',
@@ -88,7 +88,7 @@ describe('formatTriggerSpec', () => {
     }
   });
 
-  test('une date est rendue normalisée en ISO', () => {
+  test('a date is rendered normalised as ISO', () => {
     expect(formatTriggerSpec(parseCueArg('time:2026-12-01'))).toBe('time:2026-12-01T00:00:00.000Z');
   });
 });

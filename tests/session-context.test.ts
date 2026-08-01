@@ -12,9 +12,9 @@ import { seedIntentions } from './helpers/fixtures.js';
 import type { Intention } from '../src/core/types.js';
 
 /**
- * Phase 5.3.1 — bloc de contexte injecté au SessionStart (story S5-03a).
- * On teste le builder, pas le script : `scripts/hook-session-start.ts` n'est
- * qu'une coquille qui lit l'env et écrit sur stdout.
+ * Phase 5.3.1 — the context block injected at SessionStart (story S5-03a).
+ * The builder is tested, not the script: `scripts/hook-session-start.ts` is only
+ * a shell that reads the environment and writes to stdout.
  */
 
 function setup(directory = '/src/auth') {
@@ -24,43 +24,43 @@ function setup(directory = '/src/auth') {
   return { clock, store, resolver, directory };
 }
 
-describe('Identité courte des boucles', () => {
-  test('loopId produit un identifiant recopiable à la main', () => {
+describe('Short loop identity', () => {
+  test('loopId produces an id that can be retyped by hand', () => {
     expect(loopId('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBe('loop-a1b2c3d4');
   });
 
-  test('extractLoopIds lit les mentions d\'un message de commit', () => {
-    const message = 'fix(auth): token expiry\n\nCloses loop-a1b2c3d4 et loop-deadbeef';
+  test('extractLoopIds reads the mentions in a commit message', () => {
+    const message = 'fix(auth): token expiry\n\nCloses loop-a1b2c3d4 and loop-deadbeef';
     expect(extractLoopIds(message).sort()).toEqual(['a1b2c3d4', 'deadbeef']);
   });
 
-  test('extractLoopIds ne trouve rien dans un message ordinaire', () => {
+  test('extractLoopIds finds nothing in an ordinary message', () => {
     expect(extractLoopIds('chore: bump deps')).toEqual([]);
   });
 
-  test('un préfixe ambigu ne désigne aucune boucle', () => {
+  test('an ambiguous prefix points at no loop', () => {
     const a = { id: 'abc11111-0000-0000-0000-000000000000' } as Intention;
     const b = { id: 'abc22222-0000-0000-0000-000000000000' } as Intention;
 
-    expect(matchIntentionByShortId([a, b], 'abc')).toBeNull(); // ambigu → on ne ferme rien
+    expect(matchIntentionByShortId([a, b], 'abc')).toBeNull(); // ambiguous: close nothing
     expect(matchIntentionByShortId([a, b], 'abc11111')?.id).toBe(a.id);
     expect(matchIntentionByShortId([a, b], 'zzz')).toBeNull();
   });
 });
 
 describe('humanizeAge', () => {
-  test('rend des durées lisibles', () => {
+  test('renders readable durations', () => {
     const base = new Date(T0);
-    expect(humanizeAge(base, base)).toBe("à l'instant");
-    expect(humanizeAge(base, new Date(T0.getTime() + 30 * 60_000))).toBe('il y a 30min');
-    expect(humanizeAge(base, new Date(T0.getTime() + 5 * 3600_000))).toBe('il y a 5h');
-    expect(humanizeAge(base, new Date(T0.getTime() + 2 * 86_400_000))).toBe('il y a 2j');
-    expect(humanizeAge(base, new Date(T0.getTime() + 90 * 86_400_000))).toBe('il y a 3 mois');
+    expect(humanizeAge(base, base)).toBe('just now');
+    expect(humanizeAge(base, new Date(T0.getTime() + 30 * 60_000))).toBe('30min ago');
+    expect(humanizeAge(base, new Date(T0.getTime() + 5 * 3600_000))).toBe('5h ago');
+    expect(humanizeAge(base, new Date(T0.getTime() + 2 * 86_400_000))).toBe('2d ago');
+    expect(humanizeAge(base, new Date(T0.getTime() + 90 * 86_400_000))).toBe('3 months ago');
   });
 });
 
-describe('Composition du contexte', () => {
-  test('sans rien à dire, le bloc est vide — pas de pollution du prompt', async () => {
+describe('Context composition', () => {
+  test('with nothing to say, the block is empty — no prompt pollution', async () => {
     const { store, resolver, directory } = setup();
     const ctx = await buildSessionContext({ store, resolver, directory, clock: fakeClock() });
 
@@ -69,34 +69,34 @@ describe('Composition du contexte', () => {
     store.close();
   });
 
-  test('les boucles ouvertes du répertoire courant sont listées', async () => {
+  test('open loops of the current directory are listed', async () => {
     const { clock, store, resolver, directory } = setup();
-    await store.addIntention({ content: 'refactor la validation de token', directory });
+    await store.addIntention({ content: 'refactor token validation', directory });
 
     clock.advanceDays(2);
     const ctx = await buildSessionContext({ store, resolver, directory, clock });
 
     expect(ctx.openLoops.length).toBe(1);
-    expect(ctx.markdown).toContain('## 🧠 Contexte mnésique (humemory)');
-    expect(ctx.markdown).toContain('### Boucles ouvertes (Zeigarnik)');
-    expect(ctx.markdown).toContain('refactor la validation de token');
-    expect(ctx.markdown).toContain('armée il y a 2j');
+    expect(ctx.markdown).toContain('## 🧠 Mnemonic context (humemory)');
+    expect(ctx.markdown).toContain('### Open loops (Zeigarnik)');
+    expect(ctx.markdown).toContain('refactor token validation');
+    expect(ctx.markdown).toContain('armed 2d ago');
     store.close();
   });
 
-  test('les boucles des autres projets ne fuitent pas', async () => {
+  test('loops from other projects do not leak', async () => {
     const { store, resolver, directory } = setup();
-    await store.addIntention({ content: 'ici', directory });
-    await store.addIntention({ content: 'ailleurs', directory: '/autre/projet' });
+    await store.addIntention({ content: 'here', directory });
+    await store.addIntention({ content: 'elsewhere', directory: '/other/project' });
 
     const ctx = await buildSessionContext({ store, resolver, directory, clock: fakeClock() });
 
     expect(ctx.openLoops.length).toBe(1);
-    expect(ctx.markdown).not.toContain('ailleurs');
+    expect(ctx.markdown).not.toContain('elsewhere');
     store.close();
   });
 
-  test('le bloc rappelle comment fermer une boucle', async () => {
+  test('the block says how to close a loop', async () => {
     const { store, resolver, directory } = setup();
     const i = await store.addIntention({ content: 'x', directory });
 
@@ -105,7 +105,7 @@ describe('Composition du contexte', () => {
     store.close();
   });
 
-  test('la branche courante apparaît en en-tête', async () => {
+  test('the current branch appears in the header', async () => {
     const { store, resolver, directory } = setup();
     await store.addIntention({ content: 'x', directory });
 
@@ -120,7 +120,7 @@ describe('Composition du contexte', () => {
     store.close();
   });
 
-  test('une échéance atteinte remonte dans sa propre section', async () => {
+  test('a reached deadline surfaces in its own section', async () => {
     const { clock, store, resolver, directory } = setup();
     await store.addIntention({ content: 'bench decay', directory }, [
       { kind: 'time', at: new Date(T0.getTime() + 3600_000).toISOString() },
@@ -130,17 +130,17 @@ describe('Composition du contexte', () => {
     const ctx = await buildSessionContext({ store, resolver, directory, clock });
 
     expect(ctx.firedNow.length).toBe(1);
-    expect(ctx.markdown).toContain('### ⏰ Échéances atteintes');
+    expect(ctx.markdown).toContain('### ⏰ Deadlines reached');
     expect(ctx.markdown).toContain('bench decay');
-    // Elle n'est plus « armée » : elle a été tirée pendant la composition.
+    // It is no longer armed: it was fired during composition.
     expect(ctx.openLoops.length).toBe(0);
     store.close();
   });
 
-  test('les boucles périmées sont expirées au passage, pas affichées', async () => {
+  test('overdue loops are expired in passing, not displayed', async () => {
     const { clock, store, resolver, directory } = setup();
     const i = await store.addIntention({
-      content: 'trop tard',
+      content: 'too late',
       directory,
       expiresAt: new Date(T0.getTime() + 3600_000),
     });
@@ -153,10 +153,10 @@ describe('Composition du contexte', () => {
     store.close();
   });
 
-  test('sans resolver, aucun effet de bord — composition en lecture seule', async () => {
+  test('without a resolver there are no side effects — read-only composition', async () => {
     const { clock, store, directory } = setup();
     const i = await store.addIntention({
-      content: 'périmée mais intouchée',
+      content: 'overdue but untouched',
       directory,
       expiresAt: new Date(T0.getTime() + 3600_000),
     });
@@ -169,7 +169,7 @@ describe('Composition du contexte', () => {
   });
 });
 
-describe('Traces dégradées rappelées', () => {
+describe('Recalled decayed traces', () => {
   async function seedTrace(
     store: ReturnType<typeof freshStore>,
     directory: string,
@@ -182,41 +182,41 @@ describe('Traces dégradées rappelées', () => {
       keywords: ['k'],
       sessionId: 's',
     });
-    // On force niveau et saillance : ici on teste la sélection, pas la courbe de decay.
+    // Level and salience are forced: this tests selection, not the decay curve.
     (store as any).db
       .query('UPDATE memories SET current_level = $l, saillance = $s, level2_essential = $e WHERE id = $id')
-      .run({ $l: overrides.level, $s: overrides.saillance, $e: `essentiel: ${overrides.content}`, $id: m.id });
+      .run({ $l: overrides.level, $s: overrides.saillance, $e: `gist: ${overrides.content}`, $id: m.id });
     return m;
   }
 
-  test('seules les traces dégradées et encore saillantes remontent', async () => {
+  test('only degraded traces that are still salient surface', async () => {
     const { store, resolver, directory } = setup();
 
-    await seedTrace(store, directory, { content: 'utile et saillante', level: 2, saillance: 90 });
-    await seedTrace(store, directory, { content: 'oubliée', level: 2, saillance: 10 });
-    await seedTrace(store, directory, { content: 'encore fraîche', level: 0, saillance: 95 });
+    await seedTrace(store, directory, { content: 'useful and salient', level: 2, saillance: 90 });
+    await seedTrace(store, directory, { content: 'forgotten', level: 2, saillance: 10 });
+    await seedTrace(store, directory, { content: 'still fresh', level: 0, saillance: 95 });
 
     const ctx = await buildSessionContext({ store, resolver, directory, clock: fakeClock() });
 
     expect(ctx.traces.length).toBe(1);
-    expect(ctx.markdown).toContain('utile et saillante');
-    expect(ctx.markdown).not.toContain('oubliée');
-    expect(ctx.markdown).not.toContain('encore fraîche'); // L0 : l'agent l'a encore en tête
+    expect(ctx.markdown).toContain('useful and salient');
+    expect(ctx.markdown).not.toContain('forgotten');
+    expect(ctx.markdown).not.toContain('still fresh'); // L0: the agent still has it in mind
     store.close();
   });
 
-  test('la trace est rendue au niveau où elle est tombée', async () => {
+  test('the trace is rendered at the level it fell to', async () => {
     const { store, resolver, directory } = setup();
-    await seedTrace(store, directory, { content: 'race condition résolue par mutex', level: 2, saillance: 80 });
+    await seedTrace(store, directory, { content: 'race condition fixed with a mutex', level: 2, saillance: 80 });
 
     const ctx = await buildSessionContext({ store, resolver, directory, clock: fakeClock() });
 
     expect(ctx.markdown).toContain('[L2]');
-    expect(ctx.markdown).toContain('essentiel: race condition résolue par mutex');
+    expect(ctx.markdown).toContain('gist: race condition fixed with a mutex');
     store.close();
   });
 
-  test('le budget plafonne le nombre de traces', async () => {
+  test('the budget caps how many traces are listed', async () => {
     const { store, resolver, directory } = setup();
     for (let i = 0; i < 8; i++) {
       await seedTrace(store, directory, { content: `trace ${i}`, level: 3, saillance: 70 + i });
@@ -228,14 +228,14 @@ describe('Traces dégradées rappelées', () => {
     store.close();
   });
 
-  test('les constantes par défaut sont celles annoncées', () => {
+  test('the default constants are the announced ones', () => {
     expect(DEFAULT_SESSION_BUDGET).toBe(10);
     expect(DEFAULT_SAILLANCE_THRESHOLD).toBe(60);
   });
 });
 
-describe('Bout-en-bout — fixtures', () => {
-  test('les boucles de fixtures composent un bloc complet', async () => {
+describe('End to end — fixtures', () => {
+  test('fixture loops compose a complete block', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const resolver = new SqliteCueResolver(store, { clock });
@@ -249,10 +249,10 @@ describe('Bout-en-bout — fixtures', () => {
       clock,
     });
 
-    // Seule refactor-auth vit dans /src/auth.
+    // Only refactor-auth lives in /src/auth.
     expect(ctx.openLoops.length).toBe(1);
-    expect(ctx.markdown).toContain('Refactorer la validation de token');
-    expect(ctx.markdown).toContain('échéance dans 7j');
+    expect(ctx.markdown).toContain('Refactor the token validation');
+    expect(ctx.markdown).toContain('due in 7d');
     store.close();
   });
 });

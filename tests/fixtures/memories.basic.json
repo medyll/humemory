@@ -1,9 +1,9 @@
 {
-  "$comment": "Jeu de traces de base. Dates relatives à T0 (2026-01-01T00:00:00Z) via offsetHours, résolues par loadMemories() contre la FakeClock — jamais de timestamp absolu ici.",
+  "$comment": "Baseline trace set. Dates are relative to T0 (2026-01-01T00:00:00Z) through offsetHours, resolved by the seed helper against the FakeClock — never an absolute timestamp here.",
   "memories": [
     {
       "key": "auth-bug",
-      "content": "Le middleware d'auth rejetait les tokens valides : le test d'expiration utilisait < au lieu de <=, donc un token expirant à la seconde près passait pour expiré.",
+      "content": "The auth middleware rejected valid tokens: the expiry check used < instead of <=, so a token expiring on the exact second read as expired.",
       "directory": "/src/auth",
       "keywords": ["auth", "middleware", "token", "expiry"],
       "sessionId": "session-fixture-1",
@@ -12,27 +12,27 @@
     },
     {
       "key": "sqlite-wal",
-      "content": "SQLite en WAL avec busy_timeout à 5000ms supprime les SQLITE_BUSY sur écritures concurrentes intra-process.",
+      "content": "SQLite in WAL mode with busy_timeout at 5000ms removes SQLITE_BUSY on concurrent intra-process writes.",
       "directory": "/src/store",
-      "keywords": ["sqlite", "wal", "concurrence", "busy_timeout"],
+      "keywords": ["sqlite", "wal", "concurrency", "busy_timeout"],
       "sessionId": "session-fixture-1",
       "memoryType": "semantic",
       "offsetHours": 0
     },
     {
       "key": "decay-curve",
-      "content": "La courbe d'oubli est pilotée par levelThresholds en heures : 24h pour L1, 168h pour L2, 720h pour L3, 2160h pour L4.",
+      "content": "The forgetting curve is driven by levelThresholds in hours: 24h for L1, 168h for L2, 720h for L3, 2160h for L4.",
       "directory": "/src/core",
-      "keywords": ["decay", "courbe", "seuils", "oubli"],
+      "keywords": ["decay", "curve", "thresholds", "forgetting"],
       "sessionId": "session-fixture-2",
       "memoryType": "semantic",
       "offsetHours": 0
     },
     {
       "key": "photographic-note",
-      "content": "Trace critique marquée photographic : elle ne doit jamais se dégrader, quel que soit le temps écoulé.",
+      "content": "Critical trace flagged photographic: it must never decay, however much time passes.",
       "directory": "/src/core",
-      "keywords": ["photographic", "critique", "sans-decay"],
+      "keywords": ["photographic", "critical", "no-decay"],
       "sessionId": "session-fixture-2",
       "memoryType": "semantic",
       "photographic": true,

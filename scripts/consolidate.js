@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Script de consolidation automatique humemory
- * Exécuté par cron chaque nuit à 3h
+ * humemory automatic consolidation script.
+ * Meant to run from cron, nightly.
  */
 
 import { execSync } from 'child_process';
@@ -12,33 +12,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const HUMEMORY_DIR = join(__dirname, '..');
 
-console.log('🧠 humemory — Consolidation automatique');
+console.log('humemory - automatic consolidation');
 console.log('='.repeat(50));
 console.log(`Date: ${new Date().toISOString()}`);
-console.log(`Répertoire: ${HUMEMORY_DIR}`);
+console.log(`Directory: ${HUMEMORY_DIR}`);
 console.log();
 
 try {
-  // Mise à jour de la consolidation
-  console.log('📊 Mise à jour de la consolidation...');
+  // Run the decay sweep
+  console.log('Updating consolidation...');
   const decayOutput = execSync('pnpm cli decay', {
     cwd: HUMEMORY_DIR,
     encoding: 'utf-8',
   });
   console.log(decayOutput);
 
-  // État du palais de mémoire
-  console.log('📋 État de humemory:');
+  // State of the memory palace
+  console.log('humemory state:');
   const statusOutput = execSync('pnpm cli status', {
     cwd: HUMEMORY_DIR,
     encoding: 'utf-8',
   });
   console.log(statusOutput);
 
-  console.log('✅ Consolidation terminée avec succès');
+  console.log('Consolidation finished successfully');
   process.exit(0);
 } catch (error) {
-  console.error('❌ Erreur lors de la consolidation:');
+  console.error('Consolidation failed:');
   console.error(error.message);
   if (error.stdout) console.error(error.stdout.toString());
   if (error.stderr) console.error(error.stderr.toString());

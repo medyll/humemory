@@ -5,8 +5,8 @@ import { SimilarPanel } from '../web/components/SimilarPanel.tsx';
 import type { Memory } from '../src/core/types.js';
 
 /**
- * Rejeu et fusion (story S6-04) — les deux dernières vues à quitter le
- * dashboard vanilla. Aucun réseau : `fetch` est stubbé.
+ * Replay and merging (story S6-04) — the last two views to leave the vanilla
+ * dashboard. No network: `fetch` is stubbed.
  */
 
 const realFetch = globalThis.fetch;
@@ -14,7 +14,7 @@ const realFetch = globalThis.fetch;
 function memory(overrides: Partial<Memory> = {}): Memory {
   return {
     id: 'm1',
-    content: 'La race condition du worker se réglait avec un mutex async',
+    content: 'The worker race condition was fixed with an async mutex',
     directory: '/src/core',
     day: '2026-06-01',
     keywords: ['race'],
@@ -37,7 +37,7 @@ function stubFetch(routes: Record<string, unknown>) {
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body as string | undefined });
 
     const key = Object.keys(routes).find((k) => url.includes(k));
-    return new Response(JSON.stringify(key ? routes[key] : { error: 'non stubbé' }), {
+    return new Response(JSON.stringify(key ? routes[key] : { error: 'not stubbed' }), {
       status: key ? 200 : 404,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -56,9 +56,9 @@ const SESSIONS = {
 
 const EVENTS = {
   events: [
-    { type: 'encoded', content: 'première trace encodée', timestamp: '2026-06-01T10:00:00.000Z' },
-    { type: 'decayed', content: 'trace dégradée', timestamp: '2026-06-01T11:00:00.000Z' },
-    { type: 'recalled', content: 'trace rappelée', timestamp: '2026-06-01T12:00:00.000Z' },
+    { type: 'encoded', content: 'first encoded trace', timestamp: '2026-06-01T10:00:00.000Z' },
+    { type: 'decayed', content: 'decayed trace', timestamp: '2026-06-01T11:00:00.000Z' },
+    { type: 'recalled', content: 'recalled trace', timestamp: '2026-06-01T12:00:00.000Z' },
   ],
 };
 
@@ -69,41 +69,41 @@ afterEach(() => {
 });
 
 describe('ReplayTab', () => {
-  test('sans session, le dit au lieu d\'afficher un lecteur vide', async () => {
+  test('with no session, says so instead of showing an empty player', async () => {
     stubFetch({ '/sessions': { success: true, sessions: [] } });
 
     render(<ReplayTab />);
-    await waitFor(() => expect(screen.getByText(/Aucune session/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/No session to replay/)).toBeDefined());
   });
 
-  test('charge la première session et n\'affiche que le premier événement', async () => {
+  test('loads the first session and shows only the first event', async () => {
     stubFetch({ '/sessions/': EVENTS, '/sessions': SESSIONS });
 
     render(<ReplayTab />);
 
-    // L'événement d'encodage figure dans les deux panneaux : transcript et liste.
-    await waitFor(() => expect(screen.getAllByText(/première trace encodée/).length).toBe(2));
-    // Le curseur est au début : la suite n'est pas encore révélée.
-    expect(screen.queryByText(/trace rappelée/)).toBeNull();
+    // The encoded event appears in both panes: transcript and event list.
+    await waitFor(() => expect(screen.getAllByText(/first encoded trace/).length).toBe(2));
+    // The cursor sits at the start: what follows is not revealed yet.
+    expect(screen.queryByText(/recalled trace/)).toBeNull();
     expect(screen.getByText('1 / 3')).toBeDefined();
   });
 
-  test('déplacer le curseur révèle les événements et met à jour les compteurs', async () => {
+  test('moving the cursor reveals events and updates the counters', async () => {
     stubFetch({ '/sessions/': EVENTS, '/sessions': SESSIONS });
 
     render(<ReplayTab />);
-    await waitFor(() => expect(screen.getAllByText(/première trace encodée/).length).toBe(2));
+    await waitFor(() => expect(screen.getAllByText(/first encoded trace/).length).toBe(2));
 
-    fireEvent.change(screen.getByLabelText(/Position dans la session/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/Position in the session/), { target: { value: '2' } });
 
     await waitFor(() => expect(screen.getByText('3 / 3')).toBeDefined());
-    expect(screen.getByText(/trace rappelée/)).toBeDefined();
+    expect(screen.getByText(/recalled trace/)).toBeDefined();
 
-    const counts = screen.getByText(/Encodées/).parentElement!;
-    expect(counts.textContent).toContain('1'); // une de chaque type
+    const counts = screen.getByText(/📥 Encoded:/).parentElement!;
+    expect(counts.textContent).toContain('1'); // one of each type
   });
 
-  test('Reset ramène au début', async () => {
+  test('Reset returns to the start', async () => {
     stubFetch({ '/sessions/': EVENTS, '/sessions': SESSIONS });
 
     render(<ReplayTab />);
@@ -116,7 +116,7 @@ describe('ReplayTab', () => {
     await waitFor(() => expect(screen.getByText('1 / 3')).toBeDefined());
   });
 
-  test('changer de session repart de zéro', async () => {
+  test('switching session restarts from zero', async () => {
     stubFetch({ '/sessions/': EVENTS, '/sessions': SESSIONS });
 
     render(<ReplayTab />);
@@ -125,106 +125,106 @@ describe('ReplayTab', () => {
     fireEvent.change(screen.getByLabelText(/Position/), { target: { value: '2' } });
     await waitFor(() => expect(screen.getByText('3 / 3')).toBeDefined());
 
-    // Sans remise à zéro, l'index d'une session longue pointerait hors d'une courte.
+    // Without a reset, a long session's index would point outside a short one.
     fireEvent.change(screen.getByLabelText('Session'), { target: { value: 'session-b' } });
     await waitFor(() => expect(screen.getByText('1 / 3')).toBeDefined());
   });
 });
 
 describe('SimilarPanel', () => {
-  test('liste les candidats avec leur score', async () => {
+  test('lists candidates with their score', async () => {
     stubFetch({
       '/similar': {
         success: true,
-        results: [{ memory: memory({ id: 'm2', content: 'trace voisine' }), score: 72.4 }],
+        results: [{ memory: memory({ id: 'm2', content: 'neighbouring trace' }), score: 72.4 }],
       },
     });
 
     render(<SimilarPanel memory={memory()} onMerged={() => {}} />);
 
-    await waitFor(() => expect(screen.getByText('trace voisine')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('neighbouring trace')).toBeDefined());
     expect(screen.getByText('Score 72')).toBeDefined();
   });
 
-  test('sans candidat, le dit', async () => {
+  test('with no candidate, says so', async () => {
     stubFetch({ '/similar': { success: true, results: [] } });
 
     render(<SimilarPanel memory={memory()} onMerged={() => {}} />);
-    await waitFor(() => expect(screen.getByText(/Aucune trace assez proche/)).toBeDefined());
+    await waitFor(() => expect(screen.getByText(/No trace close enough/)).toBeDefined());
   });
 
-  test('la fusion exige une confirmation qui montre la cible', async () => {
+  test('merging requires a confirmation that shows the target', async () => {
     const calls = stubFetch({
-      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'trace cible' }), score: 80 }] },
+      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'target trace' }), score: 80 }] },
       '/merge': { success: true },
     });
 
     render(<SimilarPanel memory={memory()} onMerged={() => {}} />);
-    await waitFor(() => expect(screen.getByText('trace cible')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('target trace')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Fusionner/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Merge/ }));
 
-    // Rien n'est parti : la fusion est irréversible, elle se confirme.
+    // Nothing left yet: a merge is irreversible, so it gets confirmed.
     expect(calls.some((c) => c.url.includes('/merge'))).toBe(false);
     const dialog = screen.getByRole('alertdialog');
-    expect(dialog.textContent).toContain('trace cible');
-    expect(dialog.textContent).toMatch(/irréversible/i);
+    expect(dialog.textContent).toContain('target trace');
+    expect(dialog.textContent).toMatch(/irreversible/i);
   });
 
-  test('confirmer envoie la fusion avec la bonne cible et prévient le parent', async () => {
+  test('confirming sends the merge with the right target and notifies the parent', async () => {
     let merged = false;
     const calls = stubFetch({
-      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'cible' }), score: 80 }] },
+      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'target' }), score: 80 }] },
       '/merge': { success: true },
     });
 
     render(<SimilarPanel memory={memory()} onMerged={() => (merged = true)} />);
-    await waitFor(() => expect(screen.getByText('cible')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('target')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Fusionner/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Confirmer la fusion/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Merge/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm the merge/ }));
 
     await waitFor(() => expect(merged).toBe(true));
     const call = calls.find((c) => c.url.includes('/merge'))!;
     expect(call.method).toBe('POST');
-    expect(call.url).toContain('/memories/m1/merge'); // la source est la trace courante
-    expect(call.body).toContain('m2'); // la cible part dans le corps
+    expect(call.url).toContain('/memories/m1/merge'); // the source is the current trace
+    expect(call.body).toContain('m2'); // the target travels in the body
   });
 
-  test('annuler referme la confirmation sans rien fusionner', async () => {
+  test('cancelling closes the confirmation without merging', async () => {
     const calls = stubFetch({
-      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'cible' }), score: 80 }] },
+      '/similar': { success: true, results: [{ memory: memory({ id: 'm2', content: 'target' }), score: 80 }] },
     });
 
     render(<SimilarPanel memory={memory()} onMerged={() => {}} />);
-    await waitFor(() => expect(screen.getByText('cible')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('target')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Fusionner/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    fireEvent.click(screen.getByRole('button', { name: /Merge/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(calls.some((c) => c.url.includes('/merge'))).toBe(false);
   });
 
-  test('une erreur de fusion est affichée, pas avalée', async () => {
+  test('a merge error is shown, not swallowed', async () => {
     globalThis.fetch = (async (input: any) => {
       const url = String(input);
       if (url.includes('/similar')) {
         return new Response(
-          JSON.stringify({ success: true, results: [{ memory: memory({ id: 'm2', content: 'cible' }), score: 80 }] })
+          JSON.stringify({ success: true, results: [{ memory: memory({ id: 'm2', content: 'target' }), score: 80 }] })
         );
       }
-      return new Response(JSON.stringify({ error: 'fusion impossible' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'merge failed' }), { status: 500 });
     }) as typeof fetch;
 
     render(<SimilarPanel memory={memory()} onMerged={() => {}} />);
-    await waitFor(() => expect(screen.getByText('cible')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('target')).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: /Fusionner/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Confirmer la fusion/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Merge/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm the merge/ }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('alert').some((el) => el.textContent?.includes('fusion impossible'))).toBe(true);
+      expect(screen.getAllByRole('alert').some((el) => el.textContent?.includes('merge failed'))).toBe(true);
     });
   });
 });

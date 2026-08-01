@@ -8,18 +8,18 @@ import { useStubLLM } from './helpers/llm.js';
 import { seedMemories, eventFixtures, memoryFixtures } from './helpers/fixtures.js';
 
 /**
- * Fondation de l'env de test autonome (story S5-00b, docs/TESTING.md).
- * Ces tests valident les seams eux-mêmes — si l'un casse, aucune assertion
- * time-driven ou event-driven de la Phase 5 n'est digne de confiance.
+ * Foundation of the autonomous test environment (story S5-00b, docs/TESTING.md).
+ * These tests validate the seams themselves — if one breaks, no time- or
+ * event-driven assertion in Phase 5 can be trusted.
  */
 
-describe('Pilier 1 — DB isolée', () => {
-  test('freshStore() est en mémoire et ne partage rien entre instances', async () => {
+describe('Pillar 1 — isolated database', () => {
+  test('freshStore() is in memory and shares nothing between instances', async () => {
     const a = freshStore();
     const b = freshStore();
 
     await a.add({
-      content: 'trace du store A',
+      content: 'trace from store A',
       directory: '/a',
       day: '2026-01-01',
       keywords: ['a'],
@@ -33,11 +33,11 @@ describe('Pilier 1 — DB isolée', () => {
     b.close();
   });
 
-  test('ouvrir la DB de prod sous NODE_ENV=test lève', () => {
+  test('opening the production database under NODE_ENV=test throws', () => {
     const previous = process.env.NODE_ENV;
     process.env.NODE_ENV = 'test';
     try {
-      // Chemin par défaut = data/humemory.db → doit être refusé.
+      // Default path is data/humemory.db, which must be refused.
       expect(() => new SQLiteStore()).toThrow(/production/i);
     } finally {
       process.env.NODE_ENV = previous;
@@ -45,8 +45,8 @@ describe('Pilier 1 — DB isolée', () => {
   });
 });
 
-describe('Pilier 2 — Clock injectable', () => {
-  test('FakeClock n\'avance que sur demande', () => {
+describe('Pillar 2 — injectable clock', () => {
+  test('FakeClock only advances on demand', () => {
     const clock = new FakeClock(T0);
     expect(clock.now().toISOString()).toBe(T0.toISOString());
 
@@ -57,26 +57,26 @@ describe('Pilier 2 — Clock injectable', () => {
     expect(clock.now().getTime() - T0.getTime()).toBe((25 + 48) * 3600_000);
   });
 
-  test('now() renvoie une copie — muter le retour ne décale pas l\'horloge', () => {
+  test('now() returns a copy — mutating it does not shift the clock', () => {
     const clock = new FakeClock(T0);
     const d = clock.now();
     d.setFullYear(1999);
     expect(clock.now().getUTCFullYear()).toBe(2026);
   });
 
-  test('systemClock reste l\'horloge par défaut du store', () => {
-    // Garde-fou de non-régression pour la prod : pas d'horloge figée par accident.
+  test('systemClock remains the store default clock', () => {
+    // Non-regression guard for production: no frozen clock by accident.
     const before = Date.now();
     const t = systemClock.now().getTime();
     expect(t).toBeGreaterThanOrEqual(before);
   });
 
-  test('le store horodate via l\'horloge injectée, pas l\'heure système', async () => {
+  test('the store timestamps through the injected clock, not the system time', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
 
     const m = await store.add({
-      content: 'trace horodatée par la FakeClock',
+      content: 'trace timestamped by the FakeClock',
       directory: '/src/core',
       day: '2026-01-01',
       keywords: ['clock'],
@@ -87,11 +87,11 @@ describe('Pilier 2 — Clock injectable', () => {
     store.close();
   });
 
-  test('recall() horodate lui aussi via l\'horloge injectée', async () => {
+  test('recall() timestamps through the injected clock too', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const m = await store.add({
-      content: 'trace rappelée plus tard',
+      content: 'trace recalled later',
       directory: '/src/core',
       day: '2026-01-01',
       keywords: ['recall'],
@@ -107,18 +107,18 @@ describe('Pilier 2 — Clock injectable', () => {
   });
 });
 
-describe('Pilier 3 — LLM stubbé', () => {
+describe('Pillar 3 — stubbed LLM', () => {
   beforeEach(() => {
     useStubLLM();
   });
 
-  test('autoGenerate passe par le stub, sans réseau', async () => {
+  test('autoGenerate goes through the stub, no network', async () => {
     const client = useStubLLM({ levels: { level3Keywords: 'alpha, beta, gamma' } });
     const store = freshStore();
 
     const m = await store.add(
       {
-        content: 'Une trace qui doit être résumée par le stub déterministe',
+        content: 'A trace to be summarised by the deterministic stub',
         directory: '/src/core',
         day: '2026-01-01',
         keywords: ['stub'],
@@ -129,18 +129,18 @@ describe('Pilier 3 — LLM stubbé', () => {
 
     expect(client.calls.length).toBe(1);
     expect(m.level3Keywords).toBe('alpha, beta, gamma');
-    expect(m.level1Summary).toContain('résumé:');
+    expect(m.level1Summary).toContain('summary:');
     store.close();
   });
 
-  test('aucune clé API n\'est requise', () => {
-    // La CI tourne sans ANTHROPIC_API_KEY : le stub doit suffire.
+  test('no API key is required', () => {
+    // CI runs without ANTHROPIC_API_KEY: the stub must be enough.
     expect(() => useStubLLM()).not.toThrow();
   });
 });
 
-describe('Pilier 4 — Event bus injectable', () => {
-  test('publish() atteint les abonnés du type, et eux seuls', async () => {
+describe('Pillar 4 — injectable event bus', () => {
+  test('publish() reaches subscribers of that type, and only those', async () => {
     const bus = new InMemoryEventBus();
     const seen: AppEvent[] = [];
     const others: AppEvent[] = [];
@@ -159,7 +159,7 @@ describe('Pilier 4 — Event bus injectable', () => {
     expect(seen[0]).toMatchObject({ type: 'branch_switch', branch: 'feature/x' });
   });
 
-  test('subscribeAll() voit tous les types', async () => {
+  test('subscribeAll() sees every type', async () => {
     const bus = new InMemoryEventBus();
     const seen: string[] = [];
     bus.subscribeAll((e) => {
@@ -174,7 +174,7 @@ describe('Pilier 4 — Event bus injectable', () => {
     expect(seen).toEqual(['file_open', 'branch_switch', 'error_pattern', 'commit']);
   });
 
-  test('publish() attend les handlers asynchrones — pas de setTimeout en test', async () => {
+  test('publish() awaits async handlers — no setTimeout in tests', async () => {
     const bus = new InMemoryEventBus();
     let done = false;
 
@@ -184,16 +184,16 @@ describe('Pilier 4 — Event bus injectable', () => {
     });
 
     await bus.publish(eventFixtures()['commit-closes-loop']);
-    expect(done).toBe(true); // vrai immédiatement après l'await
+    expect(done).toBe(true); // true immediately after the await
   });
 
-  test('se désabonner pendant la diffusion ne casse pas l\'itération', async () => {
+  test('unsubscribing mid-dispatch does not break the iteration', async () => {
     const bus = new InMemoryEventBus();
     const calls: string[] = [];
 
     const off = bus.subscribe('file_open', () => {
-      calls.push('premier');
-      off(); // se retire pendant la diffusion
+      calls.push('first');
+      off(); // removes itself mid-dispatch
     });
     bus.subscribe('file_open', () => {
       calls.push('second');
@@ -203,10 +203,10 @@ describe('Pilier 4 — Event bus injectable', () => {
     await bus.publish(event);
     await bus.publish(event);
 
-    expect(calls).toEqual(['premier', 'second', 'second']);
+    expect(calls).toEqual(['first', 'second', 'second']);
   });
 
-  test('le journal permet d\'assertion sans abonnement', async () => {
+  test('the log allows assertions without subscribing', async () => {
     const bus = new InMemoryEventBus();
     const events = eventFixtures();
 
@@ -222,7 +222,7 @@ describe('Pilier 4 — Event bus injectable', () => {
 });
 
 describe('Fixtures', () => {
-  test('seedMemories() alimente le store depuis le fichier, pas des littéraux', async () => {
+  test('seedMemories() feeds the store from the file, not from literals', async () => {
     const store = freshStore();
     const seeded = await seedMemories(store);
 
@@ -239,8 +239,8 @@ describe('Fixtures', () => {
   });
 });
 
-describe('Bout-en-bout — decay piloté uniquement par FakeClock.advance()', () => {
-  test('une trace descend L0 → L1 → L2 → L3 sans attente réelle', async () => {
+describe('End to end — decay driven purely by FakeClock.advance()', () => {
+  test('a trace falls L0 → L1 → L2 → L3 with no real waiting', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const seeded = await seedMemories(store);
@@ -263,7 +263,7 @@ describe('Bout-en-bout — decay piloté uniquement par FakeClock.advance()', ()
     store.close();
   });
 
-  test('une trace photographic ne se dégrade jamais, même à +1 an', async () => {
+  test('a photographic trace never decays, even a year on', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const seeded = await seedMemories(store);
@@ -276,20 +276,20 @@ describe('Bout-en-bout — decay piloté uniquement par FakeClock.advance()', ()
     store.close();
   });
 
-  test('un rappel ralentit la dégradation par rapport à une trace jamais rappelée', async () => {
+  test('a recall slows decay compared with a trace never recalled', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const seeded = await seedMemories(store);
 
-    const rappelee = seeded['auth-bug'].id;
-    const oubliee = seeded['sqlite-wal'].id;
+    const recalled = seeded['auth-bug'].id;
+    const forgotten = seeded['sqlite-wal'].id;
 
     clock.advanceHours(HOURS.L1 + 1);
-    await store.recall(rappelee);
+    await store.recall(recalled);
     await store.updateDecay();
 
-    const a = (await store.getById(rappelee))!;
-    const b = (await store.getById(oubliee))!;
+    const a = (await store.getById(recalled))!;
+    const b = (await store.getById(forgotten))!;
 
     expect(a.saillance).toBeGreaterThan(b.saillance);
     expect(a.currentLevel).toBeLessThanOrEqual(b.currentLevel);

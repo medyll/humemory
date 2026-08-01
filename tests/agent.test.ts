@@ -102,8 +102,8 @@ describe('learning-extractor', () => {
 });
 
 describe('processSession (integration)', () => {
-  // `:memory:` plutôt qu'un fichier temporaire : rien à nettoyer, rien à laisser
-  // traîner si un test échoue (docs/TESTING.md, pilier 1).
+  // `:memory:` rather than a temporary file: nothing to clean up, nothing left
+  // behind when a test fails (docs/TESTING.md, pillar 1).
   const DB = ':memory:';
 
   test('stocke les apprentissages extraits en DB', async () => {

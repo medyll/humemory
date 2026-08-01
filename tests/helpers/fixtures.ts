@@ -20,25 +20,25 @@ interface MemoryFixture {
   sessionId: string;
   memoryType?: string;
   photographic?: boolean;
-  /** Décalage par rapport au « maintenant » de l'horloge, en heures. */
+  /** Offset from the clock's "now", in hours. */
   offsetHours?: number;
 }
 
-/** Traces brutes du fichier de fixtures, sans insertion. */
+/** Raw traces from the fixture file, without inserting them. */
 export function memoryFixtures(file = 'memories.basic.json'): MemoryFixture[] {
   return readFixture<{ memories: MemoryFixture[] }>(file).memories;
 }
 
 /**
- * Seed un store depuis un fichier de fixtures. Retourne les traces insérées
- * indexées par `key`, pour des assertions lisibles :
+ * Seeds a store from a fixture file. Returns the inserted traces keyed by their
+ * fixture `key`, so assertions read well:
  *
  * ```ts
  * const seeded = await seedMemories(store);
  * expect(seeded['auth-bug'].currentLevel).toBe(0);
  * ```
  *
- * Les fixtures remplacent les littéraux ad hoc dans les suites (docs/TESTING.md → Fixtures).
+ * Fixtures replace ad hoc literals in the suites (docs/TESTING.md → Fixtures).
  */
 export async function seedMemories(
   store: SQLiteStore,
@@ -59,20 +59,20 @@ interface IntentionFixture {
   key: string;
   content: string;
   directory: string;
-  /** Deadline exprimée en heures depuis « maintenant » — jamais une date absolue. */
+  /** Deadline expressed in hours from "now" — never an absolute date. */
   expiresInHours?: number;
   cues?: TriggerSpec[];
 }
 
-/** Boucles ouvertes brutes du fichier de fixtures, sans insertion. */
+/** Raw open loops from the fixture file, without inserting them. */
 export function intentionFixtures(file = 'loops.open.json'): IntentionFixture[] {
   return readFixture<{ intentions: IntentionFixture[] }>(file).intentions;
 }
 
 /**
- * Arme les intentions du fichier de fixtures (avec leurs cues) dans le store.
- * `expiresInHours` est résolu contre `now` — passe le `now()` de ta FakeClock pour
- * que les deadlines restent déterministes.
+ * Arms the fixture intentions (with their cues) in the store.
+ * `expiresInHours` is resolved against `now` — pass your FakeClock's `now()` so
+ * deadlines stay deterministic.
  */
 export async function seedIntentions(
   store: SQLiteStore,
@@ -100,7 +100,7 @@ interface EventFixture extends Record<string, unknown> {
   key: string;
 }
 
-/** Events de fixtures indexés par `key`, prêts à être publiés sur le bus. */
+/** Fixture events keyed by `key`, ready to publish on the bus. */
 export function eventFixtures(file = 'events.basic.json'): Record<string, AppEvent> {
   const { events } = readFixture<{ events: EventFixture[] }>(file);
   const byKey: Record<string, AppEvent> = {};

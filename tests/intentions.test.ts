@@ -5,16 +5,16 @@ import { seedIntentions, intentionFixtures } from './helpers/fixtures.js';
 import type { TriggerSpec } from '../src/core/types.js';
 
 /**
- * Phase 5.1 — modèle de données prospectif (story S5-01).
- * Couche données seulement : armer, lister, transitionner. Le déclenchement
- * (resolveTimeCues / resolveEventCues / expireStale) arrive en S5-02.
+ * Phase 5.1 — prospective data model (story S5-01).
+ * Data layer only: arm, list, transition. Firing
+ * (resolveTimeCues / resolveEventCues / expireStale) lands in S5-02.
  */
 
 const FILE_CUE: TriggerSpec = { kind: 'event', type: 'file_open', path: 'src/auth/service.ts' };
 const TIME_CUE: TriggerSpec = { kind: 'time', at: '2026-01-08T09:00:00.000Z' };
 
-describe('Schéma — migrations idempotentes', () => {
-  test('rejouer initSchema sur une base existante ne perd rien', async () => {
+describe('Schema — idempotent migrations', () => {
+  test('replaying initSchema on an existing database loses nothing', async () => {
     const { mkdtempSync, rmSync } = await import('fs');
     const { tmpdir } = await import('os');
     const { join } = await import('path');
@@ -26,17 +26,17 @@ describe('Schéma — migrations idempotentes', () => {
     try {
       const first = new SQLiteStore(dbPath, { clock: fakeClock() });
       const intention = await first.addIntention(
-        { content: 'survit à la réouverture', directory: '/src' },
+        { content: 'survives reopening', directory: '/src' },
         [FILE_CUE]
       );
       first.close();
 
-      // Réouverture : CREATE TABLE IF NOT EXISTS rejoué sur des tables peuplées.
+      // Reopening: CREATE TABLE IF NOT EXISTS replayed over populated tables.
       const second = new SQLiteStore(dbPath, { clock: fakeClock() });
       const reloaded = await second.getIntention(intention.id);
 
       expect(reloaded).not.toBeNull();
-      expect(reloaded!.content).toBe('survit à la réouverture');
+      expect(reloaded!.content).toBe('survives reopening');
       expect((await second.listCues({ intentionId: intention.id })).length).toBe(1);
       second.close();
     } finally {
@@ -45,30 +45,30 @@ describe('Schéma — migrations idempotentes', () => {
   });
 });
 
-describe('Intentions — écriture et lecture', () => {
-  test('addIntention arme par défaut avec saillance 100', async () => {
+describe('Intentions — writing and reading', () => {
+  test('addIntention arms with salience 100 by default', async () => {
     const store = freshStore();
     const i = await store.addIntention({ content: 'refactor fn X', directory: '/src/auth' });
 
     expect(i.status).toBe('armed');
-    expect(i.saillance).toBe(100); // boucle ouverte = saillance figée au max
+    expect(i.saillance).toBe(100); // open loop = salience pinned at the maximum
     expect(i.createdAt.toISOString()).toBe(T0.toISOString());
-    expect(i.expiresAt).toBeUndefined(); // intention sans deadline
+    expect(i.expiresAt).toBeUndefined(); // intention with no deadline
     store.close();
   });
 
-  test('les horodatages viennent de l\'horloge injectée', async () => {
+  test('timestamps come from the injected clock', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
 
     clock.advanceHours(5);
-    const i = await store.addIntention({ content: 'plus tard', directory: '/src' });
+    const i = await store.addIntention({ content: 'later', directory: '/src' });
 
     expect(i.createdAt.getTime()).toBe(T0.getTime() + 5 * 3600_000);
     store.close();
   });
 
-  test('addIntention arme ses cues dans la même écriture', async () => {
+  test('addIntention arms its cues in the same write', async () => {
     const store = freshStore();
     const i = await store.addIntention(
       { content: 'refactor auth', directory: '/src/auth' },
@@ -82,26 +82,26 @@ describe('Intentions — écriture et lecture', () => {
     store.close();
   });
 
-  test('le triggerSpec fait l\'aller-retour JSON sans perdre son type', async () => {
+  test('the triggerSpec round-trips through JSON without losing its type', async () => {
     const store = freshStore();
     const i = await store.addIntention({ content: 'c', directory: '/d' }, [FILE_CUE]);
 
     const [cue] = await store.listCues({ intentionId: i.id });
     expect(cue.triggerSpec).toEqual(FILE_CUE);
-    // Le discriminant survit — c'est lui que le resolver lira en 5.2.
+    // The discriminant survives — the resolver reads it in 5.2.
     expect(cue.triggerSpec.kind).toBe('event');
     store.close();
   });
 
-  test('getIntention renvoie null pour un id inconnu', async () => {
+  test('getIntention returns null for an unknown id', async () => {
     const store = freshStore();
     expect(await store.getIntention('inexistant')).toBeNull();
     store.close();
   });
 });
 
-describe('Intentions — filtres de liste', () => {
-  test('filtre par statut, simple ou multiple', async () => {
+describe('Intentions — list filters', () => {
+  test('filters by status, single or multiple', async () => {
     const store = freshStore();
     const a = await store.addIntention({ content: 'a', directory: '/x' });
     const b = await store.addIntention({ content: 'b', directory: '/x' });
@@ -115,31 +115,31 @@ describe('Intentions — filtres de liste', () => {
     store.close();
   });
 
-  test('filtre par lieu mental', async () => {
+  test('filters by mental place', async () => {
     const store = freshStore();
-    await store.addIntention({ content: 'ici', directory: '/src/auth' });
-    await store.addIntention({ content: 'ailleurs', directory: '/src/core' });
+    await store.addIntention({ content: 'here', directory: '/src/auth' });
+    await store.addIntention({ content: 'elsewhere', directory: '/src/core' });
 
     const found = await store.listIntentions({ directory: '/src/auth' });
     expect(found.length).toBe(1);
-    expect(found[0].content).toBe('ici');
+    expect(found[0].content).toBe('here');
     store.close();
   });
 
-  test('un statut exotique ne casse pas la requête (valeur liée, pas de SQL concaténé)', async () => {
+  test('an exotic status does not break the query (bound value, no concatenated SQL)', async () => {
     const store = freshStore();
     await store.addIntention({ content: 'a', directory: '/x' });
 
     const hostile = "armed'; DROP TABLE intentions; --" as any;
     expect(await store.listIntentions({ status: hostile })).toEqual([]);
-    // La table est toujours là.
+    // The table is still there.
     expect((await store.listIntentions()).length).toBe(1);
     store.close();
   });
 });
 
-describe('Intentions — transitions de statut', () => {
-  test('fired pose fired_at une seule fois', async () => {
+describe('Intentions — status transitions', () => {
+  test('fired sets fired_at only once', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const i = await store.addIntention({ content: 'x', directory: '/d' });
@@ -149,14 +149,14 @@ describe('Intentions — transitions de statut', () => {
     const firstFiredAt = fired.firedAt!.getTime();
     expect(firstFiredAt).toBe(T0.getTime() + 2 * 3600_000);
 
-    // Re-firer ne doit pas réécrire l'horodatage d'origine.
+    // Firing again must not rewrite the original timestamp.
     clock.advanceHours(3);
     const again = await store.updateIntentionStatus(i.id, 'fired');
     expect(again.firedAt!.getTime()).toBe(firstFiredAt);
     store.close();
   });
 
-  test('closed pose closed_at et le SHA du commit qui a fermé la boucle', async () => {
+  test('closed sets closed_at and the SHA of the commit that closed the loop', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const i = await store.addIntention({ content: 'x', directory: '/d' });
@@ -170,9 +170,9 @@ describe('Intentions — transitions de statut', () => {
     store.close();
   });
 
-  test('expired est un soft-delete : la ligne reste consultable', async () => {
+  test('expired is a soft delete: the row stays readable', async () => {
     const store = freshStore();
-    const i = await store.addIntention({ content: 'périmée', directory: '/d' });
+    const i = await store.addIntention({ content: 'overdue', directory: '/d' });
 
     await store.updateIntentionStatus(i.id, 'expired');
 
@@ -182,7 +182,7 @@ describe('Intentions — transitions de statut', () => {
     store.close();
   });
 
-  test('transitionner une intention inconnue lève', async () => {
+  test('transitioning an unknown intention throws', async () => {
     const store = freshStore();
     await expect(store.updateIntentionStatus('inexistant', 'fired')).rejects.toThrow(/not found/);
     store.close();
@@ -190,7 +190,7 @@ describe('Intentions — transitions de statut', () => {
 });
 
 describe('Cues', () => {
-  test('addCue refuse une intention inexistante', async () => {
+  test('addCue refuses a non-existent intention', async () => {
     const store = freshStore();
     await expect(store.addCue({ intentionId: 'inexistant', triggerSpec: TIME_CUE })).rejects.toThrow(
       /not found/
@@ -198,7 +198,7 @@ describe('Cues', () => {
     store.close();
   });
 
-  test('fired pose fired_at, cancelled ne le pose pas', async () => {
+  test('fired sets fired_at, cancelled does not', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const i = await store.addIntention({ content: 'x', directory: '/d' }, [TIME_CUE, FILE_CUE]);
@@ -216,7 +216,7 @@ describe('Cues', () => {
     store.close();
   });
 
-  test('filtre par kind', async () => {
+  test('filters by kind', async () => {
     const store = freshStore();
     const i = await store.addIntention({ content: 'x', directory: '/d' }, [TIME_CUE, FILE_CUE]);
 
@@ -225,7 +225,7 @@ describe('Cues', () => {
     store.close();
   });
 
-  test('supprimer l\'intention emporte ses cues (ON DELETE CASCADE)', async () => {
+  test('deleting the intention takes its cues with it (ON DELETE CASCADE)', async () => {
     const store = freshStore();
     const i = await store.addIntention({ content: 'x', directory: '/d' }, [TIME_CUE, FILE_CUE]);
     expect((await store.listCues({ intentionId: i.id })).length).toBe(2);
@@ -233,13 +233,13 @@ describe('Cues', () => {
     await store.deleteIntention(i.id);
 
     expect(await store.getIntention(i.id)).toBeNull();
-    expect((await store.listCues({ intentionId: i.id })).length).toBe(0); // pas d'orphelins
+    expect((await store.listCues({ intentionId: i.id })).length).toBe(0); // no orphans
     store.close();
   });
 });
 
-describe('Fixtures — boucles ouvertes', () => {
-  test('seedIntentions arme les boucles et leurs cues depuis le fichier', async () => {
+describe('Fixtures — open loops', () => {
+  test('seedIntentions arms the loops and their cues from the file', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const seeded = await seedIntentions(store, { now: clock.now() });
@@ -250,23 +250,23 @@ describe('Fixtures — boucles ouvertes', () => {
         .sort()
     );
 
-    // doc-prospective porte deux cues : un event, un cron.
+    // doc-prospective carries two cues: one event, one cron.
     const doc = seeded['doc-prospective'];
     const cues = await store.listCues({ intentionId: doc.id });
     expect(cues.length).toBe(2);
-    expect(doc.expiresAt).toBeUndefined(); // pas de deadline déclarée
+    expect(doc.expiresAt).toBeUndefined(); // no deadline declared
 
     store.close();
   });
 
-  test('les deadlines sont relatives à l\'horloge, pas absolues', async () => {
+  test('deadlines are relative to the clock, not absolute', async () => {
     const clock = fakeClock();
     const store = freshStore({ clock });
     const seeded = await seedIntentions(store, { now: clock.now() });
 
-    // refactor-auth déclare expiresInHours: 168
+    // refactor-auth declares expiresInHours: 168
     expect(seeded['refactor-auth'].expiresAt!.getTime()).toBe(T0.getTime() + 168 * 3600_000);
-    // expired-loop déclare 1h — déjà périmée après un saut d'un jour.
+    // expired-loop declares 1h — already overdue after a one-day jump.
     expect(seeded['expired-loop'].expiresAt!.getTime()).toBeLessThan(
       clock.advanceDays(1).now().getTime()
     );
@@ -274,7 +274,7 @@ describe('Fixtures — boucles ouvertes', () => {
     store.close();
   });
 
-  test('toutes les boucles seedées sont armées', async () => {
+  test('every seeded loop is armed', async () => {
     const store = freshStore();
     const seeded = await seedIntentions(store);
 
