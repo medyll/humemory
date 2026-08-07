@@ -179,11 +179,50 @@ salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `cl
 `GET /intentions`, `POST /intentions/:id/{close,fire}`, `POST /cues`, `POST /events`,
 `POST /cues/resolve` — in `src/api/intentions-routes.ts`, mounted by the server.
 
-**Deferred to Phase 6:** Cognitive scripts — currently underspecified (template?
-chained intentions? system prompt? tool bundle?). Spec first, then code.
+**Cognitive scripts:** still underspecified (template? chained intentions?
+system prompt? tool bundle?). Carried through Phase 6's Deferred list — spec
+first, then code.
+
+### 🎯 Phase 6 — Trusted memory & "Dreaming" (approved 2026-08-08)
+> Approved plan in **[PHASE6_PLAN.md](./PHASE6_PLAN.md)**. Summary below.
+> Drafted collaboratively by Kimi + Claude; history in PROPOSAL.md (git-ignored).
+
+**Goal:** make the shared store *trustworthy* when several agents write to it,
+and make it *learn across sessions* instead of only decaying trace by trace.
+
+**6.0 — Trust layer:**
+- [ ] **6.0.3 first** — SessionStart injection hardening: `<humemory-untrusted>`
+  wrapping, marker-escape defence, length caps (active security hole, no migration)
+- [ ] **6.0.1** — Provenance migration: `source` / `agent` / `verified` /
+  `verification_reason` / `device` / `refuted_count` on `memories` + `intentions`.
+  Verification is **earned by evidence** (cross-agent corroboration, grounding in
+  an explicitly-closed loop, cross-agent reuse), not granted by a human gate;
+  trust score kept separate from saillance; decay slowdown capped at 2.5× on the
+  *product* of all multipliers. `device` is localization now (`$HUMEMORY_DEVICE`
+  || hostname), the foundation for multi-device sync later.
+- [ ] **6.0.4** — `level_revisions`: version derived levels before merge
+  overwrites them; enables `unmerge`. Retention: last 5 per memory.
+- [ ] **6.0.2** — `contradictions` table: loser saillance ÷4 (floor 5), excluded
+  from context but still searchable; tiered authority keyed on
+  `verification_reason`; revocation recomputes saillance.
+
+**6.1 — Dreaming (`pnpm dream`, cron `17 4 * * *`):** clusters recurring traces
+across sessions/agents (flexsearch interim behind a `Clusterer` interface —
+vectors are Phase 7), scores clusters on `base(source)` only (verification and
+clustering never feed each other), writes **idempotent** `dream_proposals`
+(14-day expiry) that a human reviews via `pnpm cli dream review`. Nothing
+touches `memories` or `AGENTS.md` without approval. New dream kind:
+`close_stale_loop` (reads `intentions` read-only).
+
+**6.2 — MCP server + per-agent adapters** (last): expose the store over MCP so
+Claude / Codex / Kimi / OpenCode share one memory; `X-Humemory-Agent` header
+and `--agent` flag carry attribution from 6.0.1 onward.
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
+- Phase 7: vector/embedding clustering for the Dreamer (swap the `Clusterer`)
+- Multi-device sync of the shared store (the `device` column from 6.0.1 makes
+  it migration-free; conflict policy TBD)
 - OpenCode / other-agent integration; export/import memories between projects
 
 ---
