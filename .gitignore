@@ -9,3 +9,6 @@ data/
 
 # Bundle du front React (pnpm build:web)
 public/app/
+
+# Working documents (agent collaboration drafts)
+PROPOSAL.md
