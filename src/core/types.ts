@@ -133,6 +133,13 @@ export interface Intention {
   closedByCommit?: string; // SHA of the commit that closed the loop
   saillance: number; // pinned at 100 while armed
   relatedMemoryId?: string; // optional link to a retrospective trace
+
+  // ── Phase 6 trust layer (gap 8: loops carry provenance too) ──
+  source?: TraceSource;
+  agent?: string;
+  verified?: boolean;
+  verificationReason?: VerificationReason;
+  device?: string;
 }
 
 export interface Cue {
@@ -193,7 +200,11 @@ export interface MemoryStore {
   add(memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>, options?: { autoGenerate?: boolean }): Promise<Memory>;
   getById(id: string): Promise<Memory | null>;
   search(query: SearchQuery): Promise<SearchResult[]>;
-  recall(id: string): Promise<Memory>;
+  /**
+   * `agent` (Phase 6.0.1): who is recalling. A recall by a *different* agent
+   * than the writer earns the trace the `reused` verification.
+   */
+  recall(id: string, agent?: string): Promise<Memory>;
   updateDecay(): Promise<void>;
   delete(id: string): Promise<void>;
   list(options?: {
@@ -207,4 +218,8 @@ export interface MemoryStore {
   findSimilar(id: string, options?: { limit?: number; threshold?: number }): Promise<SearchResult[]>;
   merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: import('./llm-generator.js').LLMClient }): Promise<MergeResult>;
   setPhotographic(id: string, value: boolean): Promise<Memory>;
+  /** Phase 6.0.1 — human override verification; automatic paths set the flag directly. */
+  verify?(id: string, by?: string): Promise<Memory>;
+  /** Phase 6.0.1 — negative signal: refuted_count +1 and verification revoked. */
+  refute?(id: string, reason?: string): Promise<Memory>;
 }

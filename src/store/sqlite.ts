@@ -3,10 +3,12 @@ import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { openSync, closeSync, unlinkSync, existsSync } from 'fs';
+import { hostname } from 'os';
 import type {
   Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult,
   Intention, IntentionStatus, IntentionStore, NewIntention,
   Cue, CueKind, CueStatus, NewCue, TriggerSpec,
+  VerificationReason,
 } from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
 import { InverseSearchEngine } from '../core/search.js';
@@ -21,6 +23,16 @@ const DEFAULT_DB_PATH = join(__dirname, '../../data/humemory.db');
 export interface StoreOptions {
   /** Time source. Defaults to `systemClock`; tests pass a `FakeClock`. */
   clock?: Clock;
+  /**
+   * Encoding device id (Phase 6.0.1). Defaults to `$HUMEMORY_DEVICE`, then
+   * `os.hostname()`. Localization now; multi-device sync later.
+   */
+  device?: string;
+}
+
+/** Resolves the encoding device id once per process. */
+function resolveDevice(override?: string): string {
+  return override ?? process.env.HUMEMORY_DEVICE ?? hostname();
 }
 
 /**
@@ -128,6 +140,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   private writeQueue: Promise<any> = Promise.resolve();
   private advisoryLock: Lock;
   private clock: Clock;
+  /** Phase 6.0.1 — stamped on every trace/intention written by this process. */
+  readonly deviceId: string;
 
   private enqueueWrite<T>(fn: () => T | Promise<T>): Promise<T> {
     this.writeQueue = this.writeQueue.then(() => fn(), () => fn());
@@ -145,6 +159,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   constructor(dbPath: string = DEFAULT_DB_PATH, options: StoreOptions = {}) {
     assertNotProdDbUnderTest(dbPath);
     this.clock = options.clock ?? systemClock;
+    this.deviceId = resolveDevice(options.device);
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode=WAL');
     this.db.exec('PRAGMA busy_timeout=5000');
@@ -196,6 +211,24 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       this.db.exec("ALTER TABLE memories ADD COLUMN photographic INTEGER DEFAULT 0");
     } catch {
       // column already exists
+    }
+
+    // Phase 6.0.1 — provenance & trust (additive, defaults on every column;
+    // pre-Phase-6 rows keep NULL agent/device — silence is not endorsement).
+    const memoryTrustColumns = [
+      "ALTER TABLE memories ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'",
+      "ALTER TABLE memories ADD COLUMN agent TEXT",
+      "ALTER TABLE memories ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE memories ADD COLUMN verification_reason TEXT",
+      "ALTER TABLE memories ADD COLUMN device TEXT",
+      "ALTER TABLE memories ADD COLUMN refuted_count INTEGER NOT NULL DEFAULT 0",
+    ];
+    for (const stmt of memoryTrustColumns) {
+      try {
+        this.db.exec(stmt);
+      } catch {
+        // column already exists
+      }
     }
 
     this.db.exec(`
@@ -250,6 +283,22 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       CREATE INDEX IF NOT EXISTS idx_cues_status ON cues(status);
       CREATE INDEX IF NOT EXISTS idx_cues_kind ON cues(kind);
     `);
+
+    // Phase 6.0.1 — same provenance columns on intentions (gap 8).
+    const intentionTrustColumns = [
+      "ALTER TABLE intentions ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'",
+      "ALTER TABLE intentions ADD COLUMN agent TEXT",
+      "ALTER TABLE intentions ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE intentions ADD COLUMN verification_reason TEXT",
+      "ALTER TABLE intentions ADD COLUMN device TEXT",
+    ];
+    for (const stmt of intentionTrustColumns) {
+      try {
+        this.db.exec(stmt);
+      } catch {
+        // column already exists
+      }
+    }
   }
 
   private loadIntoMemory(): void {
@@ -279,6 +328,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       saillance: row.saillance,
       mergedIntoId: row.merged_into_id || undefined,
       photographic: Boolean(row.photographic),
+      // Phase 6.0.1 — trust layer
+      source: row.source || undefined,
+      agent: row.agent || undefined,
+      verified: Boolean(row.verified),
+      verificationReason: (row.verification_reason || undefined) as VerificationReason | undefined,
+      device: row.device || undefined,
+      refutedCount: row.refuted_count ?? 0,
     };
   }
 
@@ -302,6 +358,12 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       $saillance: memory.saillance,
       $merged_into_id: memory.mergedIntoId || null,
       $photographic: memory.photographic ? 1 : 0,
+      $source: memory.source ?? 'agent',
+      $agent: memory.agent || null,
+      $verified: memory.verified ? 1 : 0,
+      $verification_reason: memory.verificationReason || null,
+      $device: memory.device || null,
+      $refuted_count: memory.refutedCount ?? 0,
     };
   }
 
@@ -328,6 +390,11 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       decayRate: calculateDecayRate(memory.content, memory.keywords),
       currentLevel: 0,
       saillance: calculateSaillance({ ...memory, id, createdAt: now, recallCount: 0, decayRate: 0.5 } as Memory, now),
+      // Phase 6.0.1 — provenance defaults
+      source: memory.source ?? 'agent',
+      verified: memory.verified ?? false,
+      refutedCount: memory.refutedCount ?? 0,
+      device: memory.device ?? this.deviceId,
     };
 
     const row = this.memoryToRow(fullMemory);
@@ -336,11 +403,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
         INSERT INTO memories (
           id, content, level1_summary, level2_essential, level3_keywords,
           directory, day, keywords, session_id, memory_type, created_at, last_recalled,
-          recall_count, decay_rate, current_level, saillance, merged_into_id, photographic
+          recall_count, decay_rate, current_level, saillance, merged_into_id, photographic,
+          source, agent, verified, verification_reason, device, refuted_count
         ) VALUES (
           $id, $content, $level1_summary, $level2_essential, $level3_keywords,
           $directory, $day, $keywords, $session_id, $memory_type, $created_at, $last_recalled,
-          $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id, $photographic
+          $recall_count, $decay_rate, $current_level, $saillance, $merged_into_id, $photographic,
+          $source, $agent, $verified, $verification_reason, $device, $refuted_count
         )
       `).run(row);
       this.searchEngine.add(fullMemory);
@@ -358,8 +427,15 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     return this.searchEngine.search(query);
   }
 
-  async recall(id: string): Promise<Memory> {
+  async recall(id: string, agent?: string): Promise<Memory> {
     const now = this.clock.now();
+    const before = await this.getById(id);
+    if (!before) throw new Error(`Memory ${id} not found`);
+
+    // Phase 6.0.1 — cross-agent reuse earns verification: a trace written by
+    // agent X recalled by agent Y proved useful across the boundary.
+    const reused = agent !== undefined && before.agent !== undefined && agent !== before.agent;
+
     await this.enqueueWriteWithLock(async () => {
       this.db.query(`
         UPDATE memories
@@ -368,11 +444,56 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
             saillance = $saillance
         WHERE id = $id
       `).run({ $id: id, $last_recalled: now.getTime(), $saillance: 100 });
+      if (reused && !before.verified) {
+        this.db.query(`
+          UPDATE memories SET verified = 1, verification_reason = 'reused' WHERE id = $id
+        `).run({ $id: id });
+      }
     });
     const memory = await this.getById(id);
     if (!memory) throw new Error(`Memory ${id} not found`);
     this.searchEngine.update(memory);
     return memory;
+  }
+
+  /**
+   * Phase 6.0.1 — human override verification (`pnpm cli verify <id>`).
+   * Automatic paths (reused/grounded/corroborated) set the flag directly.
+   */
+  async verify(id: string, by: string = 'human'): Promise<Memory> {
+    const memory = await this.getById(id);
+    if (!memory) throw new Error(`Memory ${id} not found`);
+    const reason: VerificationReason = by === 'human' ? 'human' : (by as VerificationReason);
+    await this.enqueueWriteWithLock(async () => {
+      this.db.query(`
+        UPDATE memories SET verified = 1, verification_reason = $reason WHERE id = $id
+      `).run({ $id: id, $reason: reason });
+    });
+    const updated = await this.getById(id);
+    this.searchEngine.update(updated!);
+    return updated!;
+  }
+
+  /**
+   * Phase 6.0.1 — negative signal without a full contradiction (6.0.2):
+   * increments refuted_count (feeds the trust score) and revokes any earned
+   * verification — a refuted trace must be re-earned, not remembered.
+   */
+  async refute(id: string, _reason?: string): Promise<Memory> {
+    const memory = await this.getById(id);
+    if (!memory) throw new Error(`Memory ${id} not found`);
+    await this.enqueueWriteWithLock(async () => {
+      this.db.query(`
+        UPDATE memories
+        SET refuted_count = refuted_count + 1,
+            verified = 0,
+            verification_reason = NULL
+        WHERE id = $id
+      `).run({ $id: id });
+    });
+    const updated = await this.getById(id);
+    this.searchEngine.update(updated!);
+    return updated!;
   }
 
   async updateDecay(): Promise<void> {
@@ -580,6 +701,12 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       closedByCommit: row.closed_by_commit || undefined,
       saillance: row.saillance,
       relatedMemoryId: row.related_memory_id || undefined,
+      // Phase 6.0.1 — trust layer
+      source: row.source || undefined,
+      agent: row.agent || undefined,
+      verified: Boolean(row.verified),
+      verificationReason: (row.verification_reason || undefined) as VerificationReason | undefined,
+      device: row.device || undefined,
     };
   }
 
@@ -613,13 +740,20 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       status: intention.status ?? 'armed',
       saillance: intention.saillance ?? 100,
       relatedMemoryId: intention.relatedMemoryId,
+      // Phase 6.0.1 — provenance defaults
+      source: intention.source ?? 'agent',
+      agent: intention.agent,
+      verified: intention.verified ?? false,
+      device: intention.device ?? this.deviceId,
     };
 
     await this.enqueueWriteWithLock(async () => {
       this.db
         .query(
-          `INSERT INTO intentions (id, content, directory, created_at, expires_at, status, saillance, related_memory_id)
-           VALUES ($id, $content, $directory, $created_at, $expires_at, $status, $saillance, $related_memory_id)`
+          `INSERT INTO intentions (id, content, directory, created_at, expires_at, status, saillance, related_memory_id,
+                                   source, agent, verified, verification_reason, device)
+           VALUES ($id, $content, $directory, $created_at, $expires_at, $status, $saillance, $related_memory_id,
+                   $source, $agent, $verified, $verification_reason, $device)`
         )
         .run({
           $id: full.id,
@@ -630,6 +764,11 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
           $status: full.status,
           $saillance: full.saillance,
           $related_memory_id: full.relatedMemoryId ?? null,
+          $source: full.source ?? 'agent',
+          $agent: full.agent ?? null,
+          $verified: full.verified ? 1 : 0,
+          $verification_reason: full.verificationReason ?? null,
+          $device: full.device ?? null,
         });
 
       for (const spec of cues) {

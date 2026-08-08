@@ -15,11 +15,11 @@ export function createMemoryRoutes(store: SQLiteStore) {
   // === MEMORIES ===
   app.post('/memories', async (c) => {
     const body = await c.req.json();
-  
+
     try {
       const validTypes = ['episodic', 'semantic', 'procedural'];
       const memoryType = validTypes.includes(body.memoryType) ? body.memoryType : 'semantic';
-    
+
       const memory = await store.add({
         content: body.content,
         directory: body.directory || process.cwd(),
@@ -30,6 +30,9 @@ export function createMemoryRoutes(store: SQLiteStore) {
         level2Essential: body.level2Essential,
         level3Keywords: body.level3Keywords,
         memoryType: memoryType as 'episodic' | 'semantic' | 'procedural',
+        // Phase 6.0.1 — attribution on every write path
+        source: body.source ?? 'agent',
+        agent: c.req.header('X-Humemory-Agent') ?? body.agent ?? 'unknown',
       });
 
       return c.json({ success: true, memory }, 201);
@@ -62,7 +65,29 @@ export function createMemoryRoutes(store: SQLiteStore) {
 
   app.post('/memories/:id/recall', async (c) => {
     try {
-      const memory = await store.recall(c.req.param('id'));
+      // Phase 6.0.1 — the calling agent earns (or not) the `reused` verification
+      const agent = c.req.header('X-Humemory-Agent');
+      const memory = await store.recall(c.req.param('id'), agent);
+      return c.json({ success: true, memory });
+    } catch (error) {
+      return c.json({ success: false, error: String(error) }, 500);
+    }
+  });
+
+  // Phase 6.0.1 — trust layer
+  app.post('/memories/:id/verify', async (c) => {
+    try {
+      const memory = await store.verify(c.req.param('id'), 'human');
+      return c.json({ success: true, memory });
+    } catch (error) {
+      return c.json({ success: false, error: String(error) }, 500);
+    }
+  });
+
+  app.post('/memories/:id/refute', async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const memory = await store.refute(c.req.param('id'), body.reason);
       return c.json({ success: true, memory });
     } catch (error) {
       return c.json({ success: false, error: String(error) }, 500);

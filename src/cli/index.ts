@@ -50,6 +50,7 @@ program
   .option('-t, --type <type>', 'Memory type (episodic/semantic/procedural)', 'semantic')
   .option('--auto', 'Auto-generate levels 1-3 through the LLM (needs ANTHROPIC_API_KEY)')
   .option('--photographic', 'Photographic mode — disable decay')
+  .option('--agent <name>', 'Who is encoding (claude/codex/kimi/…)', 'cli')
   .action(async (content, options) => {
     const s = getStore();
 
@@ -73,6 +74,7 @@ program
       level3Keywords: options.level3,
       memoryType: memoryType as 'episodic' | 'semantic' | 'procedural',
       photographic: options.photographic ?? false,
+      agent: options.agent,
     }, { autoGenerate: options.auto });
 
     const typeLabels = { episodic: 'Episodic', semantic: 'Semantic', procedural: 'Procedural' };
@@ -151,15 +153,52 @@ program
   .command('recall <id>')
   .alias('reactivate')
   .description('Recall a trace (mnemonic reinforcement)')
-  .action(async (id) => {
+  .option('--agent <name>', 'Who is recalling (earns `reused` verification across agents)')
+  .action(async (id, options) => {
     const s = getStore();
-    
-    const memory = await s.recall(id);
+
+    const memory = await s.recall(id, options.agent);
     const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
     console.log(`✓ Trace recalled: ${memory.id}`);
     console.log(`  Total recalls: ${memory.recallCount}`);
     console.log(`  Mnemonic strength: ${memory.saillance}/100`);
     console.log(`  State: ${states[memory.currentLevel]}`);
+    if (memory.verified && memory.verificationReason === 'reused') {
+      console.log(`  Verified: earned by cross-agent reuse ✓`);
+    }
+  });
+
+// === VERIFY / REFUTE (Phase 6.0.1) ===
+program
+  .command('verify <id>')
+  .description('Mark a trace as human-verified (prints content first — no blind stamp)')
+  .action(async (id) => {
+    const s = getStore();
+
+    const memory = await s.getById(id);
+    if (!memory) {
+      console.error(`✗ Trace ${id} not found`);
+      process.exit(1);
+    }
+    // Trust-theatre guard (PHASE6_PLAN risks): the human must actually read
+    // the trace before stamping it — verify prints the content, always.
+    console.log(`\n🧠 ${memory.id}\n\n${memory.content}\n`);
+    const updated = await s.verify(id, 'human');
+    console.log(`✓ Trace verified (reason: human). Trust will reflect it.`);
+    void updated;
+  });
+
+program
+  .command('refute <id>')
+  .description('Record a negative signal against a trace (refuted_count +1, verification revoked)')
+  .option('-r, --reason <text>', 'Why the trace does not hold')
+  .action(async (id, options) => {
+    const s = getStore();
+
+    const memory = await s.refute(id, options.reason);
+    console.log(`✓ Trace refuted: ${memory.id}`);
+    console.log(`  Refuted count: ${memory.refutedCount}`);
+    console.log(`  Verification: revoked (must be re-earned)`);
   });
 
 // === LIST ===

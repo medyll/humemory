@@ -12,6 +12,15 @@ export const DECAY_CONFIG = {
   
   // Salience threshold above which decay slows down
   saillanceThreshold: 70,
+
+  // Phase 6.0.1 — verified traces age more slowly
+  verifiedMultiplier: 1.5,
+
+  // Phase 6.0.1 / Claude R3-B8 — cap on the PRODUCT of all slowdown
+  // multipliers (recall × salience × verified). Without this, the unbounded
+  // `1 + recallCount * recallBonus` term makes verified+salient+recalled
+  // traces effectively photographic — which is not forgetting.
+  maxTotalSlowdown: 2.5,
   
   // Decay cycle: how often the sweep runs, in hours
   decayCycleHours: 24,
@@ -38,11 +47,19 @@ export function calculateDecayLevel(memory: Memory, now: Date = new Date()): Dec
   
   // Appliquer le bonus de rappel
   const recallMultiplier = 1 + (memory.recallCount * DECAY_CONFIG.recallBonus);
-  const adjustedAge = effectiveAge / recallMultiplier;
-  
+
   // Appliquer le bonus de saillance
   const saillanceMultiplier = memory.saillance >= DECAY_CONFIG.saillanceThreshold ? 1.5 : 1;
-  const finalAge = adjustedAge / saillanceMultiplier;
+
+  // Phase 6.0.1 — le bonus de vérification
+  const verifiedMultiplier = memory.verified ? DECAY_CONFIG.verifiedMultiplier : 1;
+
+  // Cap on the PRODUCT (R3/B8): the unbounded recall term counts toward it.
+  const totalSlowdown = Math.min(
+    recallMultiplier * saillanceMultiplier * verifiedMultiplier,
+    DECAY_CONFIG.maxTotalSlowdown
+  );
+  const finalAge = effectiveAge / totalSlowdown;
   
   // Determine the level
   for (let i = 3; i >= 0; i--) {

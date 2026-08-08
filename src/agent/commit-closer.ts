@@ -95,7 +95,8 @@ export function scoreOverlap(intention: Intention, files: string[]): CloseSugges
  */
 export async function applyCommitToLoops(
   store: IntentionStore,
-  commit: CommitInfo
+  commit: CommitInfo,
+  memories?: { verify(id: string, by?: string): Promise<unknown> }
 ): Promise<CommitCloseResult> {
   const armed = await store.listIntentions({ status: 'armed', limit: 500 });
 
@@ -117,6 +118,13 @@ export async function applyCommitToLoops(
     });
     for (const cue of await store.listCues({ intentionId: target.id, status: 'armed' })) {
       await store.updateCueStatus(cue.id, 'cancelled');
+    }
+
+    // Phase 6.0.1 — `grounded` verification: an explicitly-closed loop vouches
+    // for the trace it points to. Only this path counts (Claude R1): the fuzzy
+    // file-overlap path below only *suggests* and must never become evidence.
+    if (intention.relatedMemoryId && memories) {
+      await memories.verify(intention.relatedMemoryId, 'grounded');
     }
 
     closed.push(intention);
