@@ -322,6 +322,19 @@ program
     }
   });
 
+// === UNMERGE (Phase 6.0.4) ===
+program
+  .command('unmerge <sourceId>')
+  .description('Revert a merge: resurrect the source trace, restore the target\u2019s revised levels')
+  .action(async (sourceId) => {
+    const s = getStore();
+
+    const result = await s.unmerge!(sourceId);
+    console.log(`✓ Unmerge done`);
+    console.log(`  Source ${result.source.id.slice(0, 8)}… resurrected at level ${result.source.currentLevel}`);
+    console.log(`  Target ${result.target.id.slice(0, 8)}… levels restored from the last revision`);
+  });
+
 // === DELETE ===
 program
   .command('delete <id>')

@@ -240,6 +240,56 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     `);
 
     this.initProspectiveSchema();
+
+    // Phase 6.0.4 — derived levels are versioned before any overwrite, so a
+    // bad merge is auditable and revertible (`unmerge`). Retention: last 5
+    // revisions per memory — unbounded history is its own form of hoarding.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS level_revisions (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL REFERENCES memories(id),
+        level1_summary TEXT,
+        level2_essential TEXT,
+        level3_keywords TEXT,
+        replaced_at INTEGER NOT NULL,
+        replaced_by TEXT NOT NULL
+      )
+    `);
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_level_revisions_memory ON level_revisions(memory_id)');
+  }
+
+  /** Snapshot the current derived levels before overwriting them (6.0.4). */
+  private revisionSnapshot(memoryId: string, replacedBy: 'merge' | 'dream' | 'manual'): void {
+    const row = this.db
+      .query('SELECT level1_summary, level2_essential, level3_keywords FROM memories WHERE id = $id')
+      .get({ $id: memoryId }) as any;
+    if (!row) return;
+    // Nothing to preserve: never wrote levels yet.
+    if (!row.level1_summary && !row.level2_essential && !row.level3_keywords) return;
+
+    this.db
+      .query(
+        `INSERT INTO level_revisions (id, memory_id, level1_summary, level2_essential, level3_keywords, replaced_at, replaced_by)
+         VALUES ($id, $memory_id, $l1, $l2, $l3, $at, $by)`
+      )
+      .run({
+        $id: crypto.randomUUID(),
+        $memory_id: memoryId,
+        $l1: row.level1_summary,
+        $l2: row.level2_essential,
+        $l3: row.level3_keywords,
+        $at: this.clock.now().getTime(),
+        $by: replacedBy,
+      });
+
+    // Retention: last 5 per memory.
+    this.db
+      .query(
+        `DELETE FROM level_revisions WHERE memory_id = $id AND id NOT IN (
+           SELECT id FROM level_revisions WHERE memory_id = $id ORDER BY replaced_at DESC LIMIT 5
+         )`
+      )
+      .run({ $id: memoryId });
   }
 
   /**
@@ -630,6 +680,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       mergedContent = levels.level1Summary;
 
       await this.enqueueWriteWithLock(async () => {
+        this.revisionSnapshot(targetId, 'merge');
         this.db.query(`
           UPDATE memories
           SET level1_summary = $level1_summary,
@@ -679,6 +730,62 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       target: updatedTarget!,
       mergedContent,
     };
+  }
+
+  /**
+   * Phase 6.0.4 — revert a merge: the source trace is resurrected (level and
+   * saillance recomputed, not literally restored — decayed time does not come
+   * back), and the target gets its last revised levels back when a revision
+   * exists.
+   */
+  async unmerge(sourceId: string): Promise<{ source: Memory; target: Memory }> {
+    const source = await this.getById(sourceId);
+    if (!source) throw new Error(`Source memory ${sourceId} not found`);
+    if (!source.mergedIntoId) throw new Error(`Memory ${sourceId} is not merged`);
+    const targetId = source.mergedIntoId;
+    const target = await this.getById(targetId);
+    if (!target) throw new Error(`Merge target ${targetId} not found`);
+
+    const now = this.clock.now();
+    await this.enqueueWriteWithLock(async () => {
+      // Resurrect the source: recompute from its own content and age.
+      const resurrected: Memory = { ...source, currentLevel: 0, mergedIntoId: undefined };
+      const level = calculateDecayLevel(resurrected, now);
+      const saillance = calculateSaillance(resurrected, now);
+      this.db
+        .query(
+          `UPDATE memories SET current_level = $level, saillance = $saillance, merged_into_id = NULL
+           WHERE id = $id`
+        )
+        .run({ $id: sourceId, $level: level, $saillance: saillance });
+
+      // Restore the target's pre-merge derived levels, if we have them.
+      const revision = this.db
+        .query(
+          `SELECT * FROM level_revisions WHERE memory_id = $id ORDER BY replaced_at DESC LIMIT 1`
+        )
+        .get({ $id: targetId }) as any;
+      if (revision) {
+        this.db
+          .query(
+            `UPDATE memories SET level1_summary = $l1, level2_essential = $l2, level3_keywords = $l3
+             WHERE id = $id`
+          )
+          .run({
+            $id: targetId,
+            $l1: revision.level1_summary,
+            $l2: revision.level2_essential,
+            $l3: revision.level3_keywords,
+          });
+        this.db.query('DELETE FROM level_revisions WHERE id = $id').run({ $id: revision.id });
+      }
+    });
+
+    const finalSource = await this.getById(sourceId);
+    const finalTarget = await this.getById(targetId);
+    this.searchEngine.add(finalSource!);
+    this.searchEngine.update(finalTarget!);
+    return { source: finalSource!, target: finalTarget! };
   }
 
   // ───────────────────────────────────────────────────────────────────────────

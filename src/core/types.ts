@@ -222,4 +222,6 @@ export interface MemoryStore {
   verify?(id: string, by?: string): Promise<Memory>;
   /** Phase 6.0.1 — negative signal: refuted_count +1 and verification revoked. */
   refute?(id: string, reason?: string): Promise<Memory>;
+  /** Phase 6.0.4 — revert a merge: resurrect the source, restore the target's revised levels. */
+  unmerge?(sourceId: string): Promise<{ source: Memory; target: Memory }>;
 }
