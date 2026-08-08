@@ -237,7 +237,10 @@ verification and the dreamer's cross-agent recurrence signal.
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
-- Phase 7: vector/embedding clustering for the Dreamer (swap the `Clusterer`)
+- **Phase 7: vector memory** — draft plan in **[PHASE7_PLAN.md](./PHASE7_PLAN.md)**
+  (pending approval): `Embedder` interface + offline ONNX embeddings
+  (multilingual-e5-small), `VectorClusterer` swap behind the 6.1 seam,
+  hybrid RRF search lane, calibrated thresholds
 - Multi-device sync of the shared store (the `device` column from 6.0.1 makes
   it migration-free; conflict policy TBD)
 - OpenCode / other-agent integration; export/import memories between projects
