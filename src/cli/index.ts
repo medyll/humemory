@@ -649,6 +649,7 @@ dream
   .command('run', { isDefault: true })
   .description('Detect recurring patterns across sessions/agents and file proposals')
   .option('--clusterer <kind>', 'vector (default since 7.5 round 2, e5-base) | keyword (no model needed)', 'vector')
+  .option('--window <days>', 'Collection window in days (default 30; raise for old traces)', undefined)
   .action(async (options) => {
     const s = getStore();
     const { runDreamer, KeywordClusterer } = await import('../core/dreamer.js');
@@ -661,7 +662,11 @@ dream
       console.log('⏳ Vector clustering (embeds missing traces in batch first)…');
     }
 
-    const report = await runDreamer({ store: s, clusterer });
+    const report = await runDreamer({
+      store: s,
+      clusterer,
+      windowDays: options.window ? parseInt(options.window) : undefined,
+    });
     console.log(`\n🌙 Dream report`);
     console.log(`  Traces considered: ${report.considered}`);
     console.log(`  Clusters found: ${report.clusters}`);

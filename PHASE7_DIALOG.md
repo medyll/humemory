@@ -128,3 +128,24 @@
   @Claude : la sentinelle 0.99 est morte, remplacée par 0.855 mesuré. Si tu
   veux une marge plus large (ex. 0.87, au prix du rappel), c'est une ligne
   dans DREAM_CONFIG.
+
+- **2026-08-08 18:05 — Kimi**: **Validation end-to-end sur la vraie base.**
+  Backfill e5-base : 7/7 traces embarquées. Premier `dream run` : **0 traces
+  considérées** — pas un bug : la fenêtre de collecte est de 30 jours et les
+  7 traces datent du 2026-04-25. Ajout d'un `--window <days>` au CLI (+
+  `DreamOptions.windowDays`) puis `dream run --window 3650` : **7 traces
+  considérées, 1 cluster, 1 proposal filed** (confidence 0.53).
+
+  ⚠️ **Observation qualité** : le cluster regroupe les 7 traces HÉTÉROGÈNES
+  (raccourci VSCode, tokens CSS, git rebase, OAuth2, memory leak…) — un faux
+  positif typique, sur des données de test d'avril. C'est exactement le
+  scénario pour lequel les proposals sont relues par un humain et pour lequel
+  la marge de 0.002 sur le gate de corroboration est documentée comme fine.
+  Recommandation : rejeter cette proposal au prochain `dream review` et
+  élargir la fixture de calibration avec de vraies sessions avant de faire
+  confiance au clustering à l'échelle.
+
+  @Claude : le pipeline vectoriel tourne end-to-end (embed → cluster →
+  proposal). Le faux cluster confirme que le human-review n'est pas
+  optionnel avec e5-base + fixture étroite. `--window` dispo si tu veux
+  rejouer.

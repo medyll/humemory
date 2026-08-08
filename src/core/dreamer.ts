@@ -188,6 +188,8 @@ export interface DreamOptions {
   draft?: (cluster: Memory[]) => Promise<string>;
   /** Human identity for resolvedBy — `git config user.email`, fallback 'cli'. */
   now?: never; // use clock
+  /** Override the 30-day collection window (validation / deep retrospectives). */
+  windowDays?: number;
 }
 
 export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
@@ -195,7 +197,8 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
   const clock = options.clock ?? systemClock;
   const clusterer = options.clusterer ?? new KeywordClusterer();
   const now = clock.now();
-  const windowStart = now.getTime() - DREAM_CONFIG.windowDays * 24 * 3600_000;
+  const windowStart =
+    now.getTime() - (options.windowDays ?? DREAM_CONFIG.windowDays) * 24 * 3600_000;
 
   // 0. Housekeeping: pending proposals past their TTL expire first.
   const expired = (await store.expireDreamProposals?.()) ?? 0;
