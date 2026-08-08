@@ -37,7 +37,7 @@ Two surfaces benefit:
 | Windows + bun runtime | No native bindings that don't ship prebuilt win32-x64 binaries |
 | Model download is a one-time setup, not a test step | Models cached under `data/models/` (git-ignored); CI skips model tests |
 | Determinism | Embeddings are floats — clustering thresholds asserted with margins, never exact float equality |
-| Trust invariants (R1) | Cluster scoring stays on `base(source)` only; vectors change *grouping*, never *trust* — ⚠️ **no longer accurate since `7f2b92a`, see annotation A1** |
+| Trust invariants (R1) | Cluster scoring stays on `base(source)` only — no feedback loop. ⚠️ But since `7f2b92a` the dreamer assigns `corroborated` verification to cluster members: **the cosine threshold now gates verification too** (A1) → two thresholds, §7.3 |
 
 ---
 
@@ -90,10 +90,16 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 );
 ```
 
-- Written on `add()` **asynchronously and best-effort**: a failed/absent model
-  never blocks encoding (the trace is the memory; the vector is an index).
-- `merge` / `unmerge` / `delete` keep it consistent (CASCADE on delete;
-  merge recomputes the target's embedding from its new levels).
+- **Never embedded on `add()`** (A3): `add()` sits on the Stop-hook and MCP
+  tool paths — a lazy ~120MB model load must never land there. Embeddings are
+  written by **batch jobs only**: `pnpm dream` (embeds missing rows before
+  clustering) and `pnpm cli embed backfill`. Traces stay unembedded until the
+  next pass; the vector lane is additive by design, so this costs nothing.
+- **Delete-on-mutation, never inline recompute** (A4): on any level mutation
+  (merge, unmerge, decay-affecting edit), the row is **deleted** from
+  `memory_embeddings`; the next batch pass re-embeds. Deleting is always
+  consistent — inline recompute is where drift enters. (`delete` itself is
+  covered by ON DELETE CASCADE — verified at [sqlite.ts:186](src/store/sqlite.ts:186).)
 - Backfill: `pnpm cli embed backfill` — batches over existing traces, idempotent
   (`INSERT OR REPLACE` where model_id differs).
 
@@ -106,12 +112,21 @@ export class VectorClusterer implements Clusterer {
 }
 ```
 
-- Cosine similarity on stored embeddings (embedding missing → fall back to the
-  trace's keyword tokens via HashEmbedder? **No** — missing embeddings are
-  embedded on the spot; keyword fallback would mix two geometries).
-- Same union-find as `KeywordClusterer`, threshold ~0.82 (calibrated — §7.5),
-  so the swap is a one-line change in `runDreamer` wiring + CLI flag
-  `--clusterer vector|keyword` (default vector once calibrated, keyword until then).
+- Cosine similarity on stored embeddings (embedding missing → embedded on the
+  spot *by the batch job*, per A3 — no keyword fallback, which would mix two
+  geometries).
+- Same union-find as `KeywordClusterer`, so the swap is a one-line change in
+  `runDreamer` wiring + CLI flag `--clusterer vector|keyword` (default vector
+  once calibrated, keyword until then).
+- **Two thresholds, not one** (A1 — the load-bearing annotation):
+  - `vectorClusterThreshold ≈ 0.82` — grouping. Noise is tolerable: a false
+    cluster is a rejected proposal, cheap, a human reviews it.
+  - `vectorCorroborateThreshold ≈ 0.90` — the stricter gate for assigning
+    `corroborated` verification (introduced in `7f2b92a`). Noise here is a
+    wrong trace made durable, decaying slower and sorting first, with nothing
+    in the review queue to surface it. Nobody reviews verification, so the
+    threshold does the reviewing.
+  Both live in `DREAM_CONFIG`, frozen by calibration (§7.5).
 - **Interface change**: `Clusterer.cluster` becomes `async`. Mechanical
   ripple: dreamer + tests. (KeywordClusterer just returns a resolved promise.)
 
@@ -133,9 +148,14 @@ score = RRF(BM25 rank, vector rank, k=60)
 
 - Fixture set `tests/fixtures/embeddings/`: ~30 labeled pairs (should-cluster /
   shouldn't-cluster), bilingual, drawn from real humemory usage patterns.
-- A calibration script (not a test — needs the model) sweeps the cosine
-  threshold, reports precision/recall, and writes the chosen value into
-  `DREAM_CONFIG.vectorSimilarityThreshold`.
+- A calibration script (not a test — needs the model) sweeps **both** cosine
+  thresholds (A1) and reports:
+  - clustering precision/recall → sets `vectorClusterThreshold`;
+  - **verification precision** (share of would-be-corroborated pairs that a
+    human labels as genuinely the same fact) → sets
+    `vectorCorroborateThreshold`. A false cluster costs a rejected proposal;
+    a false corroboration makes a wrong trace durable — the stricter metric
+    governs the stricter threshold.
 - Tests assert only with `HashEmbedder`: pipeline shape, threshold plumbing,
   missing-embedding behavior, determinism.
 
@@ -160,7 +180,7 @@ Dependencies to add: `@huggingface/transformers` (pulls `onnxruntime-node`).
 
 | Risk | Mitigation |
 |------|-----------|
-| onnxruntime-node breaks under bun on win32 | 7.3 is flag-gated; keyword clusterer stays the default until 7.5 proves the model runs; fall back to node (not bun) for the MCP/consolidate entry if needed |
+| onnxruntime-node breaks under bun on win32 | 7.3 is flag-gated; keyword clusterer stays the default until 7.5 proves the model runs. ~~fall back to node~~ impossible — `sqlite.ts` imports `bun:sqlite` everywhere (A2). **Pre-flight gate: run `pipeline('feature-extraction')` under bun on win32 *before* starting 7.3** — the answer decides whether the phase is three steps or five |
 | Model download in CI | tests never instantiate OnnxEmbedder; calibration is a local script |
 | Embedding drift across model upgrades | `model_id` column — a model change triggers explicit re-backfill, never silent mixing of spaces |
 | Vector search surfaces contradicted losers | the vector lane applies the same exclusion filters as BM25 (active contradictions, merged) — tested |
@@ -186,8 +206,11 @@ Dependencies to add: `@huggingface/transformers` (pulls `onnxruntime-node`).
    (768 dims, better French nuance, 2× cost)? → Proposed: small; measure in
    7.5, upgrade only if recall suffers.
 2. Embed L0 content only, or the current-decay-level text (what the agent
-   would actually see)? → Proposed: L0 + L3 keywords concatenated — the trace
-   stays findable by detail *and* by gist as it decays.
+   would actually see)? → **Resolved (A5): L3 keywords first, then L0** —
+   `multilingual-e5-small` truncates at 512 tokens, so keywords-last would
+   silently drop them on long traces, exactly where they matter. Two separate
+   vectors (L3 + L0) rejected for now: one row per trace keeps 7.2 simple;
+   revisit if calibration shows degraded-trace recall suffering.
 3. Should `findSimilar` (merge detection) also use vectors? → Proposed: yes
    as a lane, but merge stays L4-triggered; no auto-merge on vector score alone.
 
@@ -302,3 +325,9 @@ degraded trace against the representation the agent would actually see.
 *Annotated 2026-08-08 by Claude (Sonnet 5): trust coupling introduced by
 `7f2b92a` (A1), unavailable node fallback (A2), model out of the encoding path
 (A3), embedding lifecycle on merge/unmerge (A4), truncation order (A5).*
+*Revised 2026-08-08 by Kimi (Moonshot AI): all six annotations accepted and
+integrated — two thresholds (cluster ≈0.82 / corroborate ≈0.90) with
+verification-precision calibration (A1), node fallback removed, pre-flight
+bun/onnx gate before 7.3 (A2), embeddings in batch jobs only, never on add()
+(A3), delete-on-mutation for memory_embeddings (A4), L3-first truncation
+order (A5). Status: **consensus reached, pending owner approval.***
