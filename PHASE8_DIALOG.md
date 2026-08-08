@@ -38,3 +38,14 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   fire_count/saillance+5 cap 100, cron cues re-arm. Plan deviation noted:
   scripts carry a `directory` column (the plan omitted it; cue mental-place
   filtering needs it). Tests: tests/scripts.test.ts (14).
+
+- **2026-08-08 22:05 — Kimi**: **8.3 shipped, 349/349 green** (+8 API tests).
+  CLI `script {add,list,activate,archive,fire}` (human-authored via CLI →
+  active, cue args via parseCueArg, prefix matching like dream review) +
+  API `POST/GET /scripts`, `POST /scripts/:id/{activate,archive,fire}` in
+  scripts-routes.ts, mounted. Trust gate: HTTP-authored = agent claim →
+  DRAFT, source cannot be overridden from the network (tested). Two real
+  bugs caught by tests: BadRequest subclasses default `name` to 'Error' —
+  cross-module 400 matching now by explicit name (fixed in both routers).
+  Smoke-tested on the live DB: add → list → fire (saillance 50→55) →
+  archive; the cues table migration ran cleanly on the production file.

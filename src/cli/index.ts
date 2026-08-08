@@ -604,6 +604,127 @@ intent
     console.log();
   });
 
+// === SCRIPT (Phase 8.3) ===
+const script = program
+  .command('script')
+  .description('Cognitive scripts (drills) — cue-triggered procedures');
+
+/** Resolves an unambiguous script id prefix (same rule as dream review). */
+async function findScriptByPrefix(s: ReturnType<typeof getStore>, prefix: string) {
+  const all = await s.listScripts({ status: ['draft', 'active', 'archived'], limit: 500 });
+  const hits = all.filter((x) => x.id.startsWith(prefix));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+script
+  .command('add <name>')
+  .description('Add a drill (human-authored → active immediately, 8.3 gate)')
+  .requiredOption('--steps <steps...>', 'Ordered drill steps')
+  .option('--description <text>', 'One-line summary for the context header', '')
+  .option('-d, --directory <dir>', 'Mental place (defaults to cwd)')
+  .option('-c, --cue <cue...>', "Trigger — 'cron:0 9 * * 1', 'event:branch_switch:main'")
+  .option('--pinned', 'Exempt from disuse decay (8.4)', false)
+  .action(async (name: string, options) => {
+    const s = getStore();
+
+    let cues: TriggerSpec[] = [];
+    try {
+      cues = (options.cue ?? []).map((raw: string) => parseCueArg(raw));
+    } catch (err) {
+      console.error(`✗ ${err instanceof Error ? err.message : err}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const created = await s.addScript(
+        {
+          name,
+          description: options.description || name,
+          steps: options.steps,
+          directory: resolve(options.directory ?? process.cwd()),
+          pinned: options.pinned,
+          source: 'human',
+        },
+        cues
+      );
+      console.log(`\n📋 Script active — ${created.id.slice(0, 8)} (${created.name})`);
+      created.steps.forEach((step, i) => console.log(`   ${i + 1}. ${step}`));
+      console.log(`   Place: ${created.directory}${created.pinned ? ' · pinned' : ''}`);
+      for (const spec of cues) console.log(`   Cue: ${formatTriggerSpec(spec)}`);
+    } catch (err) {
+      console.error(`✗ ${err instanceof Error ? err.message : err}`);
+      process.exitCode = 1;
+    }
+  });
+
+script
+  .command('list')
+  .alias('ls')
+  .description('List drills')
+  .option('-s, --status <status>', 'draft | active | archived', 'active')
+  .option('-d, --directory <dir>', 'Filter by mental place')
+  .option('-a, --all', 'Every status')
+  .action(async (options) => {
+    const s = getStore();
+    const scripts = await s.listScripts({
+      status: options.all ? undefined : (options.status as import('../core/types.js').ScriptStatus),
+      directory: options.directory ? resolve(options.directory) : undefined,
+      limit: 50,
+    });
+
+    if (!scripts.length) {
+      console.log('No script.');
+      return;
+    }
+    const icons = { draft: '📝', active: '📋', archived: '🗄️' } as const;
+    for (const sc of scripts) {
+      console.log(`\n${icons[sc.status]} ${sc.id.slice(0, 8)} | ${sc.name} (${sc.status})`);
+      console.log(`   ${sc.description}`);
+      console.log(`   ${sc.steps.length} steps · fired ${sc.fireCount}× · saillance ${sc.saillance}${sc.pinned ? ' · pinned' : ''}`);
+      console.log(`   ${sc.directory}`);
+    }
+  });
+
+for (const verb of ['activate', 'archive'] as const) {
+  script
+    .command(`${verb} <id>`)
+    .description(verb === 'activate' ? 'draft → active (human gate)' : 'Archive a drill (cancels its cues)')
+    .action(async (id: string) => {
+      const s = getStore();
+      const target = await findScriptByPrefix(s, id);
+      if (!target) {
+        console.error(`✗ No script matches ${id}`);
+        process.exitCode = 1;
+        return;
+      }
+      const status = verb === 'activate' ? 'active' : 'archived';
+      await s.updateScriptStatus(target.id, status);
+      console.log(`✓ Script ${target.name} → ${status}`);
+    });
+}
+
+script
+  .command('fire <id>')
+  .description('Manually fire a drill (testing + saillance bump)')
+  .action(async (id: string) => {
+    const s = getStore();
+    const target = await findScriptByPrefix(s, id);
+    if (!target) {
+      console.error(`✗ No script matches ${id}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (target.status !== 'active') {
+      console.error(`✗ Script ${target.name} is ${target.status} — only active drills fire`);
+      process.exitCode = 1;
+      return;
+    }
+    const fired = await s.markScriptFired(target.id);
+    console.log(`\n📋 ${fired.name} — fired ${fired.fireCount}×, saillance ${fired.saillance}`);
+    fired.steps.forEach((step, i) => console.log(`   ${i + 1}. ${step}`));
+  });
+
 // === EMBED (Phase 7.2) ===
 const embed = program.command('embed').description('Vector index maintenance (Phase 7)');
 

@@ -26,7 +26,12 @@ const CUE_KINDS: CueKind[] = ['time', 'event'];
 const EVENT_TYPES = ['file_open', 'branch_switch', 'error_pattern', 'commit'] as const;
 
 /** Input validation error — surfaced as a 400 rather than a 500. */
-class BadRequest extends Error {}
+class BadRequest extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BadRequest'; // scripts-routes matches on this across module boundaries
+  }
+}
 
 function parseStatuses<T extends string>(raw: string | undefined, allowed: T[]): T[] | undefined {
   if (!raw) return undefined;

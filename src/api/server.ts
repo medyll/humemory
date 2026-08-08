@@ -36,6 +36,7 @@ import { SQLiteStore } from '../store/sqlite.js';
 import { createIntentionRoutes } from './intentions-routes.js';
 import { createMemoryRoutes } from './memory-routes.js';
 import { createDreamRoutes } from './dream-routes.js';
+import { createScriptRoutes } from './scripts-routes.js';
 import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
@@ -150,6 +151,9 @@ app.route('/', createIntentionRoutes(store));
 
 // === DREAMING (Phase 6.1) ===
 app.route('/', createDreamRoutes(store));
+
+// === COGNITIVE SCRIPTS (Phase 8.3) ===
+app.route('/', createScriptRoutes(store));
 
 // === HEALTH ===
 app.get('/health', (c) => {
