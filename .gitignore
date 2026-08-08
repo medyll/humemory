@@ -12,3 +12,6 @@ public/app/
 
 # Working documents (agent collaboration drafts)
 PROPOSAL.md
+
+# Local agent settings
+.claude/settings.local.json
