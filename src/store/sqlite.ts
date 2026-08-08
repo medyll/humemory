@@ -8,9 +8,10 @@ import type {
   Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult,
   Intention, IntentionStatus, IntentionStore, NewIntention,
   Cue, CueKind, CueStatus, NewCue, TriggerSpec,
-  VerificationReason,
+  VerificationReason, Contradiction, ContradictResult,
 } from '../core/types.js';
-import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay } from '../core/decay.js';
+import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay, DECAY_CONFIG } from '../core/decay.js';
+import { createHash } from 'crypto';
 import { InverseSearchEngine } from '../core/search.js';
 import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
 import { systemClock, type Clock } from '../core/clock.js';
@@ -256,6 +257,40 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       )
     `);
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_level_revisions_memory ON level_revisions(memory_id)');
+
+    // Phase 6.0.2 — contradictions: the loser collapses but is never deleted.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS contradictions (
+        id TEXT PRIMARY KEY,
+        winner_id TEXT NOT NULL REFERENCES memories(id),
+        loser_id TEXT NOT NULL REFERENCES memories(id),
+        reason TEXT,
+        created_at INTEGER NOT NULL,
+        created_by TEXT NOT NULL DEFAULT 'agent',
+        agent TEXT,
+        status TEXT NOT NULL DEFAULT 'active'
+      )
+    `);
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_contradictions_loser ON contradictions(loser_id)');
+
+    // Phase 6.1 — dream proposals (created here so 6.0.2's asymmetric-authority
+    // path can already file contradiction proposals; the dreamer pipeline
+    // arrives in 6.1).
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS dream_proposals (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        confidence REAL NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        resolved_at INTEGER,
+        resolved_by TEXT
+      )
+    `);
+    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_dream_dedup ON dream_proposals(kind, payload_hash)');
   }
 
   /** Snapshot the current derived levels before overwriting them (6.0.4). */
@@ -786,6 +821,153 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     this.searchEngine.add(finalSource!);
     this.searchEngine.update(finalTarget!);
     return { source: finalSource!, target: finalTarget! };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Trust layer (Phase 6.0.2) — contradictions
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * `winnerId` contradicts `loserId`. The loser collapses (÷4, floor 5; ÷2 on
+   * further refutations, cap 3) and loses any earned verification — but is
+   * never deleted. Cycles are allowed: last write wins, no transitivity is
+   * ever inferred.
+   */
+  async contradict(
+    winnerId: string,
+    loserId: string,
+    options: { reason?: string; createdBy?: 'agent' | 'human' | 'dreamer'; agent?: string } = {}
+  ): Promise<ContradictResult> {
+    const winner = await this.getById(winnerId);
+    if (!winner) throw new Error(`Winner memory ${winnerId} not found`);
+    let loser = await this.getById(loserId);
+    if (!loser) throw new Error(`Loser memory ${loserId} not found`);
+
+    // Merged loser: the collapse targets the merge target, and the caller warns.
+    let retargetedTo: string | undefined;
+    if (loser.mergedIntoId) {
+      retargetedTo = loser.mergedIntoId;
+      loserId = loser.mergedIntoId;
+      loser = (await this.getById(loserId))!;
+      if (!loser) throw new Error(`Merge target ${retargetedTo} not found`);
+    }
+
+    // Asymmetric authority (Claude R2): an unverified winner cannot contradict
+    // a human/grounded-verified loser outright — it files a proposal instead.
+    // Traces verified only by corroborated/reused stay directly contradictable.
+    const winnerStrong = winner.verified && (winner.verificationReason === 'human' || winner.verificationReason === 'grounded');
+    const loserProtected = loser.verified && (loser.verificationReason === 'human' || loser.verificationReason === 'grounded');
+    if (loserProtected && !winnerStrong && options.createdBy !== 'human') {
+      const hash = createHash('sha1')
+        .update(['contradiction', winnerId, loserId].sort().join('|'))
+        .digest('hex');
+      await this.enqueueWriteWithLock(async () => {
+        this.db
+          .query(
+            `INSERT OR IGNORE INTO dream_proposals (id, kind, payload, payload_hash, status, confidence, created_at)
+             VALUES ($id, 'contradiction', $payload, $hash, 'pending', 0, $at)`
+          )
+          .run({
+            $id: crypto.randomUUID(),
+            $payload: JSON.stringify({ winnerId, loserId, reason: options.reason, filedBy: options.agent }),
+            $hash: hash,
+            $at: this.clock.now().getTime(),
+          });
+      });
+      return { proposalFiled: true, retargetedTo, loser };
+    }
+
+    const now = this.clock.now();
+    const refutations = Math.min((loser.refutedCount ?? 0) + 1, DECAY_CONFIG.refuteCap);
+    const divisor = (loser.refutedCount ?? 0) === 0 ? DECAY_CONFIG.contradictionDivisor : DECAY_CONFIG.refuteDivisor;
+    const newSaillance = Math.max(DECAY_CONFIG.contradictionFloor, Math.floor(loser.saillance / divisor));
+
+    const contradiction: Contradiction = {
+      id: crypto.randomUUID(),
+      winnerId,
+      loserId,
+      reason: options.reason,
+      createdAt: now,
+      createdBy: options.createdBy ?? 'agent',
+      agent: options.agent,
+      status: 'active',
+    };
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `INSERT INTO contradictions (id, winner_id, loser_id, reason, created_at, created_by, agent, status)
+           VALUES ($id, $winner, $loser, $reason, $at, $by, $agent, 'active')`
+        )
+        .run({
+          $id: contradiction.id,
+          $winner: winnerId,
+          $loser: loserId,
+          $reason: options.reason ?? null,
+          $at: now.getTime(),
+          $by: contradiction.createdBy,
+          $agent: options.agent ?? null,
+        });
+      this.db
+        .query(
+          `UPDATE memories
+           SET saillance = $saillance, refuted_count = $refuted, verified = 0, verification_reason = NULL
+           WHERE id = $id`
+        )
+        .run({ $id: loserId, $saillance: newSaillance, $refuted: refutations });
+    });
+
+    const updatedLoser = await this.getById(loserId);
+    this.searchEngine.update(updatedLoser!);
+    return { contradiction, retargetedTo, loser: updatedLoser! };
+  }
+
+  /** Revocation recomputes the loser's saillance — decayed time does not come back. */
+  async revokeContradiction(id: string): Promise<Contradiction> {
+    const row = this.db.query('SELECT * FROM contradictions WHERE id = $id').get({ $id: id }) as any;
+    if (!row) throw new Error(`Contradiction ${id} not found`);
+
+    const loser = await this.getById(row.loser_id);
+    await this.enqueueWriteWithLock(async () => {
+      this.db.query(`UPDATE contradictions SET status = 'revoked' WHERE id = $id`).run({ $id: id });
+      if (loser) {
+        const recomputed = calculateSaillance(loser, this.clock.now());
+        this.db.query('UPDATE memories SET saillance = $s WHERE id = $id').run({ $id: loser.id, $s: recomputed });
+      }
+    });
+    if (loser) this.searchEngine.update((await this.getById(loser.id))!);
+
+    const updated = this.db.query('SELECT * FROM contradictions WHERE id = $id').get({ $id: id }) as any;
+    return this.rowToContradiction(updated);
+  }
+
+  async listContradictions(options: { loserId?: string; status?: 'active' | 'revoked' } = {}): Promise<Contradiction[]> {
+    const conditions: string[] = [];
+    const params: any = {};
+    if (options.loserId) {
+      conditions.push('loser_id = $loser');
+      params.$loser = options.loserId;
+    }
+    if (options.status) {
+      conditions.push('status = $status');
+      params.$status = options.status;
+    }
+    const sql = 'SELECT * FROM contradictions' + (conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '');
+    const rows = this.db.query(sql).all(params) as any[];
+    return rows.map((r) => this.rowToContradiction(r));
+  }
+
+  private rowToContradiction(row: any): Contradiction {
+    return {
+      id: row.id,
+      winnerId: row.winner_id,
+      loserId: row.loser_id,
+      reason: row.reason || undefined,
+      createdAt: new Date(row.created_at),
+      createdBy: row.created_by,
+      agent: row.agent || undefined,
+      status: row.status,
+    };
   }
 
   // ───────────────────────────────────────────────────────────────────────────

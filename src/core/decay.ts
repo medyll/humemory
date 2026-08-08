@@ -21,6 +21,14 @@ export const DECAY_CONFIG = {
   // `1 + recallCount * recallBonus` term makes verified+salient+recalled
   // traces effectively photographic — which is not forgetting.
   maxTotalSlowdown: 2.5,
+
+  // Phase 6.0.2 — contradiction collapse (Kimi B9, accepted by Claude R3):
+  // first refutation divides saillance by `contradictionDivisor`, further ones
+  // by `refuteDivisor` (cap `refuteCap` refutations), never below the floor.
+  contradictionDivisor: 4,
+  refuteDivisor: 2,
+  refuteCap: 3,
+  contradictionFloor: 5,
   
   // Decay cycle: how often the sweep runs, in hours
   decayCycleHours: 24,

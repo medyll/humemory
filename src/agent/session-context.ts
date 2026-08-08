@@ -132,11 +132,24 @@ export async function buildSessionContext(options: SessionContextOptions): Promi
     })
   ).sort((a, b) => b.saillance - a.saillance);
 
-  const rendered = renderMarkdown({ openLoops, traces, firedNow, branch, now });
+  // Phase 6.0.2 — a trace that loses an active contradiction leaves the block
+  // (it stays searchable). Cycle: a trace that is both winner and loser stays,
+  // flagged `disputed` — last write wins, nothing is inferred.
+  const disputedIds = new Set<string>();
+  let visibleTraces = traces;
+  if (store.listContradictions) {
+    const active = await store.listContradictions({ status: 'active' });
+    const losers = new Set(active.map((ct) => ct.loserId));
+    const winners = new Set(active.map((ct) => ct.winnerId));
+    for (const id of losers) if (winners.has(id)) disputedIds.add(id);
+    visibleTraces = traces.filter((m) => !losers.has(m.id) || disputedIds.has(m.id));
+  }
+
+  const rendered = renderMarkdown({ openLoops, traces: visibleTraces, firedNow, branch, now, disputedIds });
   return {
     markdown: rendered.markdown,
     openLoops,
-    traces,
+    traces: visibleTraces,
     firedNow,
     escapeAttempts: rendered.escapeAttempts,
   };
@@ -148,8 +161,9 @@ function renderMarkdown(input: {
   firedNow: Intention[];
   branch?: string;
   now: Date;
+  disputedIds?: Set<string>;
 }): { markdown: string; escapeAttempts: { memoryId: string; count: number }[] } {
-  const { openLoops, traces, firedNow, branch, now } = input;
+  const { openLoops, traces, firedNow, branch, now, disputedIds } = input;
   const escapeAttempts: { memoryId: string; count: number }[] = [];
 
   // Nothing to say: write nothing rather than inject an empty block into the prompt.
@@ -196,7 +210,7 @@ function renderMarkdown(input: {
             verified: m.verified,
             id: m.id,
           });
-      lines.push(`- [L${m.currentLevel}] ${body}`);
+      lines.push(`- [L${m.currentLevel}]${disputedIds?.has(m.id) ? ' ⚔️ *disputed*' : ''} ${body}`);
     }
   }
 

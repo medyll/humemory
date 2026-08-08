@@ -86,6 +86,34 @@ export interface MergeResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Trust layer (Phase 6.0.2) — contradictions
+//
+// A contradiction collapses the loser's saillance and excludes it from the
+// SessionStart block, but never deletes it: human forgetting keeps the
+// "ghosted" memory; humemory should too.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Contradiction {
+  id: string;
+  winnerId: string;
+  loserId: string;
+  reason?: string;
+  createdAt: Date;
+  createdBy: 'agent' | 'human' | 'dreamer';
+  agent?: string;
+  status: 'active' | 'revoked';
+}
+
+export interface ContradictResult {
+  contradiction?: Contradiction;
+  /** Set when authority was asymmetric: a proposal was filed instead. */
+  proposalFiled?: boolean;
+  /** Set when the loser was already merged — the collapse hit the merge target. */
+  retargetedTo?: string;
+  loser: Memory;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Prospective memory (Phase 5) — intentions and cues
 //
 // An `Intention` is an open loop: "tomorrow, refactor fn X". You do not search
@@ -224,4 +252,10 @@ export interface MemoryStore {
   refute?(id: string, reason?: string): Promise<Memory>;
   /** Phase 6.0.4 — revert a merge: resurrect the source, restore the target's revised levels. */
   unmerge?(sourceId: string): Promise<{ source: Memory; target: Memory }>;
+  /** Phase 6.0.2 — `id` contradicts `otherId`. Tiered authority keyed on verification_reason. */
+  contradict?(winnerId: string, loserId: string, options?: { reason?: string; createdBy?: 'agent' | 'human' | 'dreamer'; agent?: string }): Promise<ContradictResult>;
+  /** Phase 6.0.2 — revoke: the loser's saillance is recomputed, not literally restored. */
+  revokeContradiction?(id: string): Promise<Contradiction>;
+  /** Phase 6.0.2 — active (or all) contradictions, for the context block and audits. */
+  listContradictions?(options?: { loserId?: string; status?: 'active' | 'revoked' }): Promise<Contradiction[]>;
 }

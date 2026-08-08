@@ -75,20 +75,36 @@ export function createMemoryRoutes(store: SQLiteStore) {
   });
 
   // Phase 6.0.1 — trust layer
-  app.post('/memories/:id/verify', async (c) => {
-    try {
-      const memory = await store.verify(c.req.param('id'), 'human');
-      return c.json({ success: true, memory });
-    } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
-    }
-  });
+  //
+  // There is deliberately no `POST /memories/:id/verify` route. `human` is the
+  // strongest verification reason (+25 trust) and the only one that lets a
+  // trace render *bare*, outside the untrusted markers, in the next session's
+  // context block. The API has no authentication, so exposing it would let any
+  // caller on :3456 grant "a human looked at this" to a trace it just wrote.
+  // Human verification requires a human at a terminal: `pnpm cli verify <id>`.
+  // Earned verification (reused / grounded / corroborated) is set by the store
+  // itself from evidence, never by a request.
 
   app.post('/memories/:id/refute', async (c) => {
     try {
       const body = await c.req.json().catch(() => ({}));
       const memory = await store.refute(c.req.param('id'), body.reason);
       return c.json({ success: true, memory });
+    } catch (error) {
+      return c.json({ success: false, error: String(error) }, 500);
+    }
+  });
+
+  // Phase 6.0.2 — contradiction: this trace wins against `otherId`
+  app.post('/memories/:id/contradicts', async (c) => {
+    try {
+      const body = await c.req.json();
+      if (!body.otherId) return c.json({ success: false, error: 'otherId required' }, 400);
+      const result = await store.contradict!(c.req.param('id'), body.otherId, {
+        reason: body.reason,
+        agent: c.req.header('X-Humemory-Agent'),
+      });
+      return c.json({ success: true, ...result });
     } catch (error) {
       return c.json({ success: false, error: String(error) }, 500);
     }

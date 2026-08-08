@@ -201,6 +201,31 @@ program
     console.log(`  Verification: revoked (must be re-earned)`);
   });
 
+// === CONTRADICT (Phase 6.0.2) ===
+program
+  .command('contradict <winnerId> <loserId>')
+  .description('Winner trace contradicts loser trace — loser collapses (never deleted)')
+  .option('-r, --reason <text>', 'Why the loser no longer holds')
+  .option('--agent <name>', 'Who files the contradiction', 'cli')
+  .action(async (winnerId, loserId, options) => {
+    const s = getStore();
+
+    const result = await s.contradict!(winnerId, loserId, {
+      reason: options.reason,
+      createdBy: options.agent === 'cli' ? 'human' : 'agent',
+      agent: options.agent,
+    });
+    if (result.proposalFiled) {
+      console.log(`⏳ Loser is human/grounded-verified — contradiction filed as a dream proposal for review.`);
+      return;
+    }
+    if (result.retargetedTo) {
+      console.log(`⚠ Loser was already merged — the collapse hit the merge target ${result.retargetedTo.slice(0, 8)}…`);
+    }
+    console.log(`✓ Contradiction recorded: ${result.contradiction!.id}`);
+    console.log(`  Loser saillance: ${result.loser.saillance}/100 (collapsed, still searchable)`);
+  });
+
 // === LIST ===
 program
   .command('list')
