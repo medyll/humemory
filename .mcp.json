@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "humemory": {
+      "command": "bun",
+      "args": ["run", "src/mcp/server.ts"],
+      "env": {
+        "HUMEMORY_AGENT": "claude"
+      }
+    }
+  }
+}

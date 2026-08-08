@@ -220,6 +220,21 @@ Tools `humemory_add / search / recall / intent_add / intent_close / dreams` —
 Claude, Codex, Kimi, OpenCode share one store with agent attribution on every
 write (`agent` arg or `$HUMEMORY_AGENT`; `HUMEMORY_DB` override for tests).
 
+**Client registration** — the repo ships `.mcp.json` (Claude Code project
+scope, `HUMEMORY_AGENT=claude`). For other agents, register the same server
+with their own identity:
+
+| Agent | Config | `HUMEMORY_AGENT` |
+|-------|--------|------------------|
+| Claude Code | `.mcp.json` at repo root (shipped) | `claude` |
+| Kimi Code | same shape in the Kimi MCP config | `kimi` |
+| Codex | same shape in the Codex MCP config | `codex` |
+| OpenCode | `opencode.json` → `mcp` section | `opencode` |
+
+Server entry: `bun run src/mcp/server.ts` (stdio). Every agent MUST set its
+own `HUMEMORY_AGENT` — attribution is what powers cross-agent `reused`
+verification and the dreamer's cross-agent recurrence signal.
+
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - Phase 7: vector/embedding clustering for the Dreamer (swap the `Clusterer`)
