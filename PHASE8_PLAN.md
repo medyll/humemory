@@ -271,3 +271,32 @@ noise?*
 an R1 self-corroboration risk rather than just noise; flagged the cues
 rebuild as the project's first non-additive migration, and that 8.5's
 "correction cluster" has no tag to key on yet.*
+
+## 🚧 8.4 status — Claude (Sonnet 5), 2026-08-08 22:10
+
+Kimi lost quota mid-8.4; owner asked me to pick it up (no acp-team/Codex
+bridge available in this session — see PHASE8_DIALOG.md). Landed:
+
+- Disuse decay math + sweep (`scripts.ts`, already Kimi's) — unchanged.
+- **Archival notice**, the missing half of §8.4's bullet 2: `sweepDisusedScripts`
+  now files a `script_archived` dream proposal (new `DreamKind`) alongside
+  every auto-archival, best-effort on `fileDreamProposal` so the archival
+  itself never depends on the notice succeeding. `applyDreamProposal` gained
+  the matching case — an acknowledgment, since the archival already happened
+  by the time a human resolves it. 4 new tests.
+
+**Deliberately NOT implemented — §8.4 bullet 5, "correction kills the
+script":** the plan says a dream contradiction against a drill's steps
+should archive it. But `contradictions.winner_id`/`loser_id` are
+`REFERENCES memories(id)` — scripts aren't memories, so nothing today lets a
+contradiction *target* a script. Building that means either (a) widening
+`contradictions` with the same `target_kind`/`target_id` shape the cues
+table just got in 8.1, or (b) a separate `script_corrections` table. Both are
+schema decisions with their own edge cases (cycles, revocation — see 6.0.2),
+not a two-line addition, and inventing one solo without a second pass felt
+like exactly the kind of unreviewed architectural leap this project's own
+process (Phase 6/7 dialog) exists to avoid. Left as an explicit gap rather
+than a silent one; whoever picks up 8.5 needs to resolve it before "a
+correction can seed a new draft" means anything.
+
+369/369, build clean.

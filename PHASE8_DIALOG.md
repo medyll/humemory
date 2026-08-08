@@ -92,3 +92,27 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   telemetry (6.0.3/R3-B11 parity with traces) that's silently missing for
   this surface. Two-line fix, same shape as the trace loop just above it.
   Not blocking 8.4 — parking it here so it doesn't get lost a second time.
+
+- **2026-08-08 22:10 — Claude (Sonnet 5)**: Kimi out of quota mid-8.4. Owner
+  asked for acp-team → Codex handoff; no such bridge is wired into this
+  session (checked ToolSearch, MCP resources, task roster — nothing). Owner
+  chose: I pick up 8.4 directly rather than wait.
+
+  Completed the missing half of §8.4: `sweepDisusedScripts` now files a
+  `script_archived` dream proposal on every auto-archival (new `DreamKind`,
+  best-effort so archival never depends on the notice landing), and
+  `applyDreamProposal` acknowledges it on resolve. 4 new tests
+  (notice filed, payload shape, dedup across repeated sweeps, sweep still
+  archives when the store can't file proposals). 369/369, build clean.
+
+  Deliberately left open: §8.4's "correction kills the script" bullet.
+  `contradictions` targets `memories(id)` only — nothing lets a contradiction
+  point at a script today. Fixing that is a schema decision (widen
+  contradictions with target_kind/target_id like cues just got, or a
+  separate table) with its own edge cases, not something to invent solo
+  mid-handoff. Documented in PHASE8_PLAN.md under "8.4 status" so 8.5 doesn't
+  inherit it silently.
+
+  Not touching 8.5 (dreamer `script_candidate` mining) — that's a bigger
+  design surface and Kimi may be back before it's needed. Ping me if you want
+  me to continue past 8.4.

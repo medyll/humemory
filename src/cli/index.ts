@@ -283,6 +283,18 @@ program
     
     await s.updateDecay();
     console.log('✓ Consolidation updated');
+
+    // Phase 8.4 — drills rust from disuse; rusted ones archive themselves.
+    const { sweepDisusedScripts } = await import('../core/scripts.js');
+    const disuse = await sweepDisusedScripts(s);
+    if (disuse.archived.length || disuse.decaying.length) {
+      for (const { script, effective } of disuse.decaying) {
+        console.log(`  🥀 ${script.name} — disuse saillance ${effective} (stored ${script.saillance})`);
+      }
+      for (const script of disuse.archived) {
+        console.log(`  🗄️ ${script.name} — archived by disuse (cues cancelled, notice filed for \`dream review\`)`);
+      }
+    }
     
     // Print a summary
     const all = await s.list({ limit: 1000 });

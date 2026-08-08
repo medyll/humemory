@@ -379,5 +379,13 @@ export async function applyDreamProposal(
     case 'update_agents_md': {
       return `suggested AGENTS.md addition (paste it yourself):\n${payload.drafted ?? payload.suggestion ?? ''}`;
     }
+
+    case 'script_archived': {
+      // Notice, not a request (PHASE8_PLAN.md §8.4): the archival already
+      // happened in the disuse sweep. Nothing left to apply — resolving the
+      // proposal (approve or reject) only acknowledges the human has seen it.
+      return `acknowledged: "${payload.name}" archived by disuse ` +
+        `(saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance})`;
+    }
   }
 }

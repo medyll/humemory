@@ -13,6 +13,7 @@
 import type { Intention, Memory, MemoryStore, IntentionStore, DecayLevel, Script } from '../core/types.js';
 import type { CueResolver } from '../core/cues.js';
 import { loopId, intentionSaillance } from '../core/cues.js';
+import { scriptEffectiveSaillance } from '../core/scripts.js';
 import { systemClock, type Clock } from '../core/clock.js';
 import {
   sanitizeTrace,
@@ -197,7 +198,10 @@ function renderMarkdown(input: {
 
   // One drill per context block (Q1 conservative default): two scripts firing
   // in the same session is a smell — the sharper one wins, the rest is noise.
-  const script = (input.firedScripts ?? []).sort((a, b) => b.saillance - a.saillance)[0];
+  // Sharpness = effective saillance (8.4 disuse included), not the raw bump.
+  const script = (input.firedScripts ?? []).sort(
+    (a, b) => scriptEffectiveSaillance(b, now) - scriptEffectiveSaillance(a, now)
+  )[0];
 
   // Nothing to say: write nothing rather than inject an empty block into the prompt.
   if (!openLoops.length && !traces.length && !firedNow.length && !script) return { markdown: '', escapeAttempts };
