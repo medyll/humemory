@@ -202,6 +202,14 @@ export interface Intention {
 
 export interface Cue {
   id: string;
+  /** Phase 8: a cue can arm an intention OR a script. */
+  targetKind: CueTargetKind;
+  /** Id of the target (intention or script) this cue arms. */
+  targetId: string;
+  /**
+   * @deprecated Compat alias for Phase 5 consumers — equals `targetId`.
+   * Intention-only consumers must check `targetKind === 'intention'` first.
+   */
   intentionId: string;
   kind: CueKind;
   triggerSpec: TriggerSpec;
@@ -209,6 +217,8 @@ export interface Cue {
   armedAt: Date;
   firedAt?: Date;
 }
+
+export type CueTargetKind = 'intention' | 'script';
 
 /** Write shape for an intention: the store sets id/createdAt/status/saillance. */
 export type NewIntention = Omit<
@@ -245,6 +255,8 @@ export interface IntentionStore {
   getCue(id: string): Promise<Cue | null>;
   listCues(options?: {
     intentionId?: string;
+    targetKind?: CueTargetKind;
+    targetId?: string;
     status?: CueStatus | CueStatus[];
     kind?: CueKind;
     limit?: number;
@@ -252,6 +264,66 @@ export interface IntentionStore {
   updateCueStatus(id: string, status: CueStatus): Promise<Cue>;
   /** Records a firing. `rearm` keeps the cue `armed` (recurring cues). */
   markCueFired(id: string, options?: { rearm?: boolean }): Promise<Cue>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8.1 — Cognitive scripts (Schank & Abelson drills). A script is not an
+// intention: an intention is ONE marker ("pense à X"), a script is an ORDERED
+// procedure ("fais A, puis B, vérifie C") that fires on a cue and decays on
+// DISUSE — the inverse Zeigarnik (PHASE8_PLAN.md § 8.4).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** draft = proposed, never fires · active = resolves through cues · archived = searchable only. */
+export type ScriptStatus = 'draft' | 'active' | 'archived';
+
+export interface Script {
+  id: string;
+  name: string; // 'release-check', unique per directory
+  description: string; // one line, shown in the context block header
+  steps: string[]; // ordered drill steps — plain strings, execution stays with the agent
+  directory: string; // mental place, same cue filtering as intentions
+  status: ScriptStatus;
+  /** Fire-bumped saillance; effective value deducts disuse decay (8.4 sweep). */
+  saillance: number;
+  fireCount: number;
+  lastFiredAt?: Date;
+  /** Pinned = photographic equivalent: exempt from disuse decay. */
+  pinned: boolean;
+  // ── Trust layer (8.3): same provenance shape as intentions (6.0.1) ──
+  source?: TraceSource;
+  agent?: string;
+  device?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Write shape for a script: the store sets id/status/saillance/fireCount/timestamps. */
+export type NewScript = Omit<
+  Script,
+  'id' | 'status' | 'saillance' | 'fireCount' | 'lastFiredAt' | 'createdAt' | 'updatedAt'
+> & {
+  status?: ScriptStatus;
+  saillance?: number;
+};
+
+export interface ScriptStore {
+  addScript(script: NewScript, cues?: TriggerSpec[]): Promise<Script>;
+  getScript(id: string): Promise<Script | null>;
+  /** Name lookup, unique per directory — the CLI and the dreamer both address drills by name. */
+  getScriptByName(name: string, directory: string): Promise<Script | null>;
+  listScripts(options?: {
+    status?: ScriptStatus | ScriptStatus[];
+    directory?: string;
+    limit?: number;
+  }): Promise<Script[]>;
+  updateScriptStatus(id: string, status: ScriptStatus): Promise<Script>;
+  updateScript(
+    id: string,
+    patch: { name?: string; description?: string; steps?: string[]; pinned?: boolean }
+  ): Promise<Script>;
+  /** Firing bumps fireCount, lastFiredAt and saillance (+5, capped 100). */
+  markScriptFired(id: string): Promise<Script>;
+  deleteScript(id: string): Promise<void>; // also cancels its armed cues
 }
 
 export interface MemoryStore {

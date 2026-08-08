@@ -7,7 +7,8 @@ import { hostname } from 'os';
 import type {
   Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult,
   Intention, IntentionStatus, IntentionStore, NewIntention,
-  Cue, CueKind, CueStatus, NewCue, TriggerSpec,
+  Cue, CueKind, CueStatus, CueTargetKind, NewCue, TriggerSpec,
+  Script, ScriptStatus, ScriptStore, NewScript,
   VerificationReason, Contradiction, ContradictResult,
   DreamProposal, DreamKind, DreamStatus,
 } from '../core/types.js';
@@ -150,7 +151,7 @@ class NoopLock {
 
 type Lock = Pick<AdvisoryLock, 'withLock'>;
 
-export class SQLiteStore implements MemoryStore, IntentionStore {
+export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
   private writeQueue: Promise<any> = Promise.resolve();
@@ -378,7 +379,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS cues (
         id TEXT PRIMARY KEY,
-        intention_id TEXT NOT NULL REFERENCES intentions(id) ON DELETE CASCADE,
+        target_kind TEXT NOT NULL DEFAULT 'intention',
+        target_id TEXT NOT NULL,
         kind TEXT NOT NULL,
         trigger_spec TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'armed',
@@ -387,13 +389,61 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       )
     `);
 
+    // Phase 8.1 — old databases have cues.intention_id NOT NULL REFERENCES
+    // intentions(id). A cue can now arm an intention OR a script, and a
+    // generic target cannot keep a single-table FK: rebuild the table
+    // (create-new / copy / drop / rename) when the old column is present.
+    // Cue cleanup on intention delete is now explicit in deleteIntention.
+    const cueColumns = this.db.query('PRAGMA table_info(cues)').all() as any[];
+    if (cueColumns.some((c) => c.name === 'intention_id')) {
+      this.db.exec(`
+        CREATE TABLE cues_new (
+          id TEXT PRIMARY KEY,
+          target_kind TEXT NOT NULL DEFAULT 'intention',
+          target_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          trigger_spec TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'armed',
+          armed_at INTEGER NOT NULL,
+          fired_at INTEGER
+        );
+        INSERT INTO cues_new (id, target_kind, target_id, kind, trigger_spec, status, armed_at, fired_at)
+          SELECT id, 'intention', intention_id, kind, trigger_spec, status, armed_at, fired_at FROM cues;
+        DROP TABLE cues;
+        ALTER TABLE cues_new RENAME TO cues;
+      `);
+    }
+
+    // Phase 8.1 — cognitive scripts (drills). Idempotent like the rest.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS scripts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        steps TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        saillance REAL NOT NULL DEFAULT 50,
+        fire_count INTEGER NOT NULL DEFAULT 0,
+        last_fired_at INTEGER,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'agent',
+        agent TEXT,
+        device TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_intentions_status ON intentions(status);
       CREATE INDEX IF NOT EXISTS idx_intentions_directory ON intentions(directory);
       CREATE INDEX IF NOT EXISTS idx_intentions_expires ON intentions(expires_at);
-      CREATE INDEX IF NOT EXISTS idx_cues_intention ON cues(intention_id);
+      CREATE INDEX IF NOT EXISTS idx_cues_target ON cues(target_kind, target_id);
       CREATE INDEX IF NOT EXISTS idx_cues_status ON cues(status);
       CREATE INDEX IF NOT EXISTS idx_cues_kind ON cues(kind);
+      CREATE INDEX IF NOT EXISTS idx_scripts_status ON scripts(status);
+      CREATE INDEX IF NOT EXISTS idx_scripts_name ON scripts(name, directory);
     `);
 
     // Phase 6.0.1 — same provenance columns on intentions (gap 8).
@@ -1215,9 +1265,12 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   private rowToCue(row: any): Cue {
+    const targetKind = (row.target_kind ?? 'intention') as CueTargetKind;
     return {
       id: row.id,
-      intentionId: row.intention_id,
+      targetKind,
+      targetId: row.target_id,
+      intentionId: row.target_id, // deprecated compat alias — see types.ts
       kind: row.kind as CueKind,
       triggerSpec: JSON.parse(row.trigger_spec) as TriggerSpec,
       status: row.status as CueStatus,
@@ -1276,7 +1329,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
         });
 
       for (const spec of cues) {
-        this.insertCueRow(crypto.randomUUID(), full.id, spec, 'armed', now);
+        this.insertCueRow(crypto.randomUUID(), 'intention', full.id, spec, 'armed', now);
       }
     });
 
@@ -1285,19 +1338,21 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
 
   private insertCueRow(
     id: string,
-    intentionId: string,
+    targetKind: CueTargetKind,
+    targetId: string,
     spec: TriggerSpec,
     status: CueStatus,
     armedAt: Date
   ): void {
     this.db
       .query(
-        `INSERT INTO cues (id, intention_id, kind, trigger_spec, status, armed_at)
-         VALUES ($id, $intention_id, $kind, $trigger_spec, $status, $armed_at)`
+        `INSERT INTO cues (id, target_kind, target_id, kind, trigger_spec, status, armed_at)
+         VALUES ($id, $target_kind, $target_id, $kind, $trigger_spec, $status, $armed_at)`
       )
       .run({
         $id: id,
-        $intention_id: intentionId,
+        $target_kind: targetKind,
+        $target_id: targetId,
         $kind: spec.kind,
         $trigger_spec: JSON.stringify(spec),
         $status: status,
@@ -1372,9 +1427,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     return intention;
   }
 
-  /** Deletes the intention; its cues go with it (PRAGMA foreign_keys=ON). */
+  /** Deletes the intention and its cues — explicit since Phase 8.1 (the generic
+   *  target can no longer carry a single-table FK cascade). */
   async deleteIntention(id: string): Promise<void> {
     await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(`DELETE FROM cues WHERE target_kind = 'intention' AND target_id = $id`)
+        .run({ $id: id });
       this.db.query('DELETE FROM intentions WHERE id = $id').run({ $id: id });
     });
   }
@@ -1388,11 +1447,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     const status = cue.status ?? 'armed';
 
     await this.enqueueWriteWithLock(async () => {
-      this.insertCueRow(id, cue.intentionId, cue.triggerSpec, status, now);
+      this.insertCueRow(id, 'intention', cue.intentionId, cue.triggerSpec, status, now);
     });
 
     return {
       id,
+      targetKind: 'intention',
+      targetId: cue.intentionId,
       intentionId: cue.intentionId,
       kind: cue.triggerSpec.kind,
       triggerSpec: cue.triggerSpec,
@@ -1407,15 +1468,32 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   }
 
   async listCues(
-    options: { intentionId?: string; status?: CueStatus | CueStatus[]; kind?: CueKind; limit?: number } = {}
+    options: {
+      intentionId?: string;
+      targetKind?: CueTargetKind;
+      targetId?: string;
+      status?: CueStatus | CueStatus[];
+      kind?: CueKind;
+      limit?: number;
+    } = {}
   ): Promise<Cue[]> {
-    const { intentionId, status, kind, limit = 50 } = options;
+    const { intentionId, targetKind, targetId, status, kind, limit = 50 } = options;
     const conditions: string[] = [];
     const params: any = {};
 
     if (intentionId !== undefined) {
-      conditions.push('intention_id = $intention_id');
+      conditions.push(`target_kind = 'intention'`, 'target_id = $intention_id');
       params.$intention_id = intentionId;
+    }
+
+    if (targetKind !== undefined) {
+      conditions.push('target_kind = $target_kind');
+      params.$target_kind = targetKind;
+    }
+
+    if (targetId !== undefined) {
+      conditions.push('target_id = $target_id');
+      params.$target_id = targetId;
     }
 
     if (status !== undefined) {
@@ -1478,6 +1556,199 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     const cue = await this.getCue(id);
     if (!cue) throw new Error(`Cue ${id} not found`);
     return cue;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Phase 8.1 — Cognitive scripts (drills)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  private rowToScript(row: any): Script {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      steps: JSON.parse(row.steps) as string[],
+      directory: row.directory,
+      status: row.status as ScriptStatus,
+      saillance: row.saillance,
+      fireCount: row.fire_count,
+      lastFiredAt: row.last_fired_at ? new Date(row.last_fired_at) : undefined,
+      pinned: Boolean(row.pinned),
+      source: row.source || undefined,
+      agent: row.agent || undefined,
+      device: row.device || undefined,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
+
+  async addScript(script: NewScript, cues: TriggerSpec[] = []): Promise<Script> {
+    if (!script.name.trim()) throw new Error('Script name is required');
+    if (!script.steps.length || script.steps.some((s) => !s.trim())) {
+      throw new Error('A script needs at least one non-empty step');
+    }
+
+    // Human-authored scripts are trusted and land active (8.3); agents and
+    // the dreamer land as drafts behind the human gate.
+    const source = script.source ?? 'agent';
+    const status = script.status ?? (source === 'human' ? 'active' : 'draft');
+    const id = crypto.randomUUID();
+    const now = this.clock.now();
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `INSERT INTO scripts
+             (id, name, description, steps, directory, status, saillance, fire_count,
+              pinned, source, agent, device, created_at, updated_at)
+           VALUES ($id, $name, $description, $steps, $directory, $status, $saillance, 0,
+              $pinned, $source, $agent, $device, $created_at, $updated_at)`
+        )
+        .run({
+          $id: id,
+          $name: script.name,
+          $description: script.description,
+          $steps: JSON.stringify(script.steps),
+          $directory: script.directory,
+          $status: status,
+          $saillance: script.saillance ?? 50,
+          $pinned: script.pinned ? 1 : 0,
+          $source: source,
+          $agent: script.agent ?? null,
+          $device: script.device ?? this.deviceId,
+          $created_at: now.getTime(),
+          $updated_at: now.getTime(),
+        });
+      for (const spec of cues) {
+        this.insertCueRow(crypto.randomUUID(), 'script', id, spec, 'armed', now);
+      }
+    });
+
+    const full = await this.getScript(id);
+    if (!full) throw new Error('Script insert failed');
+    return full;
+  }
+
+  async getScript(id: string): Promise<Script | null> {
+    const row = this.db.query('SELECT * FROM scripts WHERE id = $id').get({ $id: id }) as any;
+    return row ? this.rowToScript(row) : null;
+  }
+
+  async getScriptByName(name: string, directory: string): Promise<Script | null> {
+    const row = this.db
+      .query('SELECT * FROM scripts WHERE name = $name AND directory = $directory')
+      .get({ $name: name, $directory: directory }) as any;
+    return row ? this.rowToScript(row) : null;
+  }
+
+  async listScripts(
+    options: { status?: ScriptStatus | ScriptStatus[]; directory?: string; limit?: number } = {}
+  ): Promise<Script[]> {
+    const { status, directory, limit = 50 } = options;
+    const conditions: string[] = [];
+    const params: any = {};
+
+    if (status !== undefined) {
+      const statuses = Array.isArray(status) ? status : [status];
+      const keys = statuses.map((s, i) => {
+        params[`$status${i}`] = s;
+        return `$status${i}`;
+      });
+      conditions.push(`status IN (${keys.join(', ')})`);
+    }
+    if (directory !== undefined) {
+      conditions.push('directory = $directory');
+      params.$directory = directory;
+    }
+
+    let sql = 'SELECT * FROM scripts';
+    if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
+    sql += ' ORDER BY saillance DESC, updated_at DESC LIMIT $limit';
+    params.$limit = limit;
+
+    const rows = this.db.query(sql).all(params) as any[];
+    return rows.map((r) => this.rowToScript(r));
+  }
+
+  async updateScriptStatus(id: string, status: ScriptStatus): Promise<Script> {
+    const now = this.clock.now();
+    await this.enqueueWriteWithLock(async () => {
+      // Archiving a script cancels its armed cues — a ghost wake-up is the
+      // same bug class as a cue outliving its intention (5.2 expireStale).
+      if (status === 'archived') {
+        this.db
+          .query(`UPDATE cues SET status = 'cancelled' WHERE target_kind = 'script' AND target_id = $id AND status = 'armed'`)
+          .run({ $id: id });
+      }
+      this.db
+        .query('UPDATE scripts SET status = $status, updated_at = $now WHERE id = $id')
+        .run({ $id: id, $status: status, $now: now.getTime() });
+    });
+    const script = await this.getScript(id);
+    if (!script) throw new Error(`Script ${id} not found`);
+    return script;
+  }
+
+  async updateScript(
+    id: string,
+    patch: { name?: string; description?: string; steps?: string[]; pinned?: boolean }
+  ): Promise<Script> {
+    if (patch.steps && (!patch.steps.length || patch.steps.some((s) => !s.trim()))) {
+      throw new Error('A script needs at least one non-empty step');
+    }
+    const now = this.clock.now();
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `UPDATE scripts SET
+             name = COALESCE($name, name),
+             description = COALESCE($description, description),
+             steps = COALESCE($steps, steps),
+             pinned = COALESCE($pinned, pinned),
+             updated_at = $now
+           WHERE id = $id`
+        )
+        .run({
+          $id: id,
+          $name: patch.name ?? null,
+          $description: patch.description ?? null,
+          $steps: patch.steps ? JSON.stringify(patch.steps) : null,
+          $pinned: patch.pinned === undefined ? null : patch.pinned ? 1 : 0,
+          $now: now.getTime(),
+        });
+    });
+    const script = await this.getScript(id);
+    if (!script) throw new Error(`Script ${id} not found`);
+    return script;
+  }
+
+  /** Firing a drill: fire_count +1, last_fired_at, saillance +5 capped at 100 (8.2). */
+  async markScriptFired(id: string): Promise<Script> {
+    const now = this.clock.now();
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `UPDATE scripts SET
+             fire_count = fire_count + 1,
+             last_fired_at = $now,
+             saillance = MIN(100, saillance + 5),
+             updated_at = $now
+           WHERE id = $id`
+        )
+        .run({ $id: id, $now: now.getTime() });
+    });
+    const script = await this.getScript(id);
+    if (!script) throw new Error(`Script ${id} not found`);
+    return script;
+  }
+
+  async deleteScript(id: string): Promise<void> {
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(`DELETE FROM cues WHERE target_kind = 'script' AND target_id = $id`)
+        .run({ $id: id });
+      this.db.query('DELETE FROM scripts WHERE id = $id').run({ $id: id });
+    });
   }
 
   close(): void {

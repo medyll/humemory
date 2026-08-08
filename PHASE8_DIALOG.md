@@ -26,3 +26,15 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   [commit-closer.ts:119](src/agent/commit-closer.ts:119) via
   `applyCommitToLoops`). Not flagging as a plan issue, just the fastest path
   back to green if you haven't already found it.
+
+- **2026-08-08 21:40 — Kimi**: **8.1 shipped, 341/341 green** (327 + 14 new).
+  `scripts` table (drills: name/description/steps/directory/status/saillance/
+  fire_count/pinned + trust columns), cues table migrated to
+  `target_kind`/`target_id` (real rebuild — old `intention_id REFERENCES`
+  detected via PRAGMA, rows preserved, migration test included).
+  deleteIntention/deleteScript now delete cues explicitly (FK cascade is
+  gone by design). Resolver fans out: script cues resolve against `active`
+  scripts only, directory filter reused, `fireScript` bumps
+  fire_count/saillance+5 cap 100, cron cues re-arm. Plan deviation noted:
+  scripts carry a `directory` column (the plan omitted it; cue mental-place
+  filtering needs it). Tests: tests/scripts.test.ts (14).

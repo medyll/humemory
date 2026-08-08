@@ -14,6 +14,8 @@ import type {
   Cue,
   Intention,
   IntentionStore,
+  Script,
+  ScriptStore,
   TimeTriggerSpec,
   EventTriggerSpec,
 } from './types.js';
@@ -27,6 +29,10 @@ export interface CueResolver {
   resolveEventCues(event: AppEvent): Promise<Cue[]>;
   /** Marks cue and intention as fired. Returns the woken intention. */
   fire(cueId: string): Promise<Intention>;
+  /** Phase 8.1 — fires a script cue: the drill is surfaced, saillance bumped. */
+  fireScript(cueId: string): Promise<Script>;
+  /** Dispatches by target kind (8.1) — what bus wiring should call. */
+  fireAny(cueId: string): Promise<{ kind: 'intention'; intention: Intention } | { kind: 'script'; script: Script }>;
   /** Expires intentions past their deadline. Returns how many. */
   expireStale(now?: Date): Promise<number>;
 }
@@ -283,18 +289,25 @@ export interface CueResolverOptions {
 export class SqliteCueResolver implements CueResolver {
   private clock: Clock;
 
-  constructor(private store: IntentionStore, options: CueResolverOptions = {}) {
+  constructor(
+    private store: IntentionStore & Partial<ScriptStore>,
+    options: CueResolverOptions = {}
+  ) {
     this.clock = options.clock ?? systemClock;
   }
 
   /**
-   * A cue only wakes while its intention is still `armed`: a loop already closed,
-   * expired or already surfaced must not resurface.
+   * A cue only wakes while its target is live: an intention still `armed`, a
+   * script still `active` (8.1 — drafts never fire). Returns the target's
+   * directory for mental-place filtering, or null when the target is dead.
    */
-  private async armedIntentionOf(cue: Cue): Promise<Intention | null> {
-    const intention = await this.store.getIntention(cue.intentionId);
-    if (!intention || intention.status !== 'armed') return null;
-    return intention;
+  private async liveTargetDirectoryOf(cue: Cue): Promise<string | null> {
+    if (cue.targetKind === 'script') {
+      const script = this.store.getScript ? await this.store.getScript(cue.targetId) : null;
+      return script && script.status === 'active' ? script.directory : null;
+    }
+    const intention = await this.store.getIntention(cue.targetId);
+    return intention && intention.status === 'armed' ? intention.directory : null;
   }
 
   async resolveTimeCues(now: Date = this.clock.now()): Promise<Cue[]> {
@@ -315,7 +328,7 @@ export class SqliteCueResolver implements CueResolver {
       }
 
       if (!isDue) continue;
-      if (!(await this.armedIntentionOf(cue))) continue;
+      if (!(await this.liveTargetDirectoryOf(cue))) continue;
       due.push(cue);
     }
 
@@ -335,9 +348,9 @@ export class SqliteCueResolver implements CueResolver {
       if (spec.kind !== 'event') continue;
       if (!eventTriggerMatches(spec, event)) continue;
 
-      const intention = await this.armedIntentionOf(cue);
-      if (!intention) continue;
-      if (!directoryMatches(intention.directory, (event as any).directory)) continue;
+      const directory = await this.liveTargetDirectoryOf(cue);
+      if (!directory) continue;
+      if (!directoryMatches(directory, (event as any).directory)) continue;
 
       matched.push(cue);
     }
@@ -352,12 +365,36 @@ export class SqliteCueResolver implements CueResolver {
   async fire(cueId: string): Promise<Intention> {
     const cue = await this.store.getCue(cueId);
     if (!cue) throw new Error(`Cue ${cueId} not found`);
+    if (cue.targetKind !== 'intention') throw new Error(`Cue ${cueId} arms a script — use fireScript`);
 
     const spec = cue.triggerSpec as TimeTriggerSpec;
     const recurring = spec.kind === 'time' && Boolean(spec.cron);
 
     await this.store.markCueFired(cueId, { rearm: recurring });
-    return this.store.updateIntentionStatus(cue.intentionId, 'fired');
+    return this.store.updateIntentionStatus(cue.targetId, 'fired');
+  }
+
+  /** Script counterpart of fire(): same cue bookkeeping, script bumped (8.1). */
+  async fireScript(cueId: string): Promise<Script> {
+    const cue = await this.store.getCue(cueId);
+    if (!cue) throw new Error(`Cue ${cueId} not found`);
+    if (cue.targetKind !== 'script') throw new Error(`Cue ${cueId} arms an intention — use fire`);
+    if (!this.store.markScriptFired) throw new Error('Store has no ScriptStore support');
+
+    const spec = cue.triggerSpec as TimeTriggerSpec;
+    const recurring = spec.kind === 'time' && Boolean(spec.cron);
+
+    await this.store.markCueFired(cueId, { rearm: recurring });
+    return this.store.markScriptFired(cue.targetId);
+  }
+
+  async fireAny(
+    cueId: string
+  ): Promise<{ kind: 'intention'; intention: Intention } | { kind: 'script'; script: Script }> {
+    const cue = await this.store.getCue(cueId);
+    if (!cue) throw new Error(`Cue ${cueId} not found`);
+    if (cue.targetKind === 'script') return { kind: 'script', script: await this.fireScript(cueId) };
+    return { kind: 'intention', intention: await this.fire(cueId) };
   }
 
   /**
@@ -394,12 +431,16 @@ export class SqliteCueResolver implements CueResolver {
 export function attachResolverToBus(
   bus: EventBus,
   resolver: CueResolver,
-  options: { onFired?: (intention: Intention, cue: Cue) => void | Promise<void> } = {}
+  options: {
+    onFired?: (intention: Intention, cue: Cue) => void | Promise<void>;
+    onScriptFired?: (script: Script, cue: Cue) => void | Promise<void>;
+  } = {}
 ): Unsubscribe {
   return bus.subscribeAll(async (event) => {
     for (const cue of await resolver.resolveEventCues(event)) {
-      const intention = await resolver.fire(cue.id);
-      await options.onFired?.(intention, cue);
+      const fired = await resolver.fireAny(cue.id);
+      if (fired.kind === 'script') await options.onScriptFired?.(fired.script, cue);
+      else await options.onFired?.(fired.intention, cue);
     }
   });
 }
