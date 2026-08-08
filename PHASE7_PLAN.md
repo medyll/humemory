@@ -37,7 +37,7 @@ Two surfaces benefit:
 | Windows + bun runtime | No native bindings that don't ship prebuilt win32-x64 binaries |
 | Model download is a one-time setup, not a test step | Models cached under `data/models/` (git-ignored); CI skips model tests |
 | Determinism | Embeddings are floats — clustering thresholds asserted with margins, never exact float equality |
-| Trust invariants (R1) | Cluster scoring stays on `base(source)` only; vectors change *grouping*, never *trust* |
+| Trust invariants (R1) | Cluster scoring stays on `base(source)` only; vectors change *grouping*, never *trust* — ⚠️ **no longer accurate since `7f2b92a`, see annotation A1** |
 
 ---
 
@@ -193,4 +193,112 @@ Dependencies to add: `@huggingface/transformers` (pulls `onnxruntime-node`).
 
 ---
 
+## 💬 Annotations — Claude (2026-08-08)
+
+Read against the code as it stands at `8bd4d50`. The plan is sound and the
+seam is in the right place; the notes below are where it contradicts the tree,
+or where Phase 6 moved under it.
+
+### A1 — "Vectors change *grouping*, never *trust*" is no longer true
+
+The constraints table asserts this, and it was true when the table was
+written. It stopped being true in `7f2b92a`: the dreamer now assigns the
+`corroborated` verification to cluster members when a cluster shows distinct
+agents, sessions and directories ([dreamer.ts:136](src/core/dreamer.ts:136)).
+
+So the cosine threshold of §7.3 is not only a grouping knob — it decides which
+traces get verified, which decay 1.5× slower and sort first in the SessionStart
+block. A looser threshold means more cross-agent clusters, which means more
+automatic verification. Semantic clustering makes this *sharper*, not safer:
+that is the whole point of the phase, traces that share no keywords will now
+group.
+
+Two consequences for §7.5:
+- Calibration must measure **verification precision**, not just clustering
+  precision. A false cluster is a rejected proposal — cheap. A false
+  corroboration is a wrong trace made durable — expensive, and nothing in the
+  review queue surfaces it.
+- Consider two thresholds rather than one: cluster at ~0.82, corroborate at a
+  stricter value. Grouping tolerates noise because a human reviews the
+  proposal; verification does not, because nobody reviews it.
+
+The R1 invariant itself is untouched — scoring still runs on `baseTrust`, so
+there is still no feedback loop. This is a different coupling: threshold →
+verification, not verification → threshold.
+
+### A2 — The onnxruntime fallback in the risk table does not exist
+
+"fall back to node (not bun) for the MCP/consolidate entry if needed" cannot
+be done as written: [sqlite.ts:1](src/store/sqlite.ts:1) imports `bun:sqlite`
+directly, so every entry point that touches the store is bun-only by
+construction. A node entry would require replacing the driver first — a far
+larger change than Phase 7.
+
+The real fallback is the one already in the plan: 7.3 is flag-gated and
+`KeywordClusterer` stays the default. That is sufficient. Rather than carry a
+mitigation that would not work, spend ten minutes before starting 7.3 running
+`pipeline('feature-extraction')` under bun on win32 — the answer decides
+whether the phase is three steps or five.
+
+### A3 — Do not put the model in the encoding path
+
+§7.2 writes embeddings "on `add()`, asynchronously and best-effort". `add()`
+is on the Stop-hook path ([claude-hook.ts](src/agent/claude-hook.ts)), which
+runs at the end of every session, and on the MCP `humemory_add` path, which
+runs inside another agent's tool call. A lazy first load of a ~120 MB model
+lands on whichever of those fires first.
+
+Suggest: never embed in the hook or MCP path. Embed in `pnpm dream` and
+`embed backfill` only, both of which are already batch jobs where a model load
+is expected. Traces stay unembedded until the next nightly pass, which costs
+nothing — the vector lane is additive by design.
+
+### A4 — §7.2's CASCADE works; two neighbours need explicit handling
+
+Verified: `PRAGMA foreign_keys=ON` is set ([sqlite.ts:186](src/store/sqlite.ts:186)),
+so `ON DELETE CASCADE` will behave. `data/` is git-ignored, so `data/models/`
+is covered.
+
+Not covered by "merge / unmerge / delete keep it consistent":
+- `unmerge` (6.0.4) restores the target's *previous* derived levels from
+  `level_revisions`. If the merge recomputed the target's embedding from the
+  new levels, unmerge must recompute it back — otherwise the vector describes
+  a merge that no longer exists, silently.
+- The resurrected source row needs its embedding re-created too; it was
+  CASCADE-deleted or left stale depending on the path.
+
+Cheapest correct rule: on any level mutation, **delete** the row from
+`memory_embeddings` rather than recompute it. The next batch pass re-embeds.
+Deleting is always consistent; recomputing in-line is where the drift enters.
+
+### A5 — Open question 2: the concatenation order matters
+
+Embedding "L0 + L3 keywords concatenated" is right in intent, but
+`multilingual-e5-small` truncates at 512 tokens. An L0 trace longer than that
+silently drops the L3 keywords off the end — exactly the part meant to keep
+the trace findable as it decays, and exactly the case (long traces) where you
+need it most.
+
+Put L3 first, or embed the two separately and keep both vectors. The second
+costs one more row per trace and makes the decay story honest: query a
+degraded trace against the representation the agent would actually see.
+
+### A6 — Smaller notes
+
+- §7.3's async ripple is correctly scoped: `Clusterer` is consumed only by
+  `runDreamer` and the dreamer tests. Nothing else to update.
+- Brute-force cosine at `DREAM_CONFIG.collectLimit` = 500 traces is 125k
+  pairwise comparisons over 384 dims per run — a few hundred ms. The
+  ">50k traces" deferral of `sqlite-vec` is comfortably right.
+- Open question 3: `findSimilar` already exists and backs the merge path
+  ([sqlite.ts:475](src/store/sqlite.ts:475)); adding a vector lane there is a
+  small change. Agreed that merge stays L4-triggered.
+- Open question 1: agreed, `small` first. Add the measurement to 7.5 rather
+  than leaving it as a later judgement call.
+
+---
+
 *Drafted 2026-08-08 by Kimi (Moonshot AI) — pending owner approval.*
+*Annotated 2026-08-08 by Claude (Sonnet 5): trust coupling introduced by
+`7f2b92a` (A1), unavailable node fallback (A2), model out of the encoding path
+(A3), embedding lifecycle on merge/unmerge (A4), truncation order (A5).*
