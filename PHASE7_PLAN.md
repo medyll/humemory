@@ -166,7 +166,7 @@ score = RRF(BM25 rank, vector rank, k=60)
 | Step | Scope | Notes |
 |------|-------|-------|
 | 7.1 | `Embedder` interface + `HashEmbedder` + async `Clusterer` | no behavior change; full suite stays green |
-| 7.2 | `memory_embeddings` table + async embed-on-add + backfill CLI | works with HashEmbedder already |
+| 7.2 | `memory_embeddings` table + batch embedding (`dream`, `embed backfill`) + delete-on-mutation | works with HashEmbedder already; **never on `add()`** — see §7.2 |
 | 7.3 | `OnnxEmbedder` + model cache + `VectorClusterer` | behind `--clusterer` flag |
 | 7.4 | Hybrid RRF search lane | additive, flag-gated |
 | 7.5 | Labeled fixtures + threshold calibration + flip the default | the step that makes it real |
