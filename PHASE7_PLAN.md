@@ -361,3 +361,12 @@ sentinel back to 0.99 (vector auto-corroboration OFF), cluster threshold
 0.825 (best F1: P 0.71 / R 0.92 / F1 0.80), default clusterer back to
 keyword. Conclusion: cosine corroboration is beyond e5-small AND e5-base —
 the next lever is a stronger embedder (e5-large / bge-m3), not more fixture.*
+
+*Round 4 (same day) — CLOSED: bge-m3 q8 (1024 dims, no e5 prefixes) gives the
+best clustering (threshold 0.740, F1 0.89 / P 0.83 / R 0.96) but still no
+P=1.0 corroboration gate (false max 0.908 > true min 0.691). Four models,
+four failures: cosine corroboration is beyond local lightweight embedders;
+the human-review gate covers the need. Shipped: per-model CLUSTER_THRESHOLDS
+consumed via OnnxEmbedder.suggestedClusterThreshold, default model → bge-m3,
+corroboration sentinel 0.99 permanent. fp32 untested (2.2GB download, no
+resume — q8/fp32 delta was negligible on e5). Calibration CLOSED.*

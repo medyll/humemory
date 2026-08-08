@@ -238,15 +238,16 @@ verification and the dreamer's cross-agent recurrence signal.
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - **Phase 7: vector memory** ✅ shipped (2026-08-08) — `Embedder` interface +
-  offline ONNX embeddings (multilingual-e5-base q8 default), `VectorClusterer`
-  behind the 6.1 seam, hybrid RRF search (`search --semantic`),
-  `embed backfill --model small|base` CLI, `dream run --window <days>`.
-  **Calibration (7.5, 3 rounds):** hard negatives falsified every P=1.0
-  corroboration gate (false max 0.946 on 52 pairs) → **vector
-  auto-corroboration is DISABLED** (0.99 sentinel); cluster threshold 0.825
-  (P 0.71 / F1 0.80 — proposals are human-reviewed); default dream clusterer
-  stays `keyword`, `vector` is opt-in. Re-enabling corroboration requires a
-  stronger embedder (e5-large / bge-m3). Details:
+  offline ONNX embeddings (bge-m3 q8 default, 1024 dims; e5-base/small via
+  `--model`), `VectorClusterer` with per-model calibrated thresholds
+  (`CLUSTER_THRESHOLDS`), hybrid RRF search (`search --semantic`),
+  `embed backfill`, `dream run --window <days>`.
+  **Calibration (7.5, 4 rounds — CLOSED):** no local lightweight embedder
+  reaches a P=1.0 corroboration gate on 52 pairs incl. hard negatives
+  (bge-m3 false max 0.908 > true min 0.691) → **vector auto-corroboration
+  permanently disabled** (0.99 sentinel; keyword path keeps metadata-only
+  corroboration). Best clusterer: bge-m3 @ 0.740 (F1 0.89). Default dream
+  clusterer stays `keyword`, `vector` opt-in. Details:
   [PHASE7_PLAN.md](./PHASE7_PLAN.md), dialogue log
   [PHASE7_DIALOG.md](./PHASE7_DIALOG.md)
 - Multi-device sync of the shared store (the `device` column from 6.0.1 makes

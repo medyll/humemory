@@ -61,19 +61,33 @@ export function cosine(a: Float32Array, b: Float32Array): number {
 
 export const E5_MODEL_ID = 'Xenova/multilingual-e5-small';
 export const E5_BASE_MODEL_ID = 'Xenova/multilingual-e5-base';
+export const BGE_M3_MODEL_ID = 'Xenova/bge-m3';
 
-/** Known output dims per model — e5-base is 768, e5-small 384. */
+/** Known output dims per model — e5-small 384, e5-base 768, bge-m3 1024. */
 export const MODEL_DIMS: Record<string, number> = {
   [E5_MODEL_ID]: 384,
   [E5_BASE_MODEL_ID]: 768,
+  [BGE_M3_MODEL_ID]: 1024,
+};
+
+/**
+ * Calibrated cluster thresholds per model (7.5, 52 labelled pairs incl. hard
+ * negatives, scripts/calibrate-embeddings.ts). Thresholds are MODEL-SPECIFIC:
+ * bge-m3's cosine space sits lower than e5's. No model reaches a P=1.0
+ * corroboration gate — see DREAM_CONFIG.vectorCorroborateThreshold.
+ */
+export const CLUSTER_THRESHOLDS: Record<string, number> = {
+  [E5_MODEL_ID]: 0.855, // round 1: F1 0.84 (P 0.76 / R 0.93)
+  [E5_BASE_MODEL_ID]: 0.825, // round 3: F1 0.80 (P 0.71 / R 0.92)
+  [BGE_M3_MODEL_ID]: 0.74, // round 4: F1 0.89 (P 0.83 / R 0.96) — best
 };
 
 export interface OnnxEmbedderOptions {
-  /** q8 (default, ~120MB) or fp32. fp16 is accepted but BROKEN on win32/onnxruntime-node
+  /** q8 (default) or fp32. fp16 is accepted but BROKEN on win32/onnxruntime-node
    *  (graph-fusion error at load, 7.5 calibration) — do not use it there. */
   dtype?: 'q8' | 'fp16' | 'fp32';
-  /** Model to load; defaults to e5-base (7.5 round-2 calibration: e5-small's
-   *  cosine overlap made corroboration unsafe; base reaches P=1.0 at 0.855). */
+  /** Model to load; defaults to bge-m3 (7.5 round-4 calibration: best cluster
+   *  F1 0.89 vs 0.80 for e5-base; no model reaches a P=1.0 corroborate gate). */
   model?: string;
   cacheDir?: string;
   /** Pre-flight probe: pass false to disable instead of throwing on load failure. */
@@ -81,22 +95,27 @@ export interface OnnxEmbedderOptions {
 }
 
 /**
- * Production embedder: Transformers.js + e5-base (default; e5-small via
- * `model` option), fully local after the one-time download into
+ * Production embedder: Transformers.js + bge-m3 (default; e5-base / e5-small
+ * via `model` option), fully local after the one-time download into
  * `data/models/`. Loaded lazily on first use and reused across calls.
  */
 export class OnnxEmbedder implements Embedder {
   readonly modelId: string;
   readonly dims: number;
+  /** Calibrated cluster threshold for this model (see CLUSTER_THRESHOLDS). */
+  readonly suggestedClusterThreshold: number;
   private extractor: any = null;
   private loading: Promise<any> | null = null;
 
   constructor(private options: OnnxEmbedderOptions = {}) {
-    const model = options.model ?? E5_BASE_MODEL_ID;
+    const model = options.model ?? BGE_M3_MODEL_ID;
     this.modelId = `${model}@${options.dtype ?? 'q8'}`;
     const dims = MODEL_DIMS[model];
     if (!dims) throw new Error(`unknown model dims for ${model} — extend MODEL_DIMS`);
     this.dims = dims;
+    const threshold = CLUSTER_THRESHOLDS[model];
+    if (!threshold) throw new Error(`no calibrated cluster threshold for ${model} — calibrate first`);
+    this.suggestedClusterThreshold = threshold;
   }
 
   private async load() {
@@ -105,7 +124,7 @@ export class OnnxEmbedder implements Embedder {
       const { pipeline, env } = await import('@huggingface/transformers');
       env.cacheDir = this.options.cacheDir ?? './data/models';
       env.allowLocalModels = true;
-      const model = this.options.model ?? E5_BASE_MODEL_ID;
+      const model = this.options.model ?? BGE_M3_MODEL_ID;
       return pipeline('feature-extraction', model, { dtype: this.options.dtype ?? 'q8' });
     })();
     try {
@@ -119,9 +138,14 @@ export class OnnxEmbedder implements Embedder {
   }
 
   /** `kind` picks the e5 prefix: queries for search, passages for storage. */
+  /** e5 models require `query:`/`passage:` prefixes; bge models must NOT get them. */
+  private get usesE5Prefix(): boolean {
+    return (this.options.model ?? E5_BASE_MODEL_ID).includes('e5');
+  }
+
   async embed(texts: string[], kind: 'query' | 'passage' = 'passage'): Promise<Float32Array[]> {
     const extractor = await this.load();
-    const prefixed = texts.map((t) => `${kind}: ${t}`);
+    const prefixed = this.usesE5Prefix ? texts.map((t) => `${kind}: ${t}`) : texts;
     const out = await extractor(prefixed, { pooling: 'mean', normalize: true });
     const dims = this.dims;
     const flat = out.data as Float32Array;

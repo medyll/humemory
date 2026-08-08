@@ -10,7 +10,7 @@
  * Run: bun run scripts/calibrate-embeddings.ts [--dtype q8|fp16|both] [--model small|base]
  */
 import { readFileSync } from 'fs';
-import { OnnxEmbedder, E5_MODEL_ID, E5_BASE_MODEL_ID } from '../src/core/embeddings.js';
+import { OnnxEmbedder, E5_MODEL_ID, E5_BASE_MODEL_ID, BGE_M3_MODEL_ID } from '../src/core/embeddings.js';
 
 const dtypeArg = process.argv.includes('--dtype')
   ? process.argv[process.argv.indexOf('--dtype') + 1]
@@ -20,7 +20,12 @@ const dtypes = dtypeArg === 'both' ? (['q8', 'fp16'] as const) : ([dtypeArg] as 
 const modelArg = process.argv.includes('--model')
   ? process.argv[process.argv.indexOf('--model') + 1]
   : 'small';
-const model = modelArg === 'base' ? E5_BASE_MODEL_ID : E5_MODEL_ID;
+const MODELS: Record<string, string> = {
+  small: E5_MODEL_ID,
+  base: E5_BASE_MODEL_ID,
+  'bge-m3': BGE_M3_MODEL_ID,
+};
+const model = MODELS[modelArg] ?? E5_BASE_MODEL_ID;
 
 const { pairs } = JSON.parse(readFileSync('tests/fixtures/embeddings/pairs.json', 'utf8')) as {
   pairs: { a: string; b: string; should: boolean }[];

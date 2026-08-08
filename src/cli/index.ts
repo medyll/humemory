@@ -612,12 +612,13 @@ embed
   .description('Embed every trace missing a vector for the current model (idempotent)')
   .option('-n, --limit <n>', 'Max traces per run', '500')
   .option('--dtype <dtype>', 'Model quantization (q8|fp32 — fp16 broken on win32)', 'q8')
-  .option('--model <name>', 'small|base (default base since 7.5 round 2)', 'base')
+  .option('--model <name>', 'small|base|bge-m3 (default bge-m3 since 7.5 round 4)', 'bge-m3')
   .action(async (options) => {
     const s = getStore();
-    const { OnnxEmbedder, embeddableText, E5_MODEL_ID, E5_BASE_MODEL_ID } = await import('../core/embeddings.js');
+    const { OnnxEmbedder, embeddableText, E5_MODEL_ID, E5_BASE_MODEL_ID, BGE_M3_MODEL_ID } = await import('../core/embeddings.js');
 
-    const model = options.model === 'small' ? E5_MODEL_ID : E5_BASE_MODEL_ID;
+    const MODELS: Record<string, string> = { small: E5_MODEL_ID, base: E5_BASE_MODEL_ID, 'bge-m3': BGE_M3_MODEL_ID };
+    const model = MODELS[options.model] ?? BGE_M3_MODEL_ID;
     const embedder = new OnnxEmbedder({ dtype: options.dtype, model });
     console.log(`⏳ Model: ${embedder.modelId} (first run downloads ~120MB into data/models/)…`);
 

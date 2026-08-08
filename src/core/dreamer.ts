@@ -36,22 +36,16 @@ export const DREAM_CONFIG = {
   /** Jaccard similarity threshold for the keyword clusterer. */
   similarityThreshold: 0.34,
   /**
-   * Vector thresholds (Phase 7.3, A1): grouping is reviewed by a human,
-   * corroboration is not — so the verification gate is strictly higher.
+   * FALLBACK cluster threshold, used only for embedders without a calibrated
+   * per-model value (HashEmbedder in tests). Production models carry their
+   * own in CLUSTER_THRESHOLDS (embeddings.ts, 7.5 rounds 1–4): e5-small
+   * 0.855 / e5-base 0.825 / bge-m3 0.740 (best F1 0.89).
    *
-   * CALIBRATED 7.5 (round 3, e5-base q8) on 52 labelled bilingual pairs
-   * including 12 hard negatives (same-domain, different facts):
-   * - true-pair min 0.788 / false-pair max 0.946 — hard negatives (e.g.
-   *   "armed intentions pinned at saillance 100" vs "recall() sets saillance
-   *   to 100") score ABOVE most true paraphrases. No P=1.0 gate exists.
-   * - vectorClusterThreshold 0.825 = best F1 (P 0.71 / R 0.92 / F1 0.80):
-   *   noisy but tolerable because clusters are human-reviewed proposals.
-   * - vectorCorroborateThreshold 0.99 = SENTINEL, auto-corroboration
-   *   DISABLED. Round 2's 0.855 gate was an artifact of the narrow 28-pair
-   *   fixture (margin 0.002) and did not survive hard negatives. Re-enabling
-   *   requires a stronger embedder (e5-large / bge-m3), not more fixture.
-   * (History: round 1 e5-small overlapped; round 2 e5-base looked safe on
-   *  28 pairs; round 3 hard negatives falsified it.)
+   * vectorCorroborateThreshold 0.99 = SENTINEL, auto-corroboration DISABLED.
+   * Four calibration rounds (e5-small, e5-base ×2, bge-m3 — 52 labelled pairs
+   * incl. same-domain hard negatives) all failed to find a P=1.0 gate
+   * (best-case false max 0.908 > true min 0.691 with bge-m3). Re-enabling
+   * requires a stronger embedder or an LLM pairwise verifier, not more fixture.
    */
   vectorClusterThreshold: 0.825,
   vectorCorroborateThreshold: 0.99,

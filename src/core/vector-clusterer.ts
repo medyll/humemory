@@ -40,7 +40,13 @@ export class VectorClusterer implements ScoredClusterer {
   constructor(
     private embedder: Embedder,
     private store: EmbeddingStore,
-    private threshold: number = DREAM_CONFIG.vectorClusterThreshold
+    /**
+     * Default: the embedder's calibrated per-model threshold
+     * (OnnxEmbedder.suggestedClusterThreshold — 7.5 round 4), falling back to
+     * DREAM_CONFIG for embedders without calibration (e.g. HashEmbedder in tests).
+     */
+    private threshold: number = (embedder as { suggestedClusterThreshold?: number })
+      .suggestedClusterThreshold ?? DREAM_CONFIG.vectorClusterThreshold
   ) {}
 
   private async embeddingsFor(memories: Memory[]): Promise<Float32Array[]> {
