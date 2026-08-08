@@ -60,29 +60,43 @@ export function cosine(a: Float32Array, b: Float32Array): number {
 }
 
 export const E5_MODEL_ID = 'Xenova/multilingual-e5-small';
+export const E5_BASE_MODEL_ID = 'Xenova/multilingual-e5-base';
+
+/** Known output dims per model — e5-base is 768, e5-small 384. */
+export const MODEL_DIMS: Record<string, number> = {
+  [E5_MODEL_ID]: 384,
+  [E5_BASE_MODEL_ID]: 768,
+};
 
 export interface OnnxEmbedderOptions {
   /** q8 (default, ~120MB) or fp32. fp16 is accepted but BROKEN on win32/onnxruntime-node
    *  (graph-fusion error at load, 7.5 calibration) — do not use it there. */
   dtype?: 'q8' | 'fp16' | 'fp32';
+  /** Model to load; defaults to e5-base (7.5 round-2 calibration: e5-small's
+   *  cosine overlap made corroboration unsafe; base reaches P=1.0 at 0.855). */
+  model?: string;
   cacheDir?: string;
   /** Pre-flight probe: pass false to disable instead of throwing on load failure. */
   onLoadError?: (err: unknown) => void;
 }
 
 /**
- * Production embedder: Transformers.js + e5-small, fully local after the
- * one-time download into `data/models/`. Loaded lazily on first use and
- * reused across calls (the dreamer embeds in batches).
+ * Production embedder: Transformers.js + e5-base (default; e5-small via
+ * `model` option), fully local after the one-time download into
+ * `data/models/`. Loaded lazily on first use and reused across calls.
  */
 export class OnnxEmbedder implements Embedder {
   readonly modelId: string;
-  readonly dims = 384;
+  readonly dims: number;
   private extractor: any = null;
   private loading: Promise<any> | null = null;
 
   constructor(private options: OnnxEmbedderOptions = {}) {
-    this.modelId = `${E5_MODEL_ID}@${options.dtype ?? 'q8'}`;
+    const model = options.model ?? E5_BASE_MODEL_ID;
+    this.modelId = `${model}@${options.dtype ?? 'q8'}`;
+    const dims = MODEL_DIMS[model];
+    if (!dims) throw new Error(`unknown model dims for ${model} — extend MODEL_DIMS`);
+    this.dims = dims;
   }
 
   private async load() {
@@ -91,7 +105,8 @@ export class OnnxEmbedder implements Embedder {
       const { pipeline, env } = await import('@huggingface/transformers');
       env.cacheDir = this.options.cacheDir ?? './data/models';
       env.allowLocalModels = true;
-      return pipeline('feature-extraction', E5_MODEL_ID, { dtype: this.options.dtype ?? 'q8' });
+      const model = this.options.model ?? E5_BASE_MODEL_ID;
+      return pipeline('feature-extraction', model, { dtype: this.options.dtype ?? 'q8' });
     })();
     try {
       this.extractor = await this.loading;

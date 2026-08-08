@@ -7,23 +7,30 @@
  *     true matches. Corroboration is unreviewed, so its threshold is the
  *     lowest value achieving precision 1.0 (→ vectorCorroborateThreshold).
  *
- * Run: bun run scripts/calibrate-embeddings.ts [--dtype q8|fp16|both]
+ * Run: bun run scripts/calibrate-embeddings.ts [--dtype q8|fp16|both] [--model small|base]
  */
 import { readFileSync } from 'fs';
-import { OnnxEmbedder } from '../src/core/embeddings.js';
+import { OnnxEmbedder, E5_MODEL_ID, E5_BASE_MODEL_ID } from '../src/core/embeddings.js';
 
 const dtypeArg = process.argv.includes('--dtype')
   ? process.argv[process.argv.indexOf('--dtype') + 1]
   : 'both';
 const dtypes = dtypeArg === 'both' ? (['q8', 'fp16'] as const) : ([dtypeArg] as const);
 
+const modelArg = process.argv.includes('--model')
+  ? process.argv[process.argv.indexOf('--model') + 1]
+  : 'small';
+const model = modelArg === 'base' ? E5_BASE_MODEL_ID : E5_MODEL_ID;
+
 const { pairs } = JSON.parse(readFileSync('tests/fixtures/embeddings/pairs.json', 'utf8')) as {
   pairs: { a: string; b: string; should: boolean }[];
 };
 
+console.log(`model: ${model}`);
+
 for (const dtype of dtypes) {
   console.log(`\n=== ${dtype} ===`);
-  const embedder = new OnnxEmbedder({ dtype });
+  const embedder = new OnnxEmbedder({ dtype, model });
   const texts = [...new Set(pairs.flatMap((p) => [p.a, p.b]))];
   const vecs = new Map<string, Float32Array>();
   const embedded = await embedder.embed(texts);

@@ -345,3 +345,10 @@ fp32 shows the same overlap (model, not quantization); fp16 fails to load on
 win32/onnxruntime-node. Deviations from plan: default `--clusterer` stays
 `keyword` (vector F1 0.84 too low for a default); re-enabling corroboration
 is gated on a model upgrade (open question 1, e5-base) + recalibration.*
+
+*Round 2 (same day): e5-base q8 recalibration found a P=1.0 corroboration gate
+at 0.855 (true min 0.815 / false max 0.853; cluster best-F1 0.840 at P 0.86 /
+R 0.86). Defaults flipped: model → e5-base, `--clusterer` → vector, vector
+auto-corroboration ENABLED. Margin over the worst false pair is only 0.002 on
+a 28-pair fixture — raise the gate or widen the fixture before trusting it on
+a larger corpus.*

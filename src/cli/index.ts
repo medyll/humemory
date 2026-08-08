@@ -611,12 +611,14 @@ embed
   .command('backfill')
   .description('Embed every trace missing a vector for the current model (idempotent)')
   .option('-n, --limit <n>', 'Max traces per run', '500')
-  .option('--dtype <dtype>', 'Model quantization (q8|fp16)', 'q8')
+  .option('--dtype <dtype>', 'Model quantization (q8|fp32 — fp16 broken on win32)', 'q8')
+  .option('--model <name>', 'small|base (default base since 7.5 round 2)', 'base')
   .action(async (options) => {
     const s = getStore();
-    const { OnnxEmbedder, embeddableText } = await import('../core/embeddings.js');
+    const { OnnxEmbedder, embeddableText, E5_MODEL_ID, E5_BASE_MODEL_ID } = await import('../core/embeddings.js');
 
-    const embedder = new OnnxEmbedder({ dtype: options.dtype });
+    const model = options.model === 'small' ? E5_MODEL_ID : E5_BASE_MODEL_ID;
+    const embedder = new OnnxEmbedder({ dtype: options.dtype, model });
     console.log(`⏳ Model: ${embedder.modelId} (first run downloads ~120MB into data/models/)…`);
 
     const missing = await s.listMissingEmbeddings(embedder.modelId, parseInt(options.limit));
@@ -646,7 +648,7 @@ const dream = program.command('dream').description('Cross-session consolidation 
 dream
   .command('run', { isDefault: true })
   .description('Detect recurring patterns across sessions/agents and file proposals')
-  .option('--clusterer <kind>', 'keyword (default — 7.5 calibration kept it: vector F1 0.84/P 0.76) | vector (needs the model)', 'keyword')
+  .option('--clusterer <kind>', 'vector (default since 7.5 round 2, e5-base) | keyword (no model needed)', 'vector')
   .action(async (options) => {
     const s = getStore();
     const { runDreamer, KeywordClusterer } = await import('../core/dreamer.js');

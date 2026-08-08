@@ -39,20 +39,19 @@ export const DREAM_CONFIG = {
    * Vector thresholds (Phase 7.3, A1): grouping is reviewed by a human,
    * corroboration is not — so the verification gate is strictly higher.
    *
-   * CALIBRATED 7.5 against the real e5-small q8 model on 28 labelled
-   * bilingual pairs (scripts/calibrate-embeddings.ts):
-   * - true-pair min 0.809 / false-pair max 0.895 — the distributions
-   *   OVERLAP, so no threshold gives precision 1.0 for corroboration.
-   * - vectorClusterThreshold 0.855 = best F1 (P 0.76 / R 0.93 / F1 0.84):
-   *   acceptable because clusters are human-reviewed proposals.
-   * - vectorCorroborateThreshold 0.99 is a SENTINEL: auto-corroboration via
-   *   cosine is unsafe with e5-small and is effectively disabled. Vector
-   *   clusters produce proposals only; the keyword path keeps metadata-only
-   *   corroboration. Revisit after a model upgrade (open question 1:
-   *   e5-base) — recalibrate and lower this only if P=1.0 becomes reachable.
+   * CALIBRATED 7.5 (round 2, e5-base q8) on 28 labelled bilingual pairs:
+   * - true-pair min 0.815 / false-pair max 0.853 — still a thin overlap,
+   *   but unlike e5-small a P=1.0 corroboration gate EXISTS.
+   * - vectorClusterThreshold 0.840 = best F1 (P 0.86 / R 0.86 / F1 0.86).
+   * - vectorCorroborateThreshold 0.855 = lowest P=1.0 gate with recall ≥ 0.5.
+   *   WARNING: the margin over the worst false pair is only 0.002 and the
+   *   fixture is small (28 pairs) — if verification precision ever matters
+   *   more than recall here, raise this before widening the corpus.
+   * (Round 1 with e5-small: distributions overlapped with no P=1.0 gate —
+   *  corroboration was disabled at a 0.99 sentinel. e5-base unlocked it.)
    */
-  vectorClusterThreshold: 0.855,
-  vectorCorroborateThreshold: 0.99,
+  vectorClusterThreshold: 0.84,
+  vectorCorroborateThreshold: 0.855,
   /** Proposal lifetime (owner-approved 14d expiry). */
   proposalTtlDays: 14,
   /** LLM drafting cap per run; skipped entirely without a client. */
