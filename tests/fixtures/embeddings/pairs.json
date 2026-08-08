@@ -1,0 +1,34 @@
+{
+  "comment": "Labeled pairs for threshold calibration (7.5). should=true means a human judges the two texts to be the SAME fact/lesson (paraphrase, possibly cross-language). Used by scripts/calibrate-embeddings.ts — not by hermetic tests.",
+  "pairs": [
+    { "a": "bun test fails when using the shared data/humemory.db path", "b": "les tests plantent si on utilise la base partagée data/humemory.db", "should": true },
+    { "a": "always use a hermetic temp database in tests", "b": "tests must never touch the production DB, use :memory:", "should": true },
+    { "a": "the Stop hook encodes session learnings automatically", "b": "le hook Stop capture les apprentissages de fin de session", "should": true },
+    { "a": "recall() hard-sets saillance to 100", "b": "rappeler une trace remet sa saillance au maximum", "should": true },
+    { "a": "advisory lock prevents concurrent writers on SQLite", "b": "le verrou fichier évite les écritures concurrentes sur la base", "should": true },
+    { "a": "verified traces decay 1.5x slower", "b": "une trace vérifiée oublie plus lentement", "should": true },
+    { "a": "contradiction collapses the loser saillance but never deletes it", "b": "le perdant d'une contradiction reste cherchable, sa saillance s'effondre", "should": true },
+    { "a": "the dreamer proposes, humans approve", "b": "la consolidation nocturne ne s'applique jamais sans validation humaine", "should": true },
+    { "a": "cross-agent recall earns the reused verification", "b": "quand un autre agent rappelle ta trace, elle est vérifiée 'reused'", "should": true },
+    { "a": "WAL mode fixed the multi-process write contention", "b": "le mode WAL a résolu les conflits d'écriture multi-processus", "should": true },
+    { "a": "photographic mode disables decay entirely", "b": "en mode photographique une trace n'oublie jamais", "should": true },
+    { "a": "merge keeps the target and sends the source to level 4", "b": "fusionner deux traces envoie la source en niveau 4", "should": true },
+    { "a": "the SessionStart hook injects open loops into the prompt", "b": "au démarrage de session, les boucles ouvertes sont injectées dans le contexte", "should": true },
+    { "a": "Closes loop-<id> in a commit message closes the intention", "b": "mentionner Closes loop- dans un commit ferme la boucle", "should": true },
+
+    { "a": "bun test fails when using the shared data/humemory.db path", "b": "the MCP server exposes humemory_add over stdio", "should": false },
+    { "a": "always use a hermetic temp database in tests", "b": "recipe: tomato basil pasta with olive oil", "should": false },
+    { "a": "the Stop hook encodes session learnings automatically", "b": "verified traces decay 1.5x slower", "should": false },
+    { "a": "recall() hard-sets saillance to 100", "b": "the dreamer proposes, humans approve", "should": false },
+    { "a": "advisory lock prevents concurrent writers on SQLite", "b": "contradiction collapses the loser saillance but never deletes it", "should": false },
+    { "a": "verified traces decay 1.5x slower", "b": "photographic mode disables decay entirely", "should": false },
+    { "a": "contradiction collapses the loser saillance but never deletes it", "b": "merge keeps the target and sends the source to level 4", "should": false },
+    { "a": "the dreamer proposes, humans approve", "b": "the SessionStart hook injects open loops into the prompt", "should": false },
+    { "a": "cross-agent recall earns the reused verification", "b": "Closes loop-<id> in a commit message closes the intention", "should": false },
+    { "a": "WAL mode fixed the multi-process write contention", "b": "advisory lock prevents concurrent writers on SQLite", "should": false },
+    { "a": "photographic mode disables decay entirely", "b": "deploy the dashboard on port 3456 with PORT env override", "should": false },
+    { "a": "merge keeps the target and sends the source to level 4", "b": "flexsearch powers the inverse BM25 search", "should": false },
+    { "a": "the SessionStart hook injects open loops into the prompt", "b": "cron 0 3 * * * runs the nightly consolidation", "should": false },
+    { "a": "Closes loop-<id> in a commit message closes the intention", "b": "level_revisions keeps the last five revisions per memory", "should": false }
+  ]
+}

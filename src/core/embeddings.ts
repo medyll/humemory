@@ -62,8 +62,9 @@ export function cosine(a: Float32Array, b: Float32Array): number {
 export const E5_MODEL_ID = 'Xenova/multilingual-e5-small';
 
 export interface OnnxEmbedderOptions {
-  /** q8 (default, ~120MB) or fp16 — 7.5 calibration decides. */
-  dtype?: 'q8' | 'fp16';
+  /** q8 (default, ~120MB) or fp32. fp16 is accepted but BROKEN on win32/onnxruntime-node
+   *  (graph-fusion error at load, 7.5 calibration) — do not use it there. */
+  dtype?: 'q8' | 'fp16' | 'fp32';
   cacheDir?: string;
   /** Pre-flight probe: pass false to disable instead of throwing on load failure. */
   onLoadError?: (err: unknown) => void;

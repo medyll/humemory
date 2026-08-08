@@ -646,7 +646,7 @@ const dream = program.command('dream').description('Cross-session consolidation 
 dream
   .command('run', { isDefault: true })
   .description('Detect recurring patterns across sessions/agents and file proposals')
-  .option('--clusterer <kind>', 'keyword (default until 7.5) | vector (needs the model)', 'keyword')
+  .option('--clusterer <kind>', 'keyword (default — 7.5 calibration kept it: vector F1 0.84/P 0.76) | vector (needs the model)', 'keyword')
   .action(async (options) => {
     const s = getStore();
     const { runDreamer, KeywordClusterer } = await import('../core/dreamer.js');

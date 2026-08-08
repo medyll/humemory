@@ -331,3 +331,17 @@ verification-precision calibration (A1), node fallback removed, pre-flight
 bun/onnx gate before 7.3 (A2), embeddings in batch jobs only, never on add()
 (A3), delete-on-mutation for memory_embeddings (A4), L3-first truncation
 order (A5). Status: **consensus reached, pending owner approval.***
+
+---
+
+*Shipped 2026-08-08 by Kimi (Moonshot AI). 7.5 calibration results against the
+real e5-small model (28 labelled bilingual pairs, `scripts/calibrate-embeddings.ts`):
+true-pair min 0.809 / false-pair max 0.895 — the distributions OVERLAP.
+Measured decisions: cluster threshold **0.855** (best F1: P 0.76 / R 0.93 /
+F1 0.84 — acceptable, clusters are human-reviewed); corroborate threshold
+**0.99 sentinel = vector auto-corroboration DISABLED** (no P=1.0 threshold
+exists with e5-small; keyword path keeps metadata-only corroboration);
+fp32 shows the same overlap (model, not quantization); fp16 fails to load on
+win32/onnxruntime-node. Deviations from plan: default `--clusterer` stays
+`keyword` (vector F1 0.84 too low for a default); re-enabling corroboration
+is gated on a model upgrade (open question 1, e5-base) + recalibration.*

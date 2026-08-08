@@ -38,12 +38,21 @@ export const DREAM_CONFIG = {
   /**
    * Vector thresholds (Phase 7.3, A1): grouping is reviewed by a human,
    * corroboration is not — so the verification gate is strictly higher.
-   * PROVISIONAL, pending 7.5 calibration: the pre-flight showed e5-small q8
-   * cosines are compressed (paraphrase 0.846 / unrelated 0.801), so these
-   * start well above the plan's original 0.82/0.90.
+   *
+   * CALIBRATED 7.5 against the real e5-small q8 model on 28 labelled
+   * bilingual pairs (scripts/calibrate-embeddings.ts):
+   * - true-pair min 0.809 / false-pair max 0.895 — the distributions
+   *   OVERLAP, so no threshold gives precision 1.0 for corroboration.
+   * - vectorClusterThreshold 0.855 = best F1 (P 0.76 / R 0.93 / F1 0.84):
+   *   acceptable because clusters are human-reviewed proposals.
+   * - vectorCorroborateThreshold 0.99 is a SENTINEL: auto-corroboration via
+   *   cosine is unsafe with e5-small and is effectively disabled. Vector
+   *   clusters produce proposals only; the keyword path keeps metadata-only
+   *   corroboration. Revisit after a model upgrade (open question 1:
+   *   e5-base) — recalibrate and lower this only if P=1.0 becomes reachable.
    */
-  vectorClusterThreshold: 0.87,
-  vectorCorroborateThreshold: 0.93,
+  vectorClusterThreshold: 0.855,
+  vectorCorroborateThreshold: 0.99,
   /** Proposal lifetime (owner-approved 14d expiry). */
   proposalTtlDays: 14,
   /** LLM drafting cap per run; skipped entirely without a client. */

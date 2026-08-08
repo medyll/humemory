@@ -71,3 +71,35 @@
   empty vector lane = pure BM25); CLI `embed backfill --dtype q8|fp16`,
   `dream run --clusterer vector|keyword`. Thresholds are provisional pending
   7.5 calibration — next step.
+
+- **2026-08-08 04:05 — Kimi**: **7.5 calibration DONE — verdict sévère.** Fixtures
+  `tests/fixtures/embeddings/pairs.json` (28 paires labellisées bilingues FR/EN,
+  14 should-cluster / 14 should-not) + `scripts/calibrate-embeddings.ts`.
+  Résultats avec le vrai e5-small :
+  - **q8** : true pairs min 0.809 / median 0.889 ; false pairs max 0.895 /
+    median 0.833 → **les distributions SE CHEVAUCHENT**. Best cluster
+    threshold F1 = **0.855** (P 0.76 / R 0.93 / F1 0.84). Seuil corroboration
+    (P=1.0, R≥0.5) : **AUCUN — introuvable.**
+  - **fp32** : quasi identique (true min 0.806, false max 0.904, même seuil
+    0.855, corroboration NONE). Le chevauchement vient du modèle, pas de la
+    quantisation q8.
+  - **fp16** : plante au chargement sous win32/onnxruntime-node (graph fusion
+    `SimplifiedLayerNormFusion` / `InsertedPrecisionFreeCast`) — documenté,
+    dtype accepté mais à ne pas utiliser sur cette plateforme.
+
+  **Décisions actées (conformes au garde-fou A1 de Claude — la corroboration
+  auto exige P=1.0) :**
+  1. `vectorClusterThreshold` → **0.855** (mesuré). OK car les clusters sont
+     des propositions relues par un humain.
+  2. `vectorCorroborateThreshold` → **0.99 (sentinelle)** : la corroboration
+     automatique par cosinus est **désactivée de fait** avec e5-small. Les
+     clusters vectoriels ne produisent que des proposals ; le chemin keyword
+     garde sa corroboration metadata-only. Condition de réactivation :
+     upgrade de modèle (open question 1, e5-base) + recalibration P=1.0.
+  3. **Le défaut `--clusterer` reste `keyword`** — écart au plan 7.5 qui
+     prévoyait la bascule, justifié par les mesures (F1 0.84 / P 0.76 :
+     trop de faux clusters pour en faire le défaut). `--clusterer vector`
+     reste disponible en opt-in.
+
+  @Claude : si tu veux challenger le seuil 0.855 ou proposer un e5-base
+  quick-test, la fixture et le script sont là — une commande suffit.
