@@ -806,6 +806,7 @@ dream
     console.log(`  Clusters found: ${report.clusters}`);
     console.log(`  Proposals filed: ${report.filed} (${report.expired} expired)`);
     if (report.staleLoopCandidates) console.log(`  Stale loops spotted: ${report.staleLoopCandidates}`);
+    if (report.scriptCandidates) console.log(`  Script candidates drafted: ${report.scriptCandidates}`);
     const pending = report.proposals.length;
     if (pending) console.log(`\n  ${pending} dream(s) pending — run \`pnpm cli dream review\`.`);
   });
@@ -827,6 +828,14 @@ dream
       console.log(`  [${p.kind}] ${p.id.slice(0, 8)}… — confidence ${p.confidence}`);
       if (payload.samples) for (const s2 of payload.samples) console.log(`      · ${s2}`);
       if (payload.content) console.log(`      · ${payload.content}`);
+      if (p.kind === 'script_candidate') {
+        console.log(`      "${payload.name}" in ${payload.directory} — ${payload.description}`);
+        (payload.steps as string[]).forEach((step, i) => console.log(`      ${i + 1}. ${step}`));
+        if (payload.truncatedSteps) console.log(`      … more corrections than steps shown (capped)`);
+      }
+      if (p.kind === 'script_archived') {
+        console.log(`      "${payload.name}" — saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance} (disuse)`);
+      }
       if (payload.expiresAt || p.expiresAt) console.log(`      expires ${p.expiresAt?.toISOString().split('T')[0]}`);
       console.log();
     }

@@ -127,7 +127,8 @@ export type DreamKind =
   | 'update_agents_md'
   | 'contradiction'
   | 'close_stale_loop'
-  | 'script_archived';
+  | 'script_archived'
+  | 'script_candidate';
 
 export type DreamStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 

@@ -18,7 +18,7 @@
 
 import { createHash } from 'crypto';
 import type {
-  Memory, Intention, MemoryStore, IntentionStore,
+  Memory, Intention, MemoryStore, IntentionStore, ScriptStore,
   DreamKind, DreamProposal,
 } from './types.js';
 import { baseTrust } from './trust.js';
@@ -57,6 +57,17 @@ export const DREAM_CONFIG = {
   staleLoopDays: 30,
   /** Max traces read per run. */
   collectLimit: 500,
+  /**
+   * Phase 8.5 — script mining. A "correction" is a trace that WON an active
+   * contradiction: 6.0.2 already establishes that mechanism as evidence a
+   * prior trace was wrong, so reusing it avoids inventing a new "correction"
+   * tag with no producer anywhere in the codebase (Claude's Phase 8
+   * annotation flagged the alternative — tagging memoryType — as dead weight
+   * without one).
+   */
+  scriptCandidateMinCluster: 2,
+  /** Draft steps are raw trace content, capped — no LLM drafting for this kind (out of scope, PHASE8_PLAN §Out of scope). */
+  scriptCandidateMaxSteps: 6,
 };
 
 /** Phase 7 seam: swap this implementation for a vector clusterer. */
@@ -128,6 +139,8 @@ export interface DreamReport {
   draftsWritten: number;
   /** Traces that earned `corroborated` verification during this run (6.0.1). */
   corroborated: number;
+  /** `script_candidate` proposals filed this run (8.5). */
+  scriptCandidates: number;
   proposals: DreamProposal[];
 }
 
@@ -298,6 +311,73 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
     if (ok) filed++;
   }
 
+  // 6. Script mining (8.5): a cluster of *corrections* — traces that WON an
+  // active contradiction — sharing a directory drafts a script. "11 of 15
+  // agents fail the same command, then fix it the same way" is a contradiction
+  // per winning trace; clustering the winners finds the repeated pattern.
+  let scriptCandidates = 0;
+  if (store.listContradictions) {
+    const activeContradictions = await store.listContradictions({ status: 'active' });
+    const inWindow = activeContradictions.filter((c) => c.createdAt.getTime() >= windowStart);
+    // A memory can win more than one contradiction; keep its earliest win —
+    // that is when it first established itself as the correction.
+    const wonAt = new Map<string, Date>();
+    for (const c of inWindow) {
+      const prior = wonAt.get(c.winnerId);
+      if (!prior || c.createdAt < prior) wonAt.set(c.winnerId, c.createdAt);
+    }
+    const winners = (
+      await Promise.all([...wonAt.keys()].map((id) => store.getById(id)))
+    ).filter((m): m is Memory => m !== null && m.currentLevel < 4 && !m.mergedIntoId);
+
+    const byDirectory = new Map<string, Memory[]>();
+    for (const w of winners) {
+      const bucket = byDirectory.get(w.directory) ?? [];
+      bucket.push(w);
+      byDirectory.set(w.directory, bucket);
+    }
+
+    for (const [directory, group] of byDirectory) {
+      if (group.length < DREAM_CONFIG.scriptCandidateMinCluster) continue;
+      // Cluster within the directory only — a script has one `directory`,
+      // mixing corrections from unrelated places would draft a drill nobody
+      // asked for. No verification is granted here (unlike step 4's
+      // corroboration): this path only ever produces a human-reviewed
+      // proposal, so the plain (unscored) grouping is enough.
+      const subclusters = await clusterer.cluster(group);
+      for (const cluster of subclusters) {
+        if (cluster.length < DREAM_CONFIG.scriptCandidateMinCluster) continue;
+        const ordered = [...cluster].sort(
+          (a, b) => (wonAt.get(a.id)!.getTime() - wonAt.get(b.id)!.getTime())
+        );
+        const steps = ordered
+          .slice(0, DREAM_CONFIG.scriptCandidateMaxSteps)
+          .map((m) => (m.level2Essential ?? m.content).slice(0, 200));
+        const keywordCounts = new Map<string, number>();
+        for (const m of cluster) for (const k of m.keywords) keywordCounts.set(k, (keywordCounts.get(k) ?? 0) + 1);
+        const topKeyword = [...keywordCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        const ids = cluster.map((m) => m.id);
+        const name = topKeyword ? `fix-${topKeyword}` : `correction-${hashOf('script_candidate', ids).slice(0, 6)}`;
+
+        const ok = (await store.fileDreamProposal?.({
+          kind: 'script_candidate',
+          payload: JSON.stringify({
+            directory,
+            name,
+            description: `Recurring correction across ${cluster.length} traces — steps drafted from what fixed it each time.`,
+            steps,
+            sourceMemoryIds: ids,
+            truncatedSteps: cluster.length > DREAM_CONFIG.scriptCandidateMaxSteps,
+          }),
+          payloadHash: hashOf('script_candidate', ids),
+          confidence: confidenceOf(cluster),
+          expiresAt,
+        })) ?? false;
+        if (ok) { filed++; scriptCandidates++; }
+      }
+    }
+  }
+
   const pending = (await store.listDreamProposals?.({ status: 'pending' })) ?? [];
   proposals.push(...pending);
 
@@ -309,6 +389,7 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
     staleLoopCandidates,
     draftsWritten: drafts,
     corroborated,
+    scriptCandidates,
     proposals,
   };
 }
@@ -319,7 +400,7 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
  * the human to paste (level-1 memory stays human-owned, permanently).
  */
 export async function applyDreamProposal(
-  store: MemoryStore & IntentionStore,
+  store: MemoryStore & IntentionStore & ScriptStore,
   proposal: DreamProposal,
   options?: { clock?: Clock }
 ): Promise<string> {
@@ -378,6 +459,25 @@ export async function applyDreamProposal(
 
     case 'update_agents_md': {
       return `suggested AGENTS.md addition (paste it yourself):\n${payload.drafted ?? payload.suggestion ?? ''}`;
+    }
+
+    case 'script_candidate': {
+      // Lands as 'draft', never 'active' (8.5): the human reviewing the
+      // proposal saw a description and a confidence score, not necessarily
+      // every drafted step — same reasoning as promote_semantic not landing
+      // as `verificationReason: 'human'` (R1 discussion, Claude's reply).
+      // A human still runs `script activate` after reading the actual steps.
+      const script = await store.addScript({
+        name: payload.name,
+        description: payload.description,
+        steps: payload.steps,
+        directory: payload.directory,
+        source: 'dream_proposal',
+        status: 'draft',
+        pinned: false,
+      });
+      return `drafted script "${script.name}" (${script.id.slice(0, 8)}…) — ` +
+        `\`pnpm cli script activate ${script.id.slice(0, 8)}\` after reviewing the steps`;
     }
 
     case 'script_archived': {

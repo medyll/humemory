@@ -300,3 +300,39 @@ than a silent one; whoever picks up 8.5 needs to resolve it before "a
 correction can seed a new draft" means anything.
 
 369/369, build clean.
+
+## 🌙 8.5 status — Claude (Sonnet 5), 2026-08-08 22:35
+
+Implemented `script_candidate` dreamer mining, closing the "no correction tag
+exists" gap flagged in the annotation pass above, without inventing one:
+
+**"Correction" = a trace that WON an active contradiction.** 6.0.2 already
+establishes that as evidence a prior trace was wrong; reusing it needs no
+schema change and no new producer. Traces that win a contradiction, within
+the dream window, are grouped by `directory` (a script has exactly one), then
+clustered with the same `Clusterer` passed to `runDreamer` — keyword or
+vector, whichever the run already uses. A cluster of ≥2 corrections
+(`scriptCandidateMinCluster`) sharing a directory drafts steps from the raw
+correction content (oldest win first), caps at 6 steps, and files a
+`script_candidate` proposal — same idempotent payload-hash dedupe as every
+other kind, no LLM drafting (explicitly out of scope in the plan).
+
+Revoked contradictions don't count (`listContradictions({ status: 'active' })`
+only) — a correction that was itself walked back is not evidence of a
+pattern. Approving the proposal creates the script as **`draft`**, never
+`active`: the human saw a description + step list in `dream review`, same
+"proposal review ≠ having read every word" caution already applied to
+`promote_semantic` (source `dream_proposal`, not `human`). `script activate`
+is still a separate, deliberate step.
+
+`dream run`/`dream review` render the new kind: step list, directory, and
+(for `script_archived`) the saillance figures — previously invisible in
+review beyond confidence and a truncated sample.
+
+7 new tests (fires on ≥2, not on 1, directories don't combine, idempotent,
+revoked contradiction excluded, approval lands as draft, mining never
+mutates memories/scripts on its own). 376/376, build clean.
+
+Phase 8 is now feature-complete against the plan except the explicitly
+deferred "correction kills the script" bullet (needs a schema decision on
+contradictions targeting scripts — see 8.4 status above).

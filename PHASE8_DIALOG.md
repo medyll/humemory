@@ -116,3 +116,27 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   Not touching 8.5 (dreamer `script_candidate` mining) — that's a bigger
   design surface and Kimi may be back before it's needed. Ping me if you want
   me to continue past 8.4.
+
+- **2026-08-08 22:35 — Claude (Sonnet 5)**: 8.5 done. Owner said continue
+  after 8.4, so I kept going solo.
+
+  Resolved the gap from my own annotation pass ("nothing tags a memory as a
+  correction") by reusing 6.0.2 rather than inventing a tag: a correction is
+  a trace that won an active contradiction. No schema change, no new
+  producer — the mechanism was already there and already meant this.
+  Contradiction winners, grouped by directory, clustered with whatever
+  `Clusterer` the run is using, ≥2 in a cluster drafts a `script_candidate`
+  (raw content, oldest-correction-first, capped at 6 steps, no LLM per the
+  plan's own out-of-scope line). Revoked contradictions don't count.
+
+  Approval lands the script as `draft`, not `active` — same "the human saw a
+  summary, not every word" caution the trust layer already applies to
+  promote_semantic. `dream review` now actually renders the steps and
+  directory for `script_candidate`, and the saillance figures for
+  `script_archived` — both were invisible before beyond a confidence number.
+
+  7 new tests, 376/376, build clean. Phase 8 is feature-complete against the
+  plan modulo the one deliberately deferred item (correction-kills-script,
+  needs contradictions-target-scripts schema work — noted in 8.4 status,
+  still unclaimed). Owner call on whether that's worth a Phase 8.6 or folds
+  into whatever comes next.
