@@ -10,7 +10,7 @@
  * only a shell that reads the environment and writes to stdout.
  */
 
-import type { Intention, Memory, MemoryStore, IntentionStore, DecayLevel } from '../core/types.js';
+import type { Intention, Memory, MemoryStore, IntentionStore, DecayLevel, Script } from '../core/types.js';
 import type { CueResolver } from '../core/cues.js';
 import { loopId, intentionSaillance } from '../core/cues.js';
 import { systemClock, type Clock } from '../core/clock.js';
@@ -30,6 +30,9 @@ export const DEFAULT_SAILLANCE_THRESHOLD = 60;
 /** Levels that are "degraded but still useful": the detail is gone, the meaning remains. */
 export const RELEVANT_LEVELS: DecayLevel[] = [2, 3];
 
+/** Max drill steps rendered in one block — the block goes into a prompt. */
+export const SCRIPT_STEP_CAP = 8;
+
 export interface SessionContextOptions {
   store: MemoryStore & IntentionStore;
   directory: string;
@@ -48,6 +51,8 @@ export interface SessionContext {
   traces: Memory[];
   /** Loops woken by a time cue during this composition. */
   firedNow: Intention[];
+  /** Drills woken during this composition (Phase 8.2) — at most one renders. */
+  firedScripts: Script[];
   /**
    * Marker-escape attempts neutralized while rendering (6.0.3). Non-zero is a
    * security signal — log the event, never the payload (Claude R3/B11).
@@ -110,12 +115,34 @@ export async function buildSessionContext(options: SessionContextOptions): Promi
 
   const now = clock.now();
   const firedNow: Intention[] = [];
+  const firedScripts: Script[] = [];
 
   if (resolver) {
     await resolver.expireStale(now);
+    // Time cues first — dispatch by target kind (8.1): a script cue fired
+    // through resolver.fire() would throw by design.
     for (const cue of await resolver.resolveTimeCues(now)) {
-      const intention = await resolver.fire(cue.id);
-      if (intention.directory === directory) firedNow.push(intention);
+      const fired = await resolver.fireAny(cue.id);
+      if (fired.kind === 'script') {
+        if (fired.script.directory === directory) firedScripts.push(fired.script);
+      } else if (fired.intention.directory === directory) {
+        firedNow.push(fired.intention);
+      }
+    }
+    // A session opening on a branch is a branch_switch from the drill's point
+    // of view (8.2): script cues armed on it fire. Intention behaviour is
+    // unchanged — their event cues wake through the bus, not here.
+    if (branch) {
+      const matched = await resolver.resolveEventCues({
+        type: 'branch_switch',
+        branch,
+        directory,
+      } as any);
+      for (const cue of matched) {
+        if (cue.targetKind !== 'script') continue;
+        const script = await resolver.fireScript(cue.id);
+        if (script.directory === directory) firedScripts.push(script);
+      }
     }
   }
 
@@ -145,12 +172,13 @@ export async function buildSessionContext(options: SessionContextOptions): Promi
     visibleTraces = traces.filter((m) => !losers.has(m.id) || disputedIds.has(m.id));
   }
 
-  const rendered = renderMarkdown({ openLoops, traces: visibleTraces, firedNow, branch, now, disputedIds });
+  const rendered = renderMarkdown({ openLoops, traces: visibleTraces, firedNow, firedScripts, branch, now, disputedIds });
   return {
     markdown: rendered.markdown,
     openLoops,
     traces: visibleTraces,
     firedNow,
+    firedScripts,
     escapeAttempts: rendered.escapeAttempts,
   };
 }
@@ -159,6 +187,7 @@ function renderMarkdown(input: {
   openLoops: Intention[];
   traces: Memory[];
   firedNow: Intention[];
+  firedScripts?: Script[];
   branch?: string;
   now: Date;
   disputedIds?: Set<string>;
@@ -166,11 +195,35 @@ function renderMarkdown(input: {
   const { openLoops, traces, firedNow, branch, now, disputedIds } = input;
   const escapeAttempts: { memoryId: string; count: number }[] = [];
 
+  // One drill per context block (Q1 conservative default): two scripts firing
+  // in the same session is a smell — the sharper one wins, the rest is noise.
+  const script = (input.firedScripts ?? []).sort((a, b) => b.saillance - a.saillance)[0];
+
   // Nothing to say: write nothing rather than inject an empty block into the prompt.
-  if (!openLoops.length && !traces.length && !firedNow.length) return { markdown: '', escapeAttempts };
+  if (!openLoops.length && !traces.length && !firedNow.length && !script) return { markdown: '', escapeAttempts };
 
   const lines: string[] = ['## 🧠 Mnemonic context (humemory)'];
   if (branch) lines.push('', `_Current branch: \`${branch}\`_`);
+
+  if (script) {
+    const lastFired = script.lastFiredAt ? humanizeAge(script.lastFiredAt, now) : 'never';
+    lines.push('', `### 📋 Script: ${script.name} (fired ${script.fireCount}×, last ${lastFired})`);
+    const desc = sanitizeTrace(script.description);
+    lines.push(`> ${oneLine(desc.text)}`);
+    // Same injection rules as traces (6.0.3): human-authored renders bare,
+    // agent/dreamer-authored stays wrapped.
+    const bare = script.source === 'human';
+    script.steps.slice(0, SCRIPT_STEP_CAP).forEach((step, i) => {
+      const s = sanitizeTrace(step);
+      const body = bare
+        ? oneLine(s.text)
+        : wrapUntrusted(oneLine(s.text), { source: script.source, agent: script.agent, id: script.id });
+      lines.push(`${i + 1}. ${body}`);
+    });
+    if (script.steps.length > SCRIPT_STEP_CAP) {
+      lines.push(`_… ${script.steps.length - SCRIPT_STEP_CAP} more steps — \`pnpm cli script fire ${script.id.slice(0, 8)}\` for the full drill._`);
+    }
+  }
 
   if (firedNow.length) {
     lines.push('', '### ⏰ Deadlines reached', RECALLED_NOTES_PREFACE);
