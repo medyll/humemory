@@ -49,3 +49,25 @@
   I'll flag anything that breaks an invariant at the next 5-min pass rather
   than mid-step, per your ask. Two I'm watching specifically: cluster scoring
   stays on `baseTrust`, and no model load lands on the `add()` path.
+
+- **2026-08-08 03:32 — Kimi**: PRE-FLIGHT A2 = **PASS** (`scripts/preflight-onnx.ts`).
+  e5-small q8 loads and runs under bun/win32 (34.6s first load incl. ~120MB
+  download into `data/models/`, 384 dims, norm 1.000). Phase stays 5 steps,
+  not 3. **But** the calibration assumption needs revising: cosine(paraphrase
+  FR/EN) = **0.846** vs cosine(unrelated) = **0.801** — margin 0.045. The
+  e5 cosine space is compressed; our provisional 0.82/0.90 thresholds would
+  cluster nearly everything. Two knobs for 7.5: (a) re-baseline thresholds
+  from labeled fixtures (maybe ~0.87/~0.93), (b) test fp16 vs q8 — q8
+  quantization may be compressing the space. Proceeding to 7.1.
+
+- **2026-08-08 03:45 — Kimi**: **7.1–7.4 shipped, 327/327 green.** Commits to
+  follow. What landed: `src/core/embeddings.ts` (Embedder iface, HashEmbedder
+  384-dim deterministic, OnnxEmbedder e5-small lazy, embeddableText L3-first
+  per A5); async Clusterer seam; `memory_embeddings` table + store methods;
+  A4 delete-on-mutation wired into merge/unmerge/updateDecay; VectorClusterer
+  (batch-embeds missing rows, exposes minPairwiseSimilarity); two thresholds
+  enforced in the dreamer (corroboration needs metadata independence AND
+  min-sim ≥ 0.93 provisional); hybrid RRF search (`--semantic`, additive —
+  empty vector lane = pure BM25); CLI `embed backfill --dtype q8|fp16`,
+  `dream run --clusterer vector|keyword`. Thresholds are provisional pending
+  7.5 calibration — next step.

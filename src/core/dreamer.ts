@@ -35,6 +35,15 @@ export const DREAM_CONFIG = {
   minDistinctDirectories: 2,
   /** Jaccard similarity threshold for the keyword clusterer. */
   similarityThreshold: 0.34,
+  /**
+   * Vector thresholds (Phase 7.3, A1): grouping is reviewed by a human,
+   * corroboration is not — so the verification gate is strictly higher.
+   * PROVISIONAL, pending 7.5 calibration: the pre-flight showed e5-small q8
+   * cosines are compressed (paraphrase 0.846 / unrelated 0.801), so these
+   * start well above the plan's original 0.82/0.90.
+   */
+  vectorClusterThreshold: 0.87,
+  vectorCorroborateThreshold: 0.93,
   /** Proposal lifetime (owner-approved 14d expiry). */
   proposalTtlDays: 14,
   /** LLM drafting cap per run; skipped entirely without a client. */
@@ -47,7 +56,8 @@ export const DREAM_CONFIG = {
 
 /** Phase 7 seam: swap this implementation for a vector clusterer. */
 export interface Clusterer {
-  cluster(memories: Memory[]): Memory[][];
+  /** Async since Phase 7.1 — vector clusterers embed before grouping. */
+  cluster(memories: Memory[]): Promise<Memory[][]> | Memory[][];
 }
 
 /** Tokenize the strongest available retrieval text of a trace. */
@@ -194,8 +204,13 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
       !contradicted.has(m.id)
   );
 
-  // 2. Cluster.
-  const clusters = clusterer.cluster(traces);
+  // 2. Cluster. ScoredClusterer (Phase 7.3) also yields each cluster's
+  // weakest link — needed for the two-threshold rule (A1).
+  const { hasScores } = await import('./vector-clusterer.js');
+  const scored = hasScores(clusterer) ? await clusterer.clusterWithScores(traces) : null;
+  const clusters: { members: Memory[]; minPairwiseSimilarity: number | null }[] = scored
+    ? scored.map((c) => ({ members: c.members, minPairwiseSimilarity: c.minPairwiseSimilarity }))
+    : (await clusterer.cluster(traces)).map((members) => ({ members, minPairwiseSimilarity: null }));
 
   // 3-4. Qualify, then propose (idempotent via payload_hash).
   let filed = 0;
@@ -206,13 +221,22 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
   let corroborated = 0;
 
   for (const cluster of clusters) {
-    if (!qualifies(cluster)) continue;
+    if (!qualifies(cluster.members)) continue;
 
     // Corroboration is evidence, not a proposal: 6.0.1 lists it as an
     // automatic verification path, so it applies without the human gate.
     // It touches no content — only the `verified` flag and its reason.
-    if (corroborates(cluster) && store.verify) {
-      for (const m of cluster) {
+    //
+    // A1 (two thresholds): when the clusterer scores its clusters, the weakest
+    // link must also clear the STRICTER corroborate threshold — grouping
+    // tolerates noise because a human reviews proposals; verification does
+    // not, because nobody reviews it. Clusterers without scores (keyword)
+    // keep the metadata-only rule.
+    const similarityOk =
+      cluster.minPairwiseSimilarity === null ||
+      cluster.minPairwiseSimilarity >= DREAM_CONFIG.vectorCorroborateThreshold;
+    if (similarityOk && corroborates(cluster.members) && store.verify) {
+      for (const m of cluster.members) {
         if (m.verified) continue; // never downgrade an existing, stronger reason
         await store.verify(m.id, 'corroborated');
         corroborated++;
@@ -221,16 +245,16 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
 
     let drafted: string | undefined;
     if (options.draft && drafts < DREAM_CONFIG.maxDraftsPerRun) {
-      drafted = await options.draft(cluster);
+      drafted = await options.draft(cluster.members);
       drafts++;
     }
 
-    const ids = cluster.map((m) => m.id);
+    const ids = cluster.members.map((m) => m.id);
     const payload = JSON.stringify({
       clusterIds: ids,
-      agents: [...new Set(cluster.map((m) => m.agent).filter(Boolean))],
-      sessions: new Set(cluster.map((m) => m.sessionId)).size,
-      samples: cluster.slice(0, 3).map((m) => (m.level2Essential ?? m.content).slice(0, 140)),
+      agents: [...new Set(cluster.members.map((m) => m.agent).filter(Boolean))],
+      sessions: new Set(cluster.members.map((m) => m.sessionId)).size,
+      samples: cluster.members.slice(0, 3).map((m) => (m.level2Essential ?? m.content).slice(0, 140)),
       drafted,
     });
 
@@ -238,7 +262,7 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
       kind: 'promote_semantic',
       payload,
       payloadHash: hashOf('promote_semantic', ids),
-      confidence: confidenceOf(cluster),
+      confidence: confidenceOf(cluster.members),
       expiresAt,
     })) ?? false;
     if (ok) filed++;

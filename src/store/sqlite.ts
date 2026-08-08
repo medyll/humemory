@@ -306,6 +306,18 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       )
     `);
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_dream_dedup ON dream_proposals(kind, payload_hash)');
+
+    // Phase 7.2 — vector index. Written by batch jobs ONLY (dream/backfill,
+    // never add() — A3); deleted on any level mutation, re-embedded by the
+    // next batch (A4). model_id gates re-embedding on model upgrades.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_embeddings (
+        memory_id TEXT PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        embedding BLOB NOT NULL,
+        embedded_at INTEGER NOT NULL
+      )
+    `);
   }
 
   /** Snapshot the current derived levels before overwriting them (6.0.4). */
@@ -619,6 +631,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
 
   async updateDecay(): Promise<void> {
     const memories = this.searchEngine.getAll();
+    const before = new Map(memories.map((m) => [m.id, m.currentLevel]));
     const updated = updateAllDecay(memories, this.clock.now());
 
     const updateStmt = this.db.query(`
@@ -640,6 +653,11 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
         this.searchEngine.add(memory);
       }
     });
+
+    // A4 — a level transition mutates what the trace *is*; delete the stale
+    // embedding, the next batch re-embeds.
+    const levelChanged = updated.filter((m) => before.get(m.id) !== m.currentLevel).map((m) => m.id);
+    await this.deleteEmbeddings(levelChanged);
   }
 
   async delete(id: string): Promise<void> {
@@ -795,6 +813,9 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     const updatedTarget = await this.getById(targetId);
     if (updatedTarget) this.searchEngine.update(updatedTarget);
 
+    // A4 — both rows mutated levels; embeddings are deleted, not recomputed.
+    await this.deleteEmbeddings([sourceId, targetId]);
+
     const updatedSource = await this.getById(sourceId);
     return {
       source: updatedSource!,
@@ -856,6 +877,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     const finalTarget = await this.getById(targetId);
     this.searchEngine.add(finalSource!);
     this.searchEngine.update(finalTarget!);
+    // A4 — both rows mutated levels; embeddings are deleted, not recomputed.
+    await this.deleteEmbeddings([sourceId, targetId]);
     return { source: finalSource!, target: finalTarget! };
   }
 
@@ -1094,6 +1117,72 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       count = res.changes;
     });
     return count;
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Vector index (Phase 7.2) — batch jobs only (A3), delete-on-mutation (A4)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  async setEmbedding(memoryId: string, modelId: string, embedding: Float32Array): Promise<void> {
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `INSERT OR REPLACE INTO memory_embeddings (memory_id, model_id, embedding, embedded_at)
+           VALUES ($id, $model, $emb, $at)`
+        )
+        .run({
+          $id: memoryId,
+          $model: modelId,
+          $emb: Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength),
+          $at: this.clock.now().getTime(),
+        });
+    });
+  }
+
+  async getEmbedding(memoryId: string): Promise<{ modelId: string; embedding: Float32Array } | null> {
+    const row = this.db
+      .query('SELECT model_id, embedding FROM memory_embeddings WHERE memory_id = $id')
+      .get({ $id: memoryId }) as any;
+    if (!row) return null;
+    const buf: Buffer = row.embedding;
+    return {
+      modelId: row.model_id,
+      embedding: new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4),
+    };
+  }
+
+  /** All stored embeddings, optionally filtered. The dreamer brute-forces over these. */
+  async listEmbeddings(options: { modelId?: string } = {}): Promise<{ memoryId: string; embedding: Float32Array }[]> {
+    const sql = options.modelId
+      ? 'SELECT memory_id, embedding FROM memory_embeddings WHERE model_id = $model'
+      : 'SELECT memory_id, embedding FROM memory_embeddings';
+    const rows = this.db.query(sql).all(options.modelId ? { $model: options.modelId } : {}) as any[];
+    return rows.map((r) => ({
+      memoryId: r.memory_id,
+      embedding: new Float32Array(r.embedding.buffer, r.embedding.byteOffset, r.embedding.byteLength / 4),
+    }));
+  }
+
+  /** Traces with no embedding for this model (or a stale one) — the backfill queue. */
+  async listMissingEmbeddings(modelId: string, limit = 500): Promise<Memory[]> {
+    const rows = this.db
+      .query(
+        `SELECT m.* FROM memories m
+         LEFT JOIN memory_embeddings e ON e.memory_id = m.id AND e.model_id = $model
+         WHERE e.memory_id IS NULL
+         ORDER BY m.created_at DESC LIMIT $limit`
+      )
+      .all({ $model: modelId, $limit: limit }) as any[];
+    return rows.map((r) => this.rowToMemory(r));
+  }
+
+  /** A4 — the ONLY correct response to a level mutation: delete; next batch re-embeds. */
+  async deleteEmbeddings(memoryIds: string[]): Promise<void> {
+    if (!memoryIds.length) return;
+    await this.enqueueWriteWithLock(async () => {
+      const stmt = this.db.query('DELETE FROM memory_embeddings WHERE memory_id = $id');
+      for (const id of memoryIds) stmt.run({ $id: id });
+    });
   }
 
   // ───────────────────────────────────────────────────────────────────────────

@@ -99,21 +99,33 @@ program
   .option('--to <date>', 'End date YYYY-MM-DD')
   .option('--min-saillance <n>', 'Minimum mnemonic strength (0-100)')
   .option('--min-recalls <n>', 'Minimum recall count')
+  .option('--semantic', 'Hybrid search: fuse BM25 with vector similarity (Phase 7.4, needs the model)')
   .action(async (query, options) => {
     const s = getStore();
 
-    const results = await s.search({
-      query,
-      directory: options.directory ? resolve(options.directory) : undefined,
-      sessionId: options.session,
-      maxLevel: parseInt(options.level) as 0 | 1 | 2 | 3 | 4,
-      limit: parseInt(options.limit),
-      memoryType: options.type as any,
-      dateFrom: options.from ? new Date(options.from) : undefined,
-      dateTo: options.to ? new Date(options.to) : undefined,
-      minSaillance: options.minSaillance ? parseInt(options.minSaillance) : undefined,
-      minRecalls: options.minRecalls ? parseInt(options.minRecalls) : undefined,
-    });
+    let results;
+    if (options.semantic) {
+      const { OnnxEmbedder } = await import('../core/embeddings.js');
+      const { hybridSearch } = await import('../core/hybrid.js');
+      const embedder = new OnnxEmbedder();
+      results = await hybridSearch(s, embedder, query, {
+        directory: options.directory ? resolve(options.directory) : undefined,
+        limit: parseInt(options.limit),
+      });
+    } else {
+      results = await s.search({
+        query,
+        directory: options.directory ? resolve(options.directory) : undefined,
+        sessionId: options.session,
+        maxLevel: parseInt(options.level) as 0 | 1 | 2 | 3 | 4,
+        limit: parseInt(options.limit),
+        memoryType: options.type as any,
+        dateFrom: options.from ? new Date(options.from) : undefined,
+        dateTo: options.to ? new Date(options.to) : undefined,
+        minSaillance: options.minSaillance ? parseInt(options.minSaillance) : undefined,
+        minRecalls: options.minRecalls ? parseInt(options.minRecalls) : undefined,
+      });
+    }
 
     if (results.length === 0) {
       console.log('No trace found.');
@@ -592,17 +604,62 @@ intent
     console.log();
   });
 
+// === EMBED (Phase 7.2) ===
+const embed = program.command('embed').description('Vector index maintenance (Phase 7)');
+
+embed
+  .command('backfill')
+  .description('Embed every trace missing a vector for the current model (idempotent)')
+  .option('-n, --limit <n>', 'Max traces per run', '500')
+  .option('--dtype <dtype>', 'Model quantization (q8|fp16)', 'q8')
+  .action(async (options) => {
+    const s = getStore();
+    const { OnnxEmbedder, embeddableText } = await import('../core/embeddings.js');
+
+    const embedder = new OnnxEmbedder({ dtype: options.dtype });
+    console.log(`⏳ Model: ${embedder.modelId} (first run downloads ~120MB into data/models/)…`);
+
+    const missing = await s.listMissingEmbeddings(embedder.modelId, parseInt(options.limit));
+    if (!missing.length) {
+      console.log('✓ Nothing to embed — the index is current.');
+      return;
+    }
+    console.log(`⏳ Embedding ${missing.length} trace(s)…`);
+
+    const BATCH = 32;
+    let done = 0;
+    for (let i = 0; i < missing.length; i += BATCH) {
+      const batch = missing.slice(i, i + BATCH);
+      const vectors = await embedder.embed(batch.map(embeddableText));
+      for (let k = 0; k < batch.length; k++) {
+        await s.setEmbedding(batch[k].id, embedder.modelId, vectors[k]);
+      }
+      done += batch.length;
+      console.log(`   ${done}/${missing.length}`);
+    }
+    console.log(`✓ Backfill complete: ${done} trace(s) embedded.`);
+  });
+
 // === DREAM (Phase 6.1) ===
 const dream = program.command('dream').description('Cross-session consolidation (dreaming)');
 
 dream
   .command('run', { isDefault: true })
   .description('Detect recurring patterns across sessions/agents and file proposals')
-  .action(async () => {
+  .option('--clusterer <kind>', 'keyword (default until 7.5) | vector (needs the model)', 'keyword')
+  .action(async (options) => {
     const s = getStore();
-    const { runDreamer } = await import('../core/dreamer.js');
+    const { runDreamer, KeywordClusterer } = await import('../core/dreamer.js');
 
-    const report = await runDreamer({ store: s });
+    let clusterer: import('../core/dreamer.js').Clusterer = new KeywordClusterer();
+    if (options.clusterer === 'vector') {
+      const { OnnxEmbedder } = await import('../core/embeddings.js');
+      const { VectorClusterer } = await import('../core/vector-clusterer.js');
+      clusterer = new VectorClusterer(new OnnxEmbedder(), s);
+      console.log('⏳ Vector clustering (embeds missing traces in batch first)…');
+    }
+
+    const report = await runDreamer({ store: s, clusterer });
     console.log(`\n🌙 Dream report`);
     console.log(`  Traces considered: ${report.considered}`);
     console.log(`  Clusters found: ${report.clusters}`);
