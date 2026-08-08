@@ -32,6 +32,20 @@ export interface StoreOptions {
   device?: string;
 }
 
+/** The only reasons a trace may be verified for — validated, never cast. */
+export const VERIFICATION_REASONS: VerificationReason[] = ['corroborated', 'grounded', 'reused', 'human'];
+
+export interface RecallOptions {
+  /**
+   * True when the caller's agent identity comes from the process rather than
+   * from the request — MCP stdio (one server per client, id from the env) or
+   * the CLI (a human at a terminal). The HTTP API must leave this false:
+   * `X-Humemory-Agent` is a header, and a header is a claim, not a fact.
+   * Only trusted identities can earn the `reused` verification.
+   */
+  identityTrusted?: boolean;
+}
+
 /** Resolves the encoding device id once per process. */
 function resolveDevice(override?: string): string {
   return override ?? process.env.HUMEMORY_DEVICE ?? hostname();
@@ -513,14 +527,27 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
     return this.searchEngine.search(query);
   }
 
-  async recall(id: string, agent?: string): Promise<Memory> {
+  async recall(id: string, agent?: string, options: RecallOptions = {}): Promise<Memory> {
     const now = this.clock.now();
     const before = await this.getById(id);
     if (!before) throw new Error(`Memory ${id} not found`);
 
     // Phase 6.0.1 — cross-agent reuse earns verification: a trace written by
     // agent X recalled by agent Y proved useful across the boundary.
-    const reused = agent !== undefined && before.agent !== undefined && agent !== before.agent;
+    //
+    // This only holds if `agent` is a *fact*, not a claim. Attribution and
+    // authentication are different things: a caller that names itself cannot
+    // also vouch for itself, or verification is self-service. So earning
+    // requires `identityTrusted` — set by callers whose identity comes from
+    // the process (MCP stdio: one server per client, agent id from the
+    // environment; CLI: a human at a terminal), and NOT by the HTTP API,
+    // where `X-Humemory-Agent` is an unauthenticated header anyone may send.
+    // Untrusted callers still get attribution and reinforcement, just no trust.
+    const reused =
+      options.identityTrusted === true &&
+      agent !== undefined &&
+      before.agent !== undefined &&
+      agent !== before.agent;
 
     await this.enqueueWriteWithLock(async () => {
       this.db.query(`
@@ -549,7 +576,15 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
   async verify(id: string, by: string = 'human'): Promise<Memory> {
     const memory = await this.getById(id);
     if (!memory) throw new Error(`Memory ${id} not found`);
-    const reason: VerificationReason = by === 'human' ? 'human' : (by as VerificationReason);
+    // Validate rather than cast: the reason decides the trust bonus (+8 to
+    // +25) and whether the trace renders bare in the context block, so an
+    // unchecked string here would let a caller pick its own weight.
+    if (!VERIFICATION_REASONS.includes(by as VerificationReason)) {
+      throw new Error(
+        `Invalid verification reason "${by}" — expected one of: ${VERIFICATION_REASONS.join(', ')}`
+      );
+    }
+    const reason = by as VerificationReason;
     await this.enqueueWriteWithLock(async () => {
       this.db.query(`
         UPDATE memories SET verified = 1, verification_reason = $reason WHERE id = $id

@@ -67,7 +67,11 @@ export function createMemoryRoutes(store: SQLiteStore) {
     try {
       // Phase 6.0.1 — the calling agent earns (or not) the `reused` verification
       const agent = c.req.header('X-Humemory-Agent');
-      const memory = await store.recall(c.req.param('id'), agent);
+      // Attribution only. `X-Humemory-Agent` is an unauthenticated header on a
+      // server with no auth, so a recall here reinforces the trace and records
+      // who asked, but cannot earn the `reused` verification — that would let
+      // any caller on :3456 verify any trace by naming itself someone else.
+      const memory = await store.recall(c.req.param('id'), agent, { identityTrusted: false });
       return c.json({ success: true, memory });
     } catch (error) {
       return c.json({ success: false, error: String(error) }, 500);

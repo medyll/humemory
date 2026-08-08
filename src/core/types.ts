@@ -262,7 +262,12 @@ export interface MemoryStore {
    * `agent` (Phase 6.0.1): who is recalling. A recall by a *different* agent
    * than the writer earns the trace the `reused` verification.
    */
-  recall(id: string, agent?: string): Promise<Memory>;
+  /**
+   * Reinforce a trace. `agent` is attribution; `identityTrusted` says whether
+   * that attribution is a process-level fact (MCP stdio, CLI) or a request
+   * claiming one (HTTP header). Only the former can earn `reused` verification.
+   */
+  recall(id: string, agent?: string, options?: { identityTrusted?: boolean }): Promise<Memory>;
   updateDecay(): Promise<void>;
   delete(id: string): Promise<void>;
   list(options?: {

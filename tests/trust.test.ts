@@ -112,12 +112,41 @@ describe('store provenance (freshStore)', () => {
       keywords: [], sessionId: 's1', memoryType: 'semantic', agent: 'claude',
     });
 
-    const same = await store.recall(m.id, 'claude');
+    const same = await store.recall(m.id, 'claude', { identityTrusted: true });
     expect(same.verified).toBe(false);
 
-    const other = await store.recall(m.id, 'codex');
+    const other = await store.recall(m.id, 'codex', { identityTrusted: true });
     expect(other.verified).toBe(true);
     expect(other.verificationReason).toBe('reused');
+  });
+
+  test('an untrusted identity gets attribution but earns no verification', async () => {
+    const store = freshStore();
+    const m = await store.add({
+      content: 'trace', directory: '/tmp/p', day: '2026-08-08',
+      keywords: [], sessionId: 's1', memoryType: 'semantic', agent: 'claude',
+    });
+
+    // The HTTP path: `X-Humemory-Agent` is a claim, not a fact.
+    const r = await store.recall(m.id, 'codex', { identityTrusted: false });
+    expect(r.verified).toBe(false);
+    expect(r.recallCount).toBe(1); // still reinforced — attribution is not punishment
+
+    // The same call from a process-level identity does earn it.
+    const trusted = await store.recall(m.id, 'codex', { identityTrusted: true });
+    expect(trusted.verificationReason).toBe('reused');
+  });
+
+  test('verify refuses a reason outside the enum', async () => {
+    const store = freshStore();
+    const m = await store.add({
+      content: 'trace', directory: '/tmp/p', day: '2026-08-08',
+      keywords: [], sessionId: 's1', memoryType: 'semantic',
+    });
+    // The reason decides the trust bonus (+8..+25) and bare rendering, so a
+    // caller must not be able to invent one.
+    await expect(store.verify(m.id, 'trust-me')).rejects.toThrow('Invalid verification reason');
+    expect((await store.getById(m.id))!.verified).toBe(false);
   });
 
   test('grounded verification through an explicitly-closed loop', async () => {

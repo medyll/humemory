@@ -157,7 +157,9 @@ program
   .action(async (id, options) => {
     const s = getStore();
 
-    const memory = await s.recall(id, options.agent);
+    // A human at a terminal chose this `--agent`; that is a process-level
+    // identity, not a request claiming one. It may earn `reused`.
+    const memory = await s.recall(id, options.agent, { identityTrusted: true });
     const states = ['Encoding', 'Consolidation', 'Stable', 'Fragile', 'Dormant'];
     console.log(`✓ Trace recalled: ${memory.id}`);
     console.log(`  Total recalls: ${memory.recallCount}`);

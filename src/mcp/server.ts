@@ -6,10 +6,16 @@
  * recalls against the SAME database, with the same decay curve — one unified
  * memory instead of one memory per tool.
  *
- * Attribution: every write path carries the calling agent (tool argument
- * `agent`, or `$HUMEMORY_AGENT`), feeding the Phase 6.0.1 trust layer:
- * cross-agent recall earns the `reused` verification, cross-agent recurrence
- * feeds the dreamer.
+ * Attribution: every write path carries the calling agent, taken from
+ * `$HUMEMORY_AGENT` in this process's environment — set by the client's MCP
+ * config, one server process per client. It is deliberately NOT a tool
+ * argument: the model filling in its own name is a claim, and in an injection
+ * scenario the model is precisely the untrusted party. stdio gives us a real
+ * identity per process; using it is the whole point of doing attribution at
+ * this boundary.
+ *
+ * That identity feeds the Phase 6.0.1 trust layer: cross-agent recall earns
+ * the `reused` verification, cross-agent recurrence feeds the dreamer.
  *
  * Run: `pnpm mcp` (stdio transport — register it in the client's MCP config).
  */
@@ -22,7 +28,14 @@ import { trustScore } from '../core/trust.js';
 import { sanitizeTrace } from '../core/sanitize.js';
 
 const store = new SQLiteStore(process.env.HUMEMORY_DB);
-const defaultAgent = process.env.HUMEMORY_AGENT ?? 'unknown';
+
+/**
+ * This process's agent identity. Not overridable per call — see the header.
+ * Register one server per agent in the client's MCP config:
+ *   { "humemory": { "command": "bun", "args": ["run", "src/mcp/server.ts"],
+ *                   "env": { "HUMEMORY_AGENT": "claude" } } }
+ */
+const callingAgent = process.env.HUMEMORY_AGENT ?? 'unknown';
 
 const server = new McpServer({
   name: 'humemory',
@@ -50,10 +63,9 @@ server.registerTool(
       directory: z.string().optional().describe('Project path (defaults to cwd)'),
       keywords: z.array(z.string()).optional(),
       memoryType: z.enum(['episodic', 'semantic', 'procedural']).optional(),
-      agent: z.string().optional().describe('Calling agent id (claude/codex/kimi/…)'),
     },
   },
-  async ({ content, directory, keywords, memoryType, agent }) => {
+  async ({ content, directory, keywords, memoryType }) => {
     const m = await store.add({
       content,
       directory: directory ?? process.cwd(),
@@ -62,7 +74,7 @@ server.registerTool(
       sessionId: 'mcp',
       memoryType: memoryType ?? 'semantic',
       source: 'agent',
-      agent: agent ?? defaultAgent,
+      agent: callingAgent,
     });
     return { content: [{ type: 'text', text: `encoded:\n${show(m)}` }] };
   }
@@ -98,11 +110,12 @@ server.registerTool(
     description: 'Recall a trace — reinforces it; a cross-agent recall earns the `reused` verification',
     inputSchema: {
       id: z.string(),
-      agent: z.string().optional(),
     },
   },
-  async ({ id, agent }) => {
-    const m = await store.recall(id, agent ?? defaultAgent);
+  async ({ id }) => {
+    // identityTrusted: this agent id came from the process environment, not
+    // from the caller — so a cross-agent recall here is evidence, not a claim.
+    const m = await store.recall(id, callingAgent, { identityTrusted: true });
     return { content: [{ type: 'text', text: `recalled:\n${show(m)}` }] };
   }
 );
@@ -116,10 +129,9 @@ server.registerTool(
       directory: z.string().optional(),
       cron: z.string().optional().describe('5-field cron, e.g. "0 9 * * 1"'),
       at: z.string().optional().describe('ISO datetime for a one-shot cue'),
-      agent: z.string().optional(),
     },
   },
-  async ({ content, directory, cron, at, agent }) => {
+  async ({ content, directory, cron, at }) => {
     const cues = [];
     if (cron) cues.push({ kind: 'time' as const, cron });
     else if (at) cues.push({ kind: 'time' as const, at });
@@ -128,7 +140,7 @@ server.registerTool(
         content,
         directory: directory ?? process.cwd(),
         source: 'agent',
-        agent: agent ?? defaultAgent,
+        agent: callingAgent,
       },
       cues
     );
