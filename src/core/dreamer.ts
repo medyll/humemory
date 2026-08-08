@@ -31,6 +31,8 @@ export const DREAM_CONFIG = {
   minClusterSize: 3,
   minDistinctSessions: 2,
   minDistinctAgents: 2,
+  /** Corroboration also requires distinct directories — agreement ≠ independence. */
+  minDistinctDirectories: 2,
   /** Jaccard similarity threshold for the keyword clusterer. */
   similarityThreshold: 0.34,
   /** Proposal lifetime (owner-approved 14d expiry). */
@@ -109,6 +111,8 @@ export interface DreamReport {
   expired: number;
   staleLoopCandidates: number;
   draftsWritten: number;
+  /** Traces that earned `corroborated` verification during this run (6.0.1). */
+  corroborated: number;
   proposals: DreamProposal[];
 }
 
@@ -130,6 +134,29 @@ function qualifies(cluster: Memory[]): boolean {
     (cluster.length >= DREAM_CONFIG.minClusterSize && sessions.size >= DREAM_CONFIG.minDistinctSessions) ||
     agents.size >= DREAM_CONFIG.minDistinctAgents
   );
+}
+
+/**
+ * Does this cluster constitute *corroboration* — the first of the three
+ * evidence paths of 6.0.1, and the only one the dreamer can observe?
+ *
+ * Agreement is not independence (Claude R1, defect 1): three agents that read
+ * the same stale README are one source wearing three names. So distinct agent
+ * labels are necessary but not sufficient — the traces must also come from
+ * distinct sessions AND distinct directories, which is the cheapest available
+ * proxy for "these agents did not look at the same thing at the same time".
+ *
+ * Corroboration is deliberately the weakest bonus in TRUST_CONFIG (+8). It
+ * cannot feed the dreamer back: clustering scores on `baseTrust` only, so a
+ * cluster can never raise the trust that makes it qualify (R1, defect 2).
+ */
+function corroborates(cluster: Memory[]): boolean {
+  const agents = new Set(cluster.map((m) => m.agent).filter(Boolean));
+  if (agents.size < DREAM_CONFIG.minDistinctAgents) return false;
+  const sessions = new Set(cluster.map((m) => m.sessionId));
+  if (sessions.size < DREAM_CONFIG.minDistinctSessions) return false;
+  const directories = new Set(cluster.map((m) => m.directory));
+  return directories.size >= DREAM_CONFIG.minDistinctDirectories;
 }
 
 export interface DreamOptions {
@@ -176,8 +203,21 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
   const proposals: DreamProposal[] = [];
   const expiresAt = new Date(now.getTime() + DREAM_CONFIG.proposalTtlDays * 24 * 3600_000);
 
+  let corroborated = 0;
+
   for (const cluster of clusters) {
     if (!qualifies(cluster)) continue;
+
+    // Corroboration is evidence, not a proposal: 6.0.1 lists it as an
+    // automatic verification path, so it applies without the human gate.
+    // It touches no content — only the `verified` flag and its reason.
+    if (corroborates(cluster) && store.verify) {
+      for (const m of cluster) {
+        if (m.verified) continue; // never downgrade an existing, stronger reason
+        await store.verify(m.id, 'corroborated');
+        corroborated++;
+      }
+    }
 
     let drafted: string | undefined;
     if (options.draft && drafts < DREAM_CONFIG.maxDraftsPerRun) {
@@ -236,6 +276,7 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
     expired,
     staleLoopCandidates,
     draftsWritten: drafts,
+    corroborated,
     proposals,
   };
 }
@@ -247,7 +288,8 @@ export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
  */
 export async function applyDreamProposal(
   store: MemoryStore & IntentionStore,
-  proposal: DreamProposal
+  proposal: DreamProposal,
+  options?: { clock?: Clock }
 ): Promise<string> {
   const payload = JSON.parse(proposal.payload);
 
@@ -262,13 +304,19 @@ export async function applyDreamProposal(
       const created = await store.add({
         content,
         directory: members[0].directory,
-        day: new Date().toISOString().split('T')[0],
+        day: (options?.clock ?? systemClock).now().toISOString().split('T')[0],
         keywords: [...new Set(members.flatMap((m) => m.keywords))].slice(0, 8),
         sessionId: 'dream',
         memoryType: 'semantic',
         source: 'dream_proposal',
-        verified: true, // a human just approved it
-        verificationReason: 'human',
+        verified: true,
+        // NOT 'human': `human` is the only reason that renders a trace *bare*,
+        // outside the untrusted markers, in the next session's context block
+        // (session-context.ts). This content is LLM-drafted or concatenated
+        // from agent traces — the human approved a proposal showing three
+        // 140-char samples, they did not read this text. `corroborated` is
+        // what the evidence actually supports, and it keeps the trace wrapped.
+        verificationReason: 'corroborated',
       });
       return `promoted to semantic memory ${created.id.slice(0, 8)}…`;
     }

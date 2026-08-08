@@ -145,7 +145,11 @@ describe('dreamer', () => {
     const created = (await store.list({ limit: 10 })).find((m) => m.source === 'dream_proposal');
     expect(created).toBeDefined();
     expect(created!.verified).toBe(true);
-    expect(created!.verificationReason).toBe('human');
+    // NOT 'human'. That reason is the one that renders a trace bare, outside
+    // the untrusted markers — and this content is LLM-drafted or concatenated
+    // from agent traces, never read verbatim by the approving human.
+    expect(created!.verificationReason).toBe('corroborated');
+    expect(created!.verificationReason).not.toBe('human');
   });
 
   test('resolve twice refuses — a resolved proposal is final', async () => {
@@ -155,6 +159,62 @@ describe('dreamer', () => {
     const p = r.proposals.find((x) => x.kind === 'promote_semantic')!;
     await store.resolveDreamProposal(p.id, 'rejected');
     await expect(store.resolveDreamProposal(p.id, 'approved')).rejects.toThrow('not pending');
+  });
+
+  test('cross-agent recurrence across sessions and directories earns `corroborated`', async () => {
+    const store = freshStore({ clock: fakeClock(T0) });
+    const ids: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const m = await store.add({
+        ...base,
+        directory: `/tmp/p${i}`, // distinct directories — independent looks
+        content: `bun test fails on the shared DB path use hermetic temp database variant ${i}`,
+        keywords: ['bun', 'test', 'hermetic', 'database'],
+        sessionId: `s${i}`,
+        agent: ['claude', 'codex'][i],
+      });
+      ids.push(m.id);
+    }
+
+    const report = await runDreamer({ store });
+    expect(report.corroborated).toBe(2);
+    for (const id of ids) {
+      const m = await store.getById(id);
+      expect(m!.verified).toBe(true);
+      expect(m!.verificationReason).toBe('corroborated');
+    }
+  });
+
+  test('agreement is not independence: same directory earns nothing (R1 defect 1)', async () => {
+    const store = freshStore({ clock: fakeClock(T0) });
+    // Two agents, two sessions — but both read the same place. One source
+    // wearing two names must not verify itself.
+    await seedCluster(store, 2, { sessions: 2, agents: ['claude', 'codex'] });
+
+    const report = await runDreamer({ store });
+    expect(report.filed).toBe(1);        // still worth proposing
+    expect(report.corroborated).toBe(0); // but not evidence
+  });
+
+  test('corroboration never downgrades a stronger existing reason', async () => {
+    const store = freshStore({ clock: fakeClock(T0) });
+    const ids: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const m = await store.add({
+        ...base,
+        directory: `/tmp/p${i}`,
+        content: `bun test fails on the shared DB path use hermetic temp database variant ${i}`,
+        keywords: ['bun', 'test', 'hermetic', 'database'],
+        sessionId: `s${i}`,
+        agent: ['claude', 'codex'][i],
+      });
+      ids.push(m.id);
+    }
+    await store.verify(ids[0], 'human');
+
+    await runDreamer({ store });
+    expect((await store.getById(ids[0]))!.verificationReason).toBe('human');
+    expect((await store.getById(ids[1]))!.verificationReason).toBe('corroborated');
   });
 
   test('KeywordClusterer is deterministic', () => {
