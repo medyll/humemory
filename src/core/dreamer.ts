@@ -482,10 +482,13 @@ export async function applyDreamProposal(
 
     case 'script_archived': {
       // Notice, not a request (PHASE8_PLAN.md §8.4): the archival already
-      // happened in the disuse sweep. Nothing left to apply — resolving the
-      // proposal (approve or reject) only acknowledges the human has seen it.
-      return `acknowledged: "${payload.name}" archived by disuse ` +
-        `(saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance})`;
+      // happened — in the disuse sweep, or immediately on a contradiction
+      // (`reason` distinguishes the two, both filed by the store). Nothing
+      // left to apply — resolving the proposal only acknowledges it.
+      return payload.reason === 'contradiction'
+        ? `acknowledged: "${payload.name}" archived — contradicted by "${payload.winnerContent}"`
+        : `acknowledged: "${payload.name}" archived by disuse ` +
+          `(saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance})`;
     }
   }
 }

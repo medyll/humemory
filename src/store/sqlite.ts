@@ -275,11 +275,16 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_level_revisions_memory ON level_revisions(memory_id)');
 
     // Phase 6.0.2 — contradictions: the loser collapses but is never deleted.
+    // Winner is always a memory (nothing corrects a fact *into* a script);
+    // loser_id has no FK — Phase 8.4 lets it reference a script as well as a
+    // memory, and SQLite cannot express a conditional two-table FK. Existence
+    // is checked in application code (`contradict()`) before every insert.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS contradictions (
         id TEXT PRIMARY KEY,
         winner_id TEXT NOT NULL REFERENCES memories(id),
-        loser_id TEXT NOT NULL REFERENCES memories(id),
+        loser_id TEXT NOT NULL,
+        loser_kind TEXT NOT NULL DEFAULT 'memory',
         reason TEXT,
         created_at INTEGER NOT NULL,
         created_by TEXT NOT NULL DEFAULT 'agent',
@@ -288,6 +293,31 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       )
     `);
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_contradictions_loser ON contradictions(loser_id)');
+
+    // Phase 8.4 — old databases have loser_id REFERENCES memories(id) and no
+    // loser_kind column. Rebuild (same idiom as the 8.1 cues migration):
+    // dropping a FK constraint isn't an ALTER TABLE operation in SQLite.
+    const contradictionColumns = this.db.query('PRAGMA table_info(contradictions)').all() as any[];
+    if (!contradictionColumns.some((c) => c.name === 'loser_kind')) {
+      this.db.exec(`
+        CREATE TABLE contradictions_new (
+          id TEXT PRIMARY KEY,
+          winner_id TEXT NOT NULL REFERENCES memories(id),
+          loser_id TEXT NOT NULL,
+          loser_kind TEXT NOT NULL DEFAULT 'memory',
+          reason TEXT,
+          created_at INTEGER NOT NULL,
+          created_by TEXT NOT NULL DEFAULT 'agent',
+          agent TEXT,
+          status TEXT NOT NULL DEFAULT 'active'
+        );
+        INSERT INTO contradictions_new (id, winner_id, loser_id, loser_kind, reason, created_at, created_by, agent, status)
+          SELECT id, winner_id, loser_id, 'memory', reason, created_at, created_by, agent, status FROM contradictions;
+        DROP TABLE contradictions;
+        ALTER TABLE contradictions_new RENAME TO contradictions;
+        CREATE INDEX IF NOT EXISTS idx_contradictions_loser ON contradictions(loser_id);
+      `);
+    }
 
     // Phase 6.1 — dream proposals (created here so 6.0.2's asymmetric-authority
     // path can already file contradiction proposals; the dreamer pipeline
@@ -949,8 +979,17 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
   ): Promise<ContradictResult> {
     const winner = await this.getById(winnerId);
     if (!winner) throw new Error(`Winner memory ${winnerId} not found`);
+
+    // Phase 8.4 — the loser can be a script ("correction kills the script").
+    // The winner is always a memory. A memory loser is the common case, and
+    // ids don't collide across the two tables (crypto.randomUUID()), so
+    // checking memories first and falling back to scripts is unambiguous.
     let loser = await this.getById(loserId);
-    if (!loser) throw new Error(`Loser memory ${loserId} not found`);
+    if (!loser) {
+      const scriptLoser = await this.getScript(loserId);
+      if (scriptLoser) return this.contradictScript(winner, scriptLoser, options);
+      throw new Error(`Loser ${loserId} not found (checked memories and scripts)`);
+    }
 
     // Merged loser: the collapse targets the merge target, and the caller warns.
     let retargetedTo: string | undefined;
@@ -995,6 +1034,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       id: crypto.randomUUID(),
       winnerId,
       loserId,
+      loserKind: 'memory',
       reason: options.reason,
       createdAt: now,
       createdBy: options.createdBy ?? 'agent',
@@ -1005,8 +1045,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     await this.enqueueWriteWithLock(async () => {
       this.db
         .query(
-          `INSERT INTO contradictions (id, winner_id, loser_id, reason, created_at, created_by, agent, status)
-           VALUES ($id, $winner, $loser, $reason, $at, $by, $agent, 'active')`
+          `INSERT INTO contradictions (id, winner_id, loser_id, loser_kind, reason, created_at, created_by, agent, status)
+           VALUES ($id, $winner, $loser, 'memory', $reason, $at, $by, $agent, 'active')`
         )
         .run({
           $id: contradiction.id,
@@ -1031,20 +1071,126 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     return { contradiction, retargetedTo, loser: updatedLoser! };
   }
 
-  /** Revocation recomputes the loser's saillance — decayed time does not come back. */
+  /**
+   * Phase 8.4 — "correction kills the script": a memory contradicts a
+   * script's steps directly, and the script is archived outright rather than
+   * saillance-collapsed. Two differences from the memory-loser path:
+   *
+   * - No asymmetric-authority gate. That gate exists because a memory can be
+   *   `verified` and an unverified winner shouldn't outrank it unchallenged
+   *   (6.0.2). `Script` carries no `verified`/`verificationReason` field —
+   *   nothing to be asymmetric *about* — so every script contradiction
+   *   applies directly. If scripts grow their own verification concept
+   *   later, this is the place to add the gate.
+   * - Archival, not saillance math. A script's saillance already means
+   *   something else (disuse, 8.4's sweep) — collapsing it the way a
+   *   memory's saillance collapses would just confuse two different scales.
+   *   "Wrong" and "unused" are different failure modes with the same cure:
+   *   stop injecting it.
+   *
+   * Reuses the `script_archived` notice from the disuse sweep (same kind,
+   * `payload.reason` distinguishes the two) rather than inventing a second
+   * notice type for what a human reviews identically either way.
+   */
+  private async contradictScript(
+    winner: Memory,
+    scriptLoser: Script,
+    options: { reason?: string; createdBy?: 'agent' | 'human' | 'dreamer'; agent?: string }
+  ): Promise<ContradictResult> {
+    const now = this.clock.now();
+    const wasAlreadyArchived = scriptLoser.status === 'archived';
+    const archived = wasAlreadyArchived ? scriptLoser : await this.updateScriptStatus(scriptLoser.id, 'archived');
+
+    const contradiction: Contradiction = {
+      id: crypto.randomUUID(),
+      winnerId: winner.id,
+      loserId: scriptLoser.id,
+      loserKind: 'script',
+      reason: options.reason,
+      createdAt: now,
+      createdBy: options.createdBy ?? 'agent',
+      agent: options.agent,
+      status: 'active',
+    };
+
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query(
+          `INSERT INTO contradictions (id, winner_id, loser_id, loser_kind, reason, created_at, created_by, agent, status)
+           VALUES ($id, $winner, $loser, 'script', $reason, $at, $by, $agent, 'active')`
+        )
+        .run({
+          $id: contradiction.id,
+          $winner: winner.id,
+          $loser: scriptLoser.id,
+          $reason: options.reason ?? null,
+          $at: now.getTime(),
+          $by: contradiction.createdBy,
+          $agent: options.agent ?? null,
+        });
+    });
+
+    // No second notice for a script that was already archived — nothing new
+    // happened for a human to see, and the audit trail is the contradiction
+    // row itself (still recorded above, whichever state the script was in).
+    if (!wasAlreadyArchived) {
+      await this.fileDreamProposal({
+        kind: 'script_archived',
+        payload: JSON.stringify({
+          scriptId: archived.id,
+          name: archived.name,
+          directory: archived.directory,
+          reason: 'contradiction',
+          contradictionId: contradiction.id,
+          winnerId: winner.id,
+          winnerContent: (winner.level2Essential ?? winner.content).slice(0, 200),
+        }),
+        payloadHash: createHash('sha1').update(`script_archived|contradiction|${contradiction.id}`).digest('hex'),
+        confidence: 1,
+      });
+    }
+
+    return { contradiction, loser: archived };
+  }
+
+  /**
+   * Revocation restores the trust judgment, not the automation wiring.
+   *
+   * Memory loser: saillance is recomputed, not restored to its pre-collapse
+   * literal value — decayed time does not come back (6.0.2, Kimi B10).
+   *
+   * Script loser (8.4): status flips back to `active`. Its cues stay
+   * `cancelled` — re-arming a drill's wake-ups is a deliberate act the human
+   * takes explicitly (`script activate`/cue add), not something a revoke
+   * should do silently on their behalf. A revoked-but-cueless script is
+   * visible again in `script list`; it just won't fire until re-armed.
+   */
   async revokeContradiction(id: string): Promise<Contradiction> {
     const row = this.db.query('SELECT * FROM contradictions WHERE id = $id').get({ $id: id }) as any;
     if (!row) throw new Error(`Contradiction ${id} not found`);
+    const loserKind = row.loser_kind ?? 'memory';
 
-    const loser = await this.getById(row.loser_id);
-    await this.enqueueWriteWithLock(async () => {
-      this.db.query(`UPDATE contradictions SET status = 'revoked' WHERE id = $id`).run({ $id: id });
-      if (loser) {
-        const recomputed = calculateSaillance(loser, this.clock.now());
-        this.db.query('UPDATE memories SET saillance = $s WHERE id = $id').run({ $id: loser.id, $s: recomputed });
-      }
-    });
-    if (loser) this.searchEngine.update((await this.getById(loser.id))!);
+    if (loserKind === 'script') {
+      const script = await this.getScript(row.loser_id);
+      await this.enqueueWriteWithLock(async () => {
+        this.db.query(`UPDATE contradictions SET status = 'revoked' WHERE id = $id`).run({ $id: id });
+        if (script && script.status === 'archived') {
+          this.db
+            .query(`UPDATE scripts SET status = 'active', updated_at = $now WHERE id = $id`)
+            .run({ $id: script.id, $now: this.clock.now().getTime() });
+        }
+      });
+    } else {
+      const loser = await this.getById(row.loser_id);
+      await this.enqueueWriteWithLock(async () => {
+        this.db.query(`UPDATE contradictions SET status = 'revoked' WHERE id = $id`).run({ $id: id });
+        if (loser) {
+          const recomputed = calculateSaillance(loser, this.clock.now());
+          this.db.query('UPDATE memories SET saillance = $s WHERE id = $id').run({ $id: loser.id, $s: recomputed });
+        }
+      });
+      if (loser) this.searchEngine.update((await this.getById(loser.id))!);
+    }
 
     const updated = this.db.query('SELECT * FROM contradictions WHERE id = $id').get({ $id: id }) as any;
     return this.rowToContradiction(updated);
@@ -1071,6 +1217,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       id: row.id,
       winnerId: row.winner_id,
       loserId: row.loser_id,
+      loserKind: (row.loser_kind ?? 'memory') as 'memory' | 'script',
       reason: row.reason || undefined,
       createdAt: new Date(row.created_at),
       createdBy: row.created_by,

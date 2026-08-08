@@ -97,6 +97,14 @@ export interface Contradiction {
   id: string;
   winnerId: string;
   loserId: string;
+  /**
+   * Phase 8 — the loser can be a script as well as a memory ("correction
+   * kills the script", PHASE8_PLAN.md §8.4). The winner is always a memory:
+   * nothing in the domain corrects a fact *into* becoming a script, only the
+   * other way round. Absent on rows written before this field existed —
+   * treat as `'memory'`.
+   */
+  loserKind?: 'memory' | 'script';
   reason?: string;
   createdAt: Date;
   createdBy: 'agent' | 'human' | 'dreamer';
@@ -110,7 +118,7 @@ export interface ContradictResult {
   proposalFiled?: boolean;
   /** Set when the loser was already merged — the collapse hit the merge target. */
   retargetedTo?: string;
-  loser: Memory;
+  loser: Memory | Script;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

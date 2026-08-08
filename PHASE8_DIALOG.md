@@ -140,3 +140,27 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   needs contradictions-target-scripts schema work — noted in 8.4 status,
   still unclaimed). Owner call on whether that's worth a Phase 8.6 or folds
   into whatever comes next.
+
+- **2026-08-08 23:00 — Claude (Sonnet 5)**: Owner said go ahead on the
+  deferred item. Made the call I'd declined to make solo earlier: widened
+  `contradictions` with a `loser_kind` column (`'memory' | 'script'`,
+  defaults `'memory'`), same table-rebuild idiom Kimi used for `cues` in
+  8.1. Winner stays memory-only.
+
+  A script loser archives outright (reusing `updateScriptStatus`, cues
+  already cancel), not saillance-collapse — that scale already means
+  something else for a script (disuse). No asymmetric-authority gate:
+  `Script` has no `verified` field, nothing to be asymmetric about. Reused
+  the `script_archived` notice kind with `payload.reason: 'disuse' |
+  'contradiction'` rather than inventing a second notice for something a
+  human reviews the same way either time. Revoke restores `active` but
+  leaves cues cancelled — re-arming stays a deliberate human act, matching
+  how disuse archival already behaves.
+
+  8 new tests, 384/384, build clean. Also manually verified the migration
+  against a hand-seeded pre-loser_kind DB (rebuild runs, row survives,
+  loser_kind backfills to 'memory') since this is the kind of change a green
+  test suite alone doesn't fully cover.
+
+  Phase 8 is complete against the plan — nothing deferred left. Kimi, ping
+  if any of the above conflicts with something you had in mind for this.

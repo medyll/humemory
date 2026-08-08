@@ -336,3 +336,50 @@ mutates memories/scripts on its own). 376/376, build clean.
 Phase 8 is now feature-complete against the plan except the explicitly
 deferred "correction kills the script" bullet (needs a schema decision on
 contradictions targeting scripts — see 8.4 status above).
+
+## ✅ "Correction kills the script" — Claude (Sonnet 5), 2026-08-08 23:00
+
+Owner said go ahead on the deferred item. Made the schema decision:
+`contradictions.loser_id` now points at a memory **or** a script
+(`loser_kind` column, `'memory' | 'script'`, defaults to `'memory'` on old
+rows). `winner_id` stays memory-only — nothing in the domain corrects a fact
+*into* becoming a script.
+
+**Migration**: same create-new/copy/drop/rename rebuild Kimi used for `cues`
+in 8.1 (SQLite can't drop a FK via `ALTER TABLE`, and `loser_id` can no
+longer carry a single-table `REFERENCES` once it may point at either table).
+Verified by hand against a seeded old-schema DB: table rebuilds, the
+existing row survives with `loser_kind='memory'`, ids intact.
+
+**Behavior when the loser is a script**, in `contradictScript()`
+(`sqlite.ts`): archives it outright (`updateScriptStatus(…, 'archived')`,
+which already cancels its armed cues) rather than collapsing saillance —
+"wrong" and "unused" are different failure modes with the same cure (stop
+injecting it), but a script's saillance already means disuse (8.4's sweep);
+collapsing it the way a memory's saillance collapses would confuse two
+scales. No asymmetric-authority gate: that gate protects a `verified`
+memory from an unverified challenger, and `Script` carries no
+`verified`/`verificationReason` field — nothing to be asymmetric about. If
+scripts grow a verification concept later, this is where the gate goes.
+
+Reuses the `script_archived` notice (not a new kind) — `payload.reason:
+'disuse' | 'contradiction'` distinguishes the two archival paths in both
+`dream review` and the acknowledgment text, since a human reviews them
+identically either way. Contradicting an already-archived script still
+records the contradiction (audit trail) but files no second notice.
+
+**Revocation** restores `status: 'active'` but leaves the script's cues
+`cancelled` — re-arming wake-ups is a deliberate act a human takes
+explicitly, matching the existing rule that revocation restores the trust
+judgment, not the automation wiring, and that archival-by-disuse doesn't
+auto-restore cues either.
+
+`pnpm cli contradict` and `dream review` render both shapes. 8 new tests:
+archives (not collapses), cancels cues, files the notice with the right
+reason, no authority gate, double-contradiction doesn't duplicate the
+notice, revoke leaves cues cancelled, memory-loser path unaffected
+(loserKind defaults correctly), nonexistent id in neither table throws.
+384/384, build clean, manually verified against a seeded pre-migration DB.
+
+Phase 8 is now complete against PHASE8_PLAN.md in full — no deferred items
+remain.

@@ -218,7 +218,7 @@ program
 // === CONTRADICT (Phase 6.0.2) ===
 program
   .command('contradict <winnerId> <loserId>')
-  .description('Winner trace contradicts loser trace — loser collapses (never deleted)')
+  .description('Winner trace contradicts loser trace or script — trace collapses, script archives (never deleted)')
   .option('-r, --reason <text>', 'Why the loser no longer holds')
   .option('--agent <name>', 'Who files the contradiction', 'cli')
   .action(async (winnerId, loserId, options) => {
@@ -237,7 +237,12 @@ program
       console.log(`⚠ Loser was already merged — the collapse hit the merge target ${result.retargetedTo.slice(0, 8)}…`);
     }
     console.log(`✓ Contradiction recorded: ${result.contradiction!.id}`);
-    console.log(`  Loser saillance: ${result.loser.saillance}/100 (collapsed, still searchable)`);
+    if ('status' in result.loser) {
+      // Script loser (8.4): archived outright, not saillance-collapsed.
+      console.log(`  Script "${result.loser.name}" archived (status: ${result.loser.status}) — cues cancelled.`);
+    } else {
+      console.log(`  Loser saillance: ${result.loser.saillance}/100 (collapsed, still searchable)`);
+    }
   });
 
 // === LIST ===
@@ -834,7 +839,11 @@ dream
         if (payload.truncatedSteps) console.log(`      … more corrections than steps shown (capped)`);
       }
       if (p.kind === 'script_archived') {
-        console.log(`      "${payload.name}" — saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance} (disuse)`);
+        if (payload.reason === 'contradiction') {
+          console.log(`      "${payload.name}" — contradicted by: ${payload.winnerContent}`);
+        } else {
+          console.log(`      "${payload.name}" — saillance ${payload.storedSaillance} → effective ${payload.effectiveSaillance} (disuse)`);
+        }
       }
       if (payload.expiresAt || p.expiresAt) console.log(`      expires ${p.expiresAt?.toISOString().split('T')[0]}`);
       console.log();

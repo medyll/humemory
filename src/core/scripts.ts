@@ -96,6 +96,7 @@ export async function sweepDisusedScripts(
           scriptId: archived.id,
           name: archived.name,
           directory: archived.directory,
+          reason: 'disuse',
           storedSaillance: script.saillance,
           effectiveSaillance: effective,
           lastFiredAt: script.lastFiredAt?.toISOString() ?? null,
