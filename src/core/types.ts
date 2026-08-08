@@ -45,7 +45,19 @@ export interface Memory {
 
   // Photographic mode — disables decay
   photographic?: boolean;
+
+  // ── Phase 6 trust layer (populated from 6.0.1 onward) ──
+  source?: TraceSource;      // who wrote it; undefined on pre-Phase-6 rows
+  agent?: string;            // claude | codex | kimi | opencode | unknown
+  verified?: boolean;
+  verificationReason?: VerificationReason;
+  device?: string;           // encoding device (localization now, sync later)
+  refutedCount?: number;
 }
+
+export type TraceSource = 'human' | 'agent' | 'hook' | 'llm_generated' | 'dream_proposal';
+
+export type VerificationReason = 'corroborated' | 'grounded' | 'reused' | 'human';
 
 export interface SearchQuery {
   query: string;

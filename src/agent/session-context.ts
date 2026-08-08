@@ -14,6 +14,12 @@ import type { Intention, Memory, MemoryStore, IntentionStore, DecayLevel } from 
 import type { CueResolver } from '../core/cues.js';
 import { loopId, intentionSaillance } from '../core/cues.js';
 import { systemClock, type Clock } from '../core/clock.js';
+import {
+  sanitizeTrace,
+  wrapUntrusted,
+  RECALLED_NOTES_PREFACE,
+  DEFAULT_TRACE_CAP,
+} from '../core/sanitize.js';
 
 /** Default budget: maximum number of items listed per section. */
 export const DEFAULT_SESSION_BUDGET = 10;
@@ -42,6 +48,11 @@ export interface SessionContext {
   traces: Memory[];
   /** Loops woken by a time cue during this composition. */
   firedNow: Intention[];
+  /**
+   * Marker-escape attempts neutralized while rendering (6.0.3). Non-zero is a
+   * security signal — log the event, never the payload (Claude R3/B11).
+   */
+  escapeAttempts: { memoryId: string; count: number }[];
 }
 
 /** Renders a duration in short form: "2d ago", "3h ago". */
@@ -121,11 +132,13 @@ export async function buildSessionContext(options: SessionContextOptions): Promi
     })
   ).sort((a, b) => b.saillance - a.saillance);
 
+  const rendered = renderMarkdown({ openLoops, traces, firedNow, branch, now });
   return {
-    markdown: renderMarkdown({ openLoops, traces, firedNow, branch, now }),
+    markdown: rendered.markdown,
     openLoops,
     traces,
     firedNow,
+    escapeAttempts: rendered.escapeAttempts,
   };
 }
 
@@ -135,43 +148,59 @@ function renderMarkdown(input: {
   firedNow: Intention[];
   branch?: string;
   now: Date;
-}): string {
+}): { markdown: string; escapeAttempts: { memoryId: string; count: number }[] } {
   const { openLoops, traces, firedNow, branch, now } = input;
+  const escapeAttempts: { memoryId: string; count: number }[] = [];
 
   // Nothing to say: write nothing rather than inject an empty block into the prompt.
-  if (!openLoops.length && !traces.length && !firedNow.length) return '';
+  if (!openLoops.length && !traces.length && !firedNow.length) return { markdown: '', escapeAttempts };
 
   const lines: string[] = ['## 🧠 Mnemonic context (humemory)'];
   if (branch) lines.push('', `_Current branch: \`${branch}\`_`);
 
   if (firedNow.length) {
-    lines.push('', '### ⏰ Deadlines reached');
+    lines.push('', '### ⏰ Deadlines reached', RECALLED_NOTES_PREFACE);
     for (const i of firedNow) {
-      lines.push(`- **[${loopId(i.id)}]** ${oneLine(i.content)}`);
+      const s = sanitizeTrace(i.content);
+      lines.push(`- **[${loopId(i.id)}]** ${oneLine(s.text)}`);
     }
   }
 
   if (openLoops.length) {
-    lines.push('', '### Open loops (Zeigarnik)');
+    lines.push('', '### Open loops (Zeigarnik)', RECALLED_NOTES_PREFACE);
     for (const i of openLoops) {
       const age = humanizeAge(i.createdAt, now);
       const deadline =
         i.expiresAt && i.expiresAt.getTime() > now.getTime()
           ? ` — due in ${humanizeAge(now, i.expiresAt).replace(' ago', '')}`
           : '';
-      lines.push(`- **[${loopId(i.id)}]** ${oneLine(i.content)} (armed ${age}${deadline})`);
+      const s = sanitizeTrace(i.content);
+      lines.push(`- **[${loopId(i.id)}]** ${oneLine(s.text)} (armed ${age}${deadline})`);
     }
     lines.push('', `_To close a loop: mention \`Closes ${loopId(openLoops[0].id)}\` in a commit message._`);
   }
 
   if (traces.length) {
-    lines.push('', '### Relevant decayed traces');
+    lines.push('', '### Relevant decayed traces', RECALLED_NOTES_PREFACE);
     for (const m of traces) {
-      lines.push(`- [L${m.currentLevel}] ${oneLine(traceText(m))}`);
+      const s = sanitizeTrace(traceText(m), DEFAULT_TRACE_CAP);
+      if (s.escapedMarkers > 0) escapeAttempts.push({ memoryId: m.id, count: s.escapedMarkers });
+      // Only traces verified by a human render bare; earned verification
+      // (corroborated/reused/grounded) never unwraps content (6.0.3).
+      const bare = m.verified === true && m.verificationReason === 'human';
+      const body = bare
+        ? s.text
+        : wrapUntrusted(s.text, {
+            source: m.source,
+            agent: m.agent,
+            verified: m.verified,
+            id: m.id,
+          });
+      lines.push(`- [L${m.currentLevel}] ${body}`);
     }
   }
 
-  return `${lines.join('\n')}\n`;
+  return { markdown: `${lines.join('\n')}\n`, escapeAttempts };
 }
 
 /** Current salience of a loop — re-exported for consumers of the context. */
