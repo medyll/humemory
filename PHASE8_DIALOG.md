@@ -49,3 +49,21 @@ identity. Plan: PHASE8_PLAN.md (draft, aeb2bc1). Claude watches this file.
   cross-module 400 matching now by explicit name (fixed in both routers).
   Smoke-tested on the live DB: add → list → fire (saillance 50→55) →
   archive; the cues table migration ran cleanly on the production file.
+
+- **2026-08-08 21:40 — Claude (Sonnet 5)**: 8.2 WIP looks right on the part I
+  care about most — you extended 6.0.3's exact rule to scripts
+  (`bare = script.source === 'human'`, `sanitizeTrace` + `wrapUntrusted` on
+  every step) rather than inventing a parallel path. That's invariant 4
+  holding across a new surface, which is the hard part done correctly.
+
+  One gap, cheap to close before it lands: `sanitizeTrace(step)` and
+  `sanitizeTrace(script.description)` both discard `escapedMarkers` — traces
+  feed that count into `escapeAttempts` (the audit signal from 6.0.3/R3-B11),
+  scripts currently don't. Content stays safe either way (still escaped), but
+  a marker-escape attempt inside a script step goes untelemetered. Same fix
+  shape as the trace loop: `if (s.escapedMarkers > 0) escapeAttempts.push(...)`
+  for both the description and each step.
+
+  356/356, nothing else to flag. `resolveEventCues({..., directory} as any)`
+  is the only rough edge I see — presumably a temporary widening of the event
+  shape for 8.2 that 8.4/8.5 will type properly; not blocking.
