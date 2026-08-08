@@ -29,6 +29,32 @@
     { "a": "photographic mode disables decay entirely", "b": "deploy the dashboard on port 3456 with PORT env override", "should": false },
     { "a": "merge keeps the target and sends the source to level 4", "b": "flexsearch powers the inverse BM25 search", "should": false },
     { "a": "the SessionStart hook injects open loops into the prompt", "b": "cron 0 3 * * * runs the nightly consolidation", "should": false },
-    { "a": "Closes loop-<id> in a commit message closes the intention", "b": "level_revisions keeps the last five revisions per memory", "should": false }
+    { "a": "Closes loop-<id> in a commit message closes the intention", "b": "level_revisions keeps the last five revisions per memory", "should": false },
+
+    { "a": "armed intentions stay pinned at saillance 100 and never decay", "b": "une intention armée reste saillante à 100 tant que la boucle est ouverte", "should": true },
+    { "a": "a fired intention that is never closed decays like a normal trace", "b": "l'effet Zeigarnik s'estompe : une boucle déclenchée non fermée oublie normalement", "should": true },
+    { "a": "e5-base produces 768-dimensional embeddings", "b": "le modèle e5-base sort des vecteurs de 768 dimensions", "should": true },
+    { "a": "hybrid search merges the BM25 and vector lanes with RRF", "b": "la recherche hybride fusionne les pistes BM25 et vectorielle par rang réciproque", "should": true },
+    { "a": "the vectorCorroborateThreshold is calibrated at 0.855", "b": "le seuil de corroboration vectorielle a été mesuré à 0.855", "should": true },
+    { "a": "embeddings are deleted when a memory is merged or re-leveled", "b": "la règle delete-on-mutation invalide les vecteurs dès qu'une trace change", "should": true },
+    { "a": "the L3 summary is embedded first, L0 raw text only if it fits", "b": "on embarque le résumé L3 en priorité, le texte brut L0 seulement s'il reste de la place", "should": true },
+    { "a": "dream proposals expire after fourteen days without review", "b": "une proposition de dream non relue expire au bout de deux semaines", "should": true },
+    { "a": "a cluster needs at least three traces from two distinct sessions", "b": "il faut trois traces issues de deux sessions différentes pour former un cluster", "should": true },
+    { "a": "the device column was added in 6.0.1 for future multi-device sync", "b": "la colonne device pose les bases de la synchro multi-appareils depuis la 6.0.1", "should": true },
+    { "a": "fp16 fails to load on win32 with onnxruntime-node", "b": "le dtype fp16 plante au chargement sous Windows avec onnxruntime-node", "should": true },
+    { "a": "vector clustering is the default dream clusterer since 7.5 round 2", "b": "depuis la recalibration e5-base, le dreamer utilise le clusterer vectoriel par défaut", "should": true },
+
+    { "a": "armed intentions stay pinned at saillance 100 and never decay", "b": "recall() hard-sets saillance to 100", "should": false },
+    { "a": "a fired intention that is never closed decays like a normal trace", "b": "verified traces decay 1.5x slower", "should": false },
+    { "a": "e5-base produces 768-dimensional embeddings", "b": "e5-small produces 384-dimensional embeddings", "should": false },
+    { "a": "hybrid search merges the BM25 and vector lanes with RRF", "b": "flexsearch powers the inverse BM25 search", "should": false },
+    { "a": "the vectorCorroborateThreshold is calibrated at 0.855", "b": "the vectorClusterThreshold is calibrated at 0.840", "should": false },
+    { "a": "embeddings are deleted when a memory is merged or re-leveled", "b": "merge keeps the target and sends the source to level 4", "should": false },
+    { "a": "the L3 summary is embedded first, L0 raw text only if it fits", "b": "recall() hard-sets saillance to 100", "should": false },
+    { "a": "dream proposals expire after fourteen days without review", "b": "cron 0 3 * * * runs the nightly consolidation", "should": false },
+    { "a": "a cluster needs at least three traces from two distinct sessions", "b": "corroboration requires members from two distinct directories", "should": false },
+    { "a": "the device column was added in 6.0.1 for future multi-device sync", "b": "advisory lock prevents concurrent writers on SQLite", "should": false },
+    { "a": "fp16 fails to load on win32 with onnxruntime-node", "b": "q8 quantization keeps the e5-base download around 450MB", "should": false },
+    { "a": "vector clustering is the default dream clusterer since 7.5 round 2", "b": "the keyword clusterer uses Jaccard similarity at 0.34", "should": false }
   ]
 }

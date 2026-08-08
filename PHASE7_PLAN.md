@@ -352,3 +352,12 @@ R 0.86). Defaults flipped: model → e5-base, `--clusterer` → vector, vector
 auto-corroboration ENABLED. Margin over the worst false pair is only 0.002 on
 a 28-pair fixture — raise the gate or widen the fixture before trusting it on
 a larger corpus.*
+
+*Round 3 (same day): the fixture was widened to 52 pairs with 12 hard
+negatives (same-domain, different facts). They FALSIFIED round 2: false-pair
+max 0.946 > true-pair min 0.788, no P=1.0 gate exists. The 0.855 gate was an
+artifact of the narrow fixture (0.002 margin). Final state: corroboration
+sentinel back to 0.99 (vector auto-corroboration OFF), cluster threshold
+0.825 (best F1: P 0.71 / R 0.92 / F1 0.80), default clusterer back to
+keyword. Conclusion: cosine corroboration is beyond e5-small AND e5-base —
+the next lever is a stronger embedder (e5-large / bge-m3), not more fixture.*

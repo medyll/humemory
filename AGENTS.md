@@ -238,15 +238,17 @@ verification and the dreamer's cross-agent recurrence signal.
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - **Phase 7: vector memory** ✅ shipped (2026-08-08) — `Embedder` interface +
-  offline ONNX embeddings (multilingual-e5-base q8, default since 7.5 round 2),
-  `VectorClusterer` behind the 6.1 seam (default dream clusterer), hybrid RRF
-  search (`search --semantic`), `embed backfill --model small|base` CLI.
-  **Calibration (7.5):** e5-small's cosine distributions overlap (no P=1.0
-  gate) → superseded by e5-base: cluster threshold 0.840 (F1 0.86),
-  corroborate threshold 0.855 (P=1.0 measured, margin 0.002 — thin, see
-  dialog). Vector auto-corroboration ENABLED. `keyword` clusterer remains as
-  no-model fallback. Details: [PHASE7_PLAN.md](./PHASE7_PLAN.md),
-  dialogue log [PHASE7_DIALOG.md](./PHASE7_DIALOG.md)
+  offline ONNX embeddings (multilingual-e5-base q8 default), `VectorClusterer`
+  behind the 6.1 seam, hybrid RRF search (`search --semantic`),
+  `embed backfill --model small|base` CLI, `dream run --window <days>`.
+  **Calibration (7.5, 3 rounds):** hard negatives falsified every P=1.0
+  corroboration gate (false max 0.946 on 52 pairs) → **vector
+  auto-corroboration is DISABLED** (0.99 sentinel); cluster threshold 0.825
+  (P 0.71 / F1 0.80 — proposals are human-reviewed); default dream clusterer
+  stays `keyword`, `vector` is opt-in. Re-enabling corroboration requires a
+  stronger embedder (e5-large / bge-m3). Details:
+  [PHASE7_PLAN.md](./PHASE7_PLAN.md), dialogue log
+  [PHASE7_DIALOG.md](./PHASE7_DIALOG.md)
 - Multi-device sync of the shared store (the `device` column from 6.0.1 makes
   it migration-free; conflict policy TBD)
 - OpenCode / other-agent integration; export/import memories between projects

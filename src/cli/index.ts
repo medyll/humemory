@@ -648,7 +648,7 @@ const dream = program.command('dream').description('Cross-session consolidation 
 dream
   .command('run', { isDefault: true })
   .description('Detect recurring patterns across sessions/agents and file proposals')
-  .option('--clusterer <kind>', 'vector (default since 7.5 round 2, e5-base) | keyword (no model needed)', 'vector')
+  .option('--clusterer <kind>', 'keyword (default — 7.5 round 3: vector P 0.71 too noisy) | vector (needs the model)', 'keyword')
   .option('--window <days>', 'Collection window in days (default 30; raise for old traces)', undefined)
   .action(async (options) => {
     const s = getStore();

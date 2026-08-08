@@ -39,19 +39,22 @@ export const DREAM_CONFIG = {
    * Vector thresholds (Phase 7.3, A1): grouping is reviewed by a human,
    * corroboration is not — so the verification gate is strictly higher.
    *
-   * CALIBRATED 7.5 (round 2, e5-base q8) on 28 labelled bilingual pairs:
-   * - true-pair min 0.815 / false-pair max 0.853 — still a thin overlap,
-   *   but unlike e5-small a P=1.0 corroboration gate EXISTS.
-   * - vectorClusterThreshold 0.840 = best F1 (P 0.86 / R 0.86 / F1 0.86).
-   * - vectorCorroborateThreshold 0.855 = lowest P=1.0 gate with recall ≥ 0.5.
-   *   WARNING: the margin over the worst false pair is only 0.002 and the
-   *   fixture is small (28 pairs) — if verification precision ever matters
-   *   more than recall here, raise this before widening the corpus.
-   * (Round 1 with e5-small: distributions overlapped with no P=1.0 gate —
-   *  corroboration was disabled at a 0.99 sentinel. e5-base unlocked it.)
+   * CALIBRATED 7.5 (round 3, e5-base q8) on 52 labelled bilingual pairs
+   * including 12 hard negatives (same-domain, different facts):
+   * - true-pair min 0.788 / false-pair max 0.946 — hard negatives (e.g.
+   *   "armed intentions pinned at saillance 100" vs "recall() sets saillance
+   *   to 100") score ABOVE most true paraphrases. No P=1.0 gate exists.
+   * - vectorClusterThreshold 0.825 = best F1 (P 0.71 / R 0.92 / F1 0.80):
+   *   noisy but tolerable because clusters are human-reviewed proposals.
+   * - vectorCorroborateThreshold 0.99 = SENTINEL, auto-corroboration
+   *   DISABLED. Round 2's 0.855 gate was an artifact of the narrow 28-pair
+   *   fixture (margin 0.002) and did not survive hard negatives. Re-enabling
+   *   requires a stronger embedder (e5-large / bge-m3), not more fixture.
+   * (History: round 1 e5-small overlapped; round 2 e5-base looked safe on
+   *  28 pairs; round 3 hard negatives falsified it.)
    */
-  vectorClusterThreshold: 0.84,
-  vectorCorroborateThreshold: 0.855,
+  vectorClusterThreshold: 0.825,
+  vectorCorroborateThreshold: 0.99,
   /** Proposal lifetime (owner-approved 14d expiry). */
   proposalTtlDays: 14,
   /** LLM drafting cap per run; skipped entirely without a client. */
