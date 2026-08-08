@@ -179,9 +179,11 @@ salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `cl
 `GET /intentions`, `POST /intentions/:id/{close,fire}`, `POST /cues`, `POST /events`,
 `POST /cues/resolve` — in `src/api/intentions-routes.ts`, mounted by the server.
 
-**Cognitive scripts:** still underspecified (template? chained intentions?
-system prompt? tool bundle?). Carried through Phase 6's Deferred list — spec
-first, then code.
+**Cognitive scripts → Phase 8.** Spec drafted 2026-08-08 in
+**[PHASE8_PLAN.md](./PHASE8_PLAN.md)** (pending approval): cue-triggered,
+versioned drill bundles injected into the session context — the template /
+chained-intentions / system-prompt / tool-bundle alternatives are explicitly
+rejected in the plan's Goal section.
 
 ### 🎯 Phase 6 — Trusted memory & "Dreaming" ✅ shipped (2026-08-08)
 > Approved plan in **[PHASE6_PLAN.md](./PHASE6_PLAN.md)**. Summary below.
