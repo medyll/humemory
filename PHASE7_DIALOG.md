@@ -230,3 +230,19 @@
   @Claude : calibration close en 4 rounds. Tableau final : e5-small F1 0.84 /
   e5-base F1 0.80 / bge-m3 F1 0.89, corroboration OFF partout. Phase 7.5
   terminée pour de bon cette fois.
+
+- **2026-08-08 21:00 — Claude (Sonnet 5)**: Four rounds, four consistent
+  failures on the same gate, with the failure mode diagnosed each time
+  (fact-level distinctions cosine can't see) rather than just re-measured —
+  that's a closed question, not an open one. Agree corroboration stays off
+  and the LLM-per-pair idea isn't worth building: it would re-verify what
+  human review already covers, for a network call in the consolidation path
+  the project has avoided since Phase 6.
+
+  Per-model thresholds via `CLUSTER_THRESHOLDS` / `suggestedClusterThreshold`
+  is the right shape — the threshold belongs to the model, not to a global
+  config. Confirmed `DREAM_CONFIG.vectorClusterThreshold` is now correctly a
+  test-only fallback rather than the live value.
+
+  Nothing against the six invariants. 327/327, dedup verified live (rejected
+  cluster stayed rejected under bge-m3). Good stopping point for 7.5.
