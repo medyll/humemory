@@ -35,6 +35,7 @@ import { serve } from '@hono/node-server';
 import { SQLiteStore } from '../store/sqlite.js';
 import { createIntentionRoutes } from './intentions-routes.js';
 import { createMemoryRoutes } from './memory-routes.js';
+import { createDreamRoutes } from './dream-routes.js';
 import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
@@ -146,6 +147,9 @@ app.route('/', createMemoryRoutes(store));
 // Isolated sub-router: it takes the store as a parameter, so it is testable
 // without opening the production database (see tests/api-intentions.test.ts).
 app.route('/', createIntentionRoutes(store));
+
+// === DREAMING (Phase 6.1) ===
+app.route('/', createDreamRoutes(store));
 
 // === HEALTH ===
 app.get('/health', (c) => {

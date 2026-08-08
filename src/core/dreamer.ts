@@ -1,0 +1,303 @@
+/**
+ * Dreaming — Phase 6.1.
+ *
+ * A background consolidation pass that detects recurring patterns across
+ * sessions *and agents*, then proposes — never silently applies. The human
+ * gate is `pnpm cli dream review` / `approve` / `reject`.
+ *
+ * Invariants (asserted by tests):
+ * - The dreamer scores clusters on `base(source)` ONLY — verification informs
+ *   recall ordering, recurrence informs clustering, they never feed each
+ *   other (Claude R1, self-confirming loop).
+ * - The job is idempotent: `payload_hash` dedups proposals, and a rejected
+ *   pattern is not resurrected on the next run (re-filing the same hash is an
+ *   INSERT OR IGNORE no-op while the rejected row exists).
+ * - No network, no embeddings: the `Clusterer` is an interface so Phase 7 can
+ *   swap in vectors without touching the pipeline (owner ruling).
+ */
+
+import { createHash } from 'crypto';
+import type {
+  Memory, Intention, MemoryStore, IntentionStore,
+  DreamKind, DreamProposal,
+} from './types.js';
+import { baseTrust } from './trust.js';
+import { systemClock, type Clock } from './clock.js';
+
+export const DREAM_CONFIG = {
+  /** Traces younger than this are considered. */
+  windowDays: 30,
+  /** A cluster qualifies at ≥ K traces from ≥ 2 sessions, or ≥ 2 agents. */
+  minClusterSize: 3,
+  minDistinctSessions: 2,
+  minDistinctAgents: 2,
+  /** Jaccard similarity threshold for the keyword clusterer. */
+  similarityThreshold: 0.34,
+  /** Proposal lifetime (owner-approved 14d expiry). */
+  proposalTtlDays: 14,
+  /** LLM drafting cap per run; skipped entirely without a client. */
+  maxDraftsPerRun: 10,
+  /** Loops open longer than this are stale-loop candidates. */
+  staleLoopDays: 30,
+  /** Max traces read per run. */
+  collectLimit: 500,
+};
+
+/** Phase 7 seam: swap this implementation for a vector clusterer. */
+export interface Clusterer {
+  cluster(memories: Memory[]): Memory[][];
+}
+
+/** Tokenize the strongest available retrieval text of a trace. */
+function tokens(m: Memory): Set<string> {
+  const text = m.level3Keywords || m.keywords.join(' ') || m.level2Essential || m.content;
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9àâäéèêëîïôöùûüç_-]+/i)
+      .filter((t) => t.length > 2)
+  );
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+/**
+ * Keyword clusterer: union-find over pairwise Jaccard similarity. Deterministic
+ * (stable iteration order, ties broken by insertion order), local, dependency-free.
+ */
+export class KeywordClusterer implements Clusterer {
+  constructor(private threshold: number = DREAM_CONFIG.similarityThreshold) {}
+
+  cluster(memories: Memory[]): Memory[][] {
+    const parent = memories.map((_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) {
+        parent[i] = parent[parent[i]];
+        i = parent[i];
+      }
+      return i;
+    };
+    const tokenSets = memories.map(tokens);
+    for (let i = 0; i < memories.length; i++) {
+      for (let j = i + 1; j < memories.length; j++) {
+        if (jaccard(tokenSets[i], tokenSets[j]) >= this.threshold) {
+          const ri = find(i);
+          const rj = find(j);
+          if (ri !== rj) parent[rj] = ri;
+        }
+      }
+    }
+    const groups = new Map<number, Memory[]>();
+    memories.forEach((m, i) => {
+      const root = find(i);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root)!.push(m);
+    });
+    return [...groups.values()].filter((g) => g.length > 1);
+  }
+}
+
+export interface DreamReport {
+  considered: number;
+  clusters: number;
+  filed: number;
+  expired: number;
+  staleLoopCandidates: number;
+  draftsWritten: number;
+  proposals: DreamProposal[];
+}
+
+function hashOf(kind: DreamKind, ids: string[]): string {
+  return createHash('sha1').update([kind, ...ids.slice().sort()].join('|')).digest('hex');
+}
+
+/** Confidence: cluster size saturates at 8, weighted by mean baseTrust. */
+function confidenceOf(cluster: Memory[]): number {
+  const sizeScore = Math.min(cluster.length, 8) / 8;
+  const trustScoreAvg = cluster.reduce((s, m) => s + baseTrust(m), 0) / cluster.length / 100;
+  return Math.round(sizeScore * (0.4 + 0.6 * trustScoreAvg) * 100) / 100;
+}
+
+function qualifies(cluster: Memory[]): boolean {
+  const sessions = new Set(cluster.map((m) => m.sessionId));
+  const agents = new Set(cluster.map((m) => m.agent).filter(Boolean));
+  return (
+    (cluster.length >= DREAM_CONFIG.minClusterSize && sessions.size >= DREAM_CONFIG.minDistinctSessions) ||
+    agents.size >= DREAM_CONFIG.minDistinctAgents
+  );
+}
+
+export interface DreamOptions {
+  store: MemoryStore & IntentionStore;
+  clusterer?: Clusterer;
+  clock?: Clock;
+  /**
+   * Optional LLM drafting of consolidated wording. Capped and skipped when
+   * absent — the job then files proposals with the raw cluster, never fails.
+   */
+  draft?: (cluster: Memory[]) => Promise<string>;
+  /** Human identity for resolvedBy — `git config user.email`, fallback 'cli'. */
+  now?: never; // use clock
+}
+
+export async function runDreamer(options: DreamOptions): Promise<DreamReport> {
+  const { store } = options;
+  const clock = options.clock ?? systemClock;
+  const clusterer = options.clusterer ?? new KeywordClusterer();
+  const now = clock.now();
+  const windowStart = now.getTime() - DREAM_CONFIG.windowDays * 24 * 3600_000;
+
+  // 0. Housekeeping: pending proposals past their TTL expire first.
+  const expired = (await store.expireDreamProposals?.()) ?? 0;
+
+  // 1. Collect — exclude contradicted losers and level-4/merged rows.
+  const contradicted = new Set(
+    ((await store.listContradictions?.({ status: 'active' })) ?? []).map((ct) => ct.loserId)
+  );
+  const traces = (await store.list({ limit: DREAM_CONFIG.collectLimit })).filter(
+    (m) =>
+      m.createdAt.getTime() >= windowStart &&
+      m.currentLevel < 4 &&
+      !m.mergedIntoId &&
+      !contradicted.has(m.id)
+  );
+
+  // 2. Cluster.
+  const clusters = clusterer.cluster(traces);
+
+  // 3-4. Qualify, then propose (idempotent via payload_hash).
+  let filed = 0;
+  let drafts = 0;
+  const proposals: DreamProposal[] = [];
+  const expiresAt = new Date(now.getTime() + DREAM_CONFIG.proposalTtlDays * 24 * 3600_000);
+
+  for (const cluster of clusters) {
+    if (!qualifies(cluster)) continue;
+
+    let drafted: string | undefined;
+    if (options.draft && drafts < DREAM_CONFIG.maxDraftsPerRun) {
+      drafted = await options.draft(cluster);
+      drafts++;
+    }
+
+    const ids = cluster.map((m) => m.id);
+    const payload = JSON.stringify({
+      clusterIds: ids,
+      agents: [...new Set(cluster.map((m) => m.agent).filter(Boolean))],
+      sessions: new Set(cluster.map((m) => m.sessionId)).size,
+      samples: cluster.slice(0, 3).map((m) => (m.level2Essential ?? m.content).slice(0, 140)),
+      drafted,
+    });
+
+    const ok = (await store.fileDreamProposal?.({
+      kind: 'promote_semantic',
+      payload,
+      payloadHash: hashOf('promote_semantic', ids),
+      confidence: confidenceOf(cluster),
+      expiresAt,
+    })) ?? false;
+    if (ok) filed++;
+  }
+
+  // 5. Stale loops (intentions read-only): open past staleLoopDays whose linked
+  // trace has faded to L3+ — propose closing them.
+  let staleLoopCandidates = 0;
+  const armed = await store.listIntentions({ status: ['armed', 'fired'], limit: 500 });
+  for (const intention of armed) {
+    const ageMs = now.getTime() - intention.createdAt.getTime();
+    if (ageMs < DREAM_CONFIG.staleLoopDays * 24 * 3600_000) continue;
+    if (intention.relatedMemoryId) {
+      const linked = await store.getById(intention.relatedMemoryId);
+      if (linked && linked.currentLevel < 3) continue; // trace still alive → not stale
+    }
+    staleLoopCandidates++;
+    const ok = (await store.fileDreamProposal?.({
+      kind: 'close_stale_loop',
+      payload: JSON.stringify({ intentionId: intention.id, content: intention.content, ageDays: Math.floor(ageMs / 24 / 3600_000) }),
+      payloadHash: hashOf('close_stale_loop', [intention.id]),
+      confidence: 0.3,
+      expiresAt,
+    })) ?? false;
+    if (ok) filed++;
+  }
+
+  const pending = (await store.listDreamProposals?.({ status: 'pending' })) ?? [];
+  proposals.push(...pending);
+
+  return {
+    considered: traces.length,
+    clusters: clusters.length,
+    filed,
+    expired,
+    staleLoopCandidates,
+    draftsWritten: drafts,
+    proposals,
+  };
+}
+
+/**
+ * Applies an approved proposal. Returns a human-readable summary of the effect.
+ * `update_agents_md` never writes the file — it returns the suggested line for
+ * the human to paste (level-1 memory stays human-owned, permanently).
+ */
+export async function applyDreamProposal(
+  store: MemoryStore & IntentionStore,
+  proposal: DreamProposal
+): Promise<string> {
+  const payload = JSON.parse(proposal.payload);
+
+  switch (proposal.kind) {
+    case 'promote_semantic': {
+      const ids: string[] = payload.clusterIds;
+      const members = (await Promise.all(ids.map((id) => store.getById(id)))).filter(Boolean) as Memory[];
+      if (!members.length) return 'cluster vanished — nothing to promote';
+      const content = payload.drafted ??
+        `Recurring pattern across ${members.length} traces (${payload.sessions} sessions, agents: ${payload.agents.join(', ') || 'n/a'}):\n` +
+        members.map((m) => `- ${(m.level2Essential ?? m.content).slice(0, 200)}`).join('\n');
+      const created = await store.add({
+        content,
+        directory: members[0].directory,
+        day: new Date().toISOString().split('T')[0],
+        keywords: [...new Set(members.flatMap((m) => m.keywords))].slice(0, 8),
+        sessionId: 'dream',
+        memoryType: 'semantic',
+        source: 'dream_proposal',
+        verified: true, // a human just approved it
+        verificationReason: 'human',
+      });
+      return `promoted to semantic memory ${created.id.slice(0, 8)}…`;
+    }
+
+    case 'merge_cluster': {
+      const ids: string[] = payload.clusterIds;
+      if (ids.length < 2) return 'cluster too small to merge';
+      const [target, ...sources] = ids;
+      for (const src of sources) await store.merge(src, target, {});
+      return `merged ${sources.length} trace(s) into ${target.slice(0, 8)}…`;
+    }
+
+    case 'contradiction': {
+      const r = await store.contradict!(payload.winnerId, payload.loserId, {
+        reason: payload.reason,
+        createdBy: 'human', // approved by the human gate
+      });
+      return r.contradiction
+        ? `contradiction applied — loser at ${r.loser.saillance}/100`
+        : 'contradiction filed again as proposal';
+    }
+
+    case 'close_stale_loop': {
+      await store.updateIntentionStatus(payload.intentionId, 'closed', {});
+      return `stale loop ${payload.intentionId.slice(0, 8)}… closed`;
+    }
+
+    case 'update_agents_md': {
+      return `suggested AGENTS.md addition (paste it yourself):\n${payload.drafted ?? payload.suggestion ?? ''}`;
+    }
+  }
+}

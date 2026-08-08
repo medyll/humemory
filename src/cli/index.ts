@@ -590,6 +590,74 @@ intent
     console.log();
   });
 
+// === DREAM (Phase 6.1) ===
+const dream = program.command('dream').description('Cross-session consolidation (dreaming)');
+
+dream
+  .command('run', { isDefault: true })
+  .description('Detect recurring patterns across sessions/agents and file proposals')
+  .action(async () => {
+    const s = getStore();
+    const { runDreamer } = await import('../core/dreamer.js');
+
+    const report = await runDreamer({ store: s });
+    console.log(`\n🌙 Dream report`);
+    console.log(`  Traces considered: ${report.considered}`);
+    console.log(`  Clusters found: ${report.clusters}`);
+    console.log(`  Proposals filed: ${report.filed} (${report.expired} expired)`);
+    if (report.staleLoopCandidates) console.log(`  Stale loops spotted: ${report.staleLoopCandidates}`);
+    const pending = report.proposals.length;
+    if (pending) console.log(`\n  ${pending} dream(s) pending — run \`pnpm cli dream review\`.`);
+  });
+
+dream
+  .command('review')
+  .description('List pending dream proposals')
+  .action(async () => {
+    const s = getStore();
+    const pending = await s.listDreamProposals!({ status: 'pending' });
+
+    if (!pending.length) {
+      console.log('No dream pending.');
+      return;
+    }
+    console.log(`\n🌙 ${pending.length} dream(s) pending:\n`);
+    for (const p of pending) {
+      const payload = JSON.parse(p.payload);
+      console.log(`  [${p.kind}] ${p.id.slice(0, 8)}… — confidence ${p.confidence}`);
+      if (payload.samples) for (const s2 of payload.samples) console.log(`      · ${s2}`);
+      if (payload.content) console.log(`      · ${payload.content}`);
+      if (payload.expiresAt || p.expiresAt) console.log(`      expires ${p.expiresAt?.toISOString().split('T')[0]}`);
+      console.log();
+    }
+  });
+
+for (const verb of ['approve', 'reject'] as const) {
+  dream
+    .command(`${verb} <id>`)
+    .description(`${verb === 'approve' ? 'Apply' : 'Archive'} a dream proposal (human gate)`)
+    .action(async (id) => {
+      const s = getStore();
+
+      const pending = await s.listDreamProposals!({ status: 'pending', includeExpired: true });
+      const target = pending.find((p) => p.id === id || p.id.startsWith(id));
+      if (!target) {
+        console.error(`✗ No pending dream matches ${id}`);
+        process.exit(1);
+      }
+
+      if (verb === 'approve') {
+        const { applyDreamProposal } = await import('../core/dreamer.js');
+        const effect = await applyDreamProposal(s, target);
+        await s.resolveDreamProposal!(target.id, 'approved');
+        console.log(`✓ Dream approved — ${effect}`);
+      } else {
+        await s.resolveDreamProposal!(target.id, 'rejected');
+        console.log(`✓ Dream rejected — it will not resurface unless the pattern recurs.`);
+      }
+    });
+}
+
 // Parse and run
 program.parse();
 

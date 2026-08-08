@@ -9,6 +9,7 @@ import type {
   Intention, IntentionStatus, IntentionStore, NewIntention,
   Cue, CueKind, CueStatus, NewCue, TriggerSpec,
   VerificationReason, Contradiction, ContradictResult,
+  DreamProposal, DreamKind, DreamStatus,
 } from '../core/types.js';
 import { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay, DECAY_CONFIG } from '../core/decay.js';
 import { createHash } from 'crypto';
@@ -968,6 +969,96 @@ export class SQLiteStore implements MemoryStore, IntentionStore {
       agent: row.agent || undefined,
       status: row.status,
     };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Dreaming (Phase 6.1) — proposals
+  // ───────────────────────────────────────────────────────────────────────────
+
+  private rowToDream(row: any): DreamProposal {
+    return {
+      id: row.id,
+      kind: row.kind,
+      payload: row.payload,
+      payloadHash: row.payload_hash,
+      status: row.status,
+      confidence: row.confidence,
+      createdAt: new Date(row.created_at),
+      expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
+      resolvedAt: row.resolved_at ? new Date(row.resolved_at) : undefined,
+      resolvedBy: row.resolved_by || undefined,
+    };
+  }
+
+  async fileDreamProposal(p: {
+    kind: DreamKind;
+    payload: string;
+    payloadHash: string;
+    confidence?: number;
+    expiresAt?: Date;
+  }): Promise<boolean> {
+    let inserted = false;
+    await this.enqueueWriteWithLock(async () => {
+      const res = this.db
+        .query(
+          `INSERT OR IGNORE INTO dream_proposals (id, kind, payload, payload_hash, status, confidence, created_at, expires_at)
+           VALUES ($id, $kind, $payload, $hash, 'pending', $conf, $at, $exp)`
+        )
+        .run({
+          $id: crypto.randomUUID(),
+          $kind: p.kind,
+          $payload: p.payload,
+          $hash: p.payloadHash,
+          $conf: p.confidence ?? 0,
+          $at: this.clock.now().getTime(),
+          $exp: p.expiresAt?.getTime() ?? null,
+        });
+      inserted = res.changes > 0;
+    });
+    return inserted;
+  }
+
+  async listDreamProposals(options: { status?: DreamStatus; includeExpired?: boolean } = {}): Promise<DreamProposal[]> {
+    const conditions: string[] = [];
+    const params: any = {};
+    if (options.status) {
+      conditions.push('status = $status');
+      params.$status = options.status;
+    }
+    if (!options.includeExpired) {
+      conditions.push("(expires_at IS NULL OR expires_at > $now OR status != 'pending')");
+      params.$now = this.clock.now().getTime();
+    }
+    const sql =
+      'SELECT * FROM dream_proposals' + (conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '') +
+      ' ORDER BY confidence DESC, created_at DESC';
+    return (this.db.query(sql).all(params) as any[]).map((r) => this.rowToDream(r));
+  }
+
+  async resolveDreamProposal(id: string, status: 'approved' | 'rejected', resolvedBy?: string): Promise<DreamProposal> {
+    const row = this.db.query('SELECT * FROM dream_proposals WHERE id = $id').get({ $id: id }) as any;
+    if (!row) throw new Error(`Dream proposal ${id} not found`);
+    if (row.status !== 'pending') throw new Error(`Dream proposal ${id} is ${row.status}, not pending`);
+    await this.enqueueWriteWithLock(async () => {
+      this.db
+        .query('UPDATE dream_proposals SET status = $s, resolved_at = $at, resolved_by = $by WHERE id = $id')
+        .run({ $s: status, $at: this.clock.now().getTime(), $by: resolvedBy ?? 'cli', $id: id });
+    });
+    return this.rowToDream(this.db.query('SELECT * FROM dream_proposals WHERE id = $id').get({ $id: id }));
+  }
+
+  async expireDreamProposals(): Promise<number> {
+    let count = 0;
+    await this.enqueueWriteWithLock(async () => {
+      const res = this.db
+        .query(
+          `UPDATE dream_proposals SET status = 'expired'
+           WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= $now`
+        )
+        .run({ $now: this.clock.now().getTime() });
+      count = res.changes;
+    });
+    return count;
   }
 
   // ───────────────────────────────────────────────────────────────────────────

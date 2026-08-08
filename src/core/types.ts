@@ -114,6 +114,36 @@ export interface ContradictResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Dreaming (Phase 6.1) — cross-session consolidation
+//
+// The dreamer detects recurring patterns across sessions and agents, then
+// *proposes*. Nothing touches `memories` or AGENTS.md without explicit human
+// approval.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DreamKind =
+  | 'promote_semantic'
+  | 'merge_cluster'
+  | 'update_agents_md'
+  | 'contradiction'
+  | 'close_stale_loop';
+
+export type DreamStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface DreamProposal {
+  id: string;
+  kind: DreamKind;
+  payload: string;          // JSON: cluster ids, drafted consolidated content
+  payloadHash: string;      // stable hash of sorted cluster ids + kind → idempotent
+  status: DreamStatus;
+  confidence: number;       // 0..1, cluster size × mean baseTrust
+  createdAt: Date;
+  expiresAt?: Date;
+  resolvedAt?: Date;
+  resolvedBy?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Prospective memory (Phase 5) — intentions and cues
 //
 // An `Intention` is an open loop: "tomorrow, refactor fn X". You do not search
@@ -258,4 +288,11 @@ export interface MemoryStore {
   revokeContradiction?(id: string): Promise<Contradiction>;
   /** Phase 6.0.2 — active (or all) contradictions, for the context block and audits. */
   listContradictions?(options?: { loserId?: string; status?: 'active' | 'revoked' }): Promise<Contradiction[]>;
+  /** Phase 6.1 — dream proposals: list (default pending, non-expired) and resolve. */
+  listDreamProposals?(options?: { status?: DreamStatus; includeExpired?: boolean }): Promise<DreamProposal[]>;
+  resolveDreamProposal?(id: string, status: 'approved' | 'rejected', resolvedBy?: string): Promise<DreamProposal>;
+  /** Phase 6.1 — insert a proposal, deduped by (kind, payload_hash). Returns false if it already existed. */
+  fileDreamProposal?(p: { kind: DreamKind; payload: string; payloadHash: string; confidence?: number; expiresAt?: Date }): Promise<boolean>;
+  /** Phase 6.1 — mark pending proposals past their expires_at as expired. Returns the count. */
+  expireDreamProposals?(): Promise<number>;
 }
