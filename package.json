@@ -49,6 +49,7 @@
   "engines": {
     "bun": ">=1.0.0"
   },
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "bun run --watch src/cli/index.ts",
     "build": "tsc -p tsconfig.json && bun run build:web",

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # humemory runs under bun, not node: the store uses `bun:sqlite`, which
+      # node's ESM loader cannot resolve. No node-version matrix here — unlike
+      # a plain-node package, testing "does this work under several node
+      # versions" is meaningless when node never runs the suite.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test
+
+      # Tests are hermetic by project rule (docs/TESTING.md): in-memory SQLite,
+      # injectable clock, stubbed LLMClient, no network. Nothing here needs
+      # credentials, so there is no separate "smoke" job to skip.
