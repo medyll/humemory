@@ -9,15 +9,22 @@ For the project's identity and "why", read [README.md](./README.md) first.
 
 ## 🎯 Vision — two halves of a brain
 
-humemory has two halves. The first is built. The second is the direction
-(**Direction 1**, chosen 2026-06-17) that gives the project its purpose.
+humemory has two halves, both built as of Phase 8 (2026-08-08). The direction
+was **Direction 1**, chosen 2026-06-17; everything below is the shipped result.
 
 1. **Retrospective** ✅ — past learnings **decay** through 5 levels (detail → summary
    → essential → keywords → lost/merged); recall reinforces; inverse search hits the
    degraded layers first.
-2. **Prospective** 🎯 — intentions that fire on a **cue** (time/event), **Zeigarnik**
+2. **Prospective** ✅ — intentions that fire on a **cue** (time/event), **Zeigarnik**
    open loops that stay salient until a `commit` closes them, and context-triggered
-   **scripts**. A memory that resurfaces *before* it is queried. See **Phase 5**.
+   **scripts** that fade on disuse rather than time. A memory that resurfaces
+   *before* it is queried. See Phases 5 and 8.
+
+On top of both: a **trust layer** (Phase 6) so several agents can write to one
+store without a wrong lesson becoming indestructible, a **dreamer** (6.1) that
+proposes cross-session/cross-agent patterns for human review, an **MCP server**
+(6.2) so Claude/Codex/Kimi/OpenCode share one memory, and **vector search**
+(Phase 7) as an opt-in second retrieval lane alongside BM25.
 
 The conceptual source for the prospective half is `SCRATCHPAD.md` (memoire
 prospective, scripts cognitifs, effet Zeigarnik).
@@ -179,11 +186,7 @@ salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `cl
 `GET /intentions`, `POST /intentions/:id/{close,fire}`, `POST /cues`, `POST /events`,
 `POST /cues/resolve` — in `src/api/intentions-routes.ts`, mounted by the server.
 
-**Cognitive scripts → Phase 8.** Spec drafted 2026-08-08 in
-**[PHASE8_PLAN.md](./PHASE8_PLAN.md)** (pending approval): cue-triggered,
-versioned drill bundles injected into the session context — the template /
-chained-intentions / system-prompt / tool-bundle alternatives are explicitly
-rejected in the plan's Goal section.
+**Cognitive scripts → Phase 8 ✅ shipped (2026-08-08).** See below.
 
 ### 🎯 Phase 6 — Trusted memory & "Dreaming" ✅ shipped (2026-08-08)
 > Approved plan in **[PHASE6_PLAN.md](./PHASE6_PLAN.md)**. Summary below.
@@ -237,6 +240,57 @@ Server entry: `bun run src/mcp/server.ts` (stdio). Every agent MUST set its
 own `HUMEMORY_AGENT` — attribution is what powers cross-agent `reused`
 verification and the dreamer's cross-agent recurrence signal.
 
+### 🎯 Phase 8 — Cognitive scripts ✅ shipped (2026-08-08)
+> Approved plan in **[PHASE8_PLAN.md](./PHASE8_PLAN.md)**. Drafted by Kimi, annotated
+> and implemented (8.4/8.5, plus contradictions-target-scripts) by Claude after Kimi
+> ran out of quota mid-phase. Dialogue log: [PHASE8_DIALOG.md](./PHASE8_DIALOG.md).
+
+**Goal:** not "remember this fact" but "when this situation occurs, run this
+drill" — a named, cue-triggered, versioned bundle of ordered steps, injected as
+one block into the session context when its cue fires. Explicitly rejected
+shapes: template (steps are data, not text interpolation), chained intentions
+(a script has its own lifecycle, not a re-implementation of one on a model that
+has none), permanent system prompt (fires on context, not every session), tool
+bundle (scripts are markdown any CLI agent reads, humemory stays agent-agnostic).
+
+- **8.1 — data model.** `scripts` table (draft/active/archived, fire-bumped
+  saillance, `pinned` = photographic equivalent, same 6.0.1 provenance columns
+  as intentions). `cues` rebuilt from `intention_id` to generic
+  `target_kind`/`target_id` so one cue mechanism arms intentions or scripts —
+  the project's first non-additive migration (SQLite table rebuild:
+  create-new/copy/drop/rename, reused twice more below).
+- **8.2 — injection.** One drill per context block max (two firing together is
+  a smell, not a case to accommodate); tie-break on *effective* saillance
+  (disuse included, not the raw value). Same 6.0.3 sandboxing as traces:
+  human-authored renders bare, everything else wrapped in
+  `<humemory-untrusted>`, escape-attempt telemetry on every render path.
+- **8.3 — authoring & trust.** Three paths: human (`script add` → active
+  directly), agent (`script propose` → draft, human activates), dreamer-mined
+  (→ draft, see 8.5). Draft scripts never fire.
+- **8.4 — disuse decay, the inverse Zeigarnik.** Scripts fade on *disuse*, not
+  time: active + unfired 60 days → −10 saillance/month past the grace period;
+  under 20 → auto-archived (searchable, never injected) with a `script_archived`
+  dream-proposal notice so the archival is human-visible; firing resets the
+  clock entirely; `pinned` scripts are exempt. **Correction kills the
+  script:** `contradictions.loser_id` now targets a script as well as a memory
+  (`loser_kind` column, same table-rebuild migration pattern as 8.1's cues) — a
+  memory contradicting a script archives it outright (not a saillance
+  collapse, that scale already means disuse) rather than proposal-gated
+  (scripts carry no `verified` field to be asymmetric about). Revocation
+  restores `active` but leaves cues cancelled — re-arming stays a deliberate
+  human act.
+- **8.5 — dreamer mining.** A `script_candidate` proposal kind: a "correction"
+  is redefined as a trace that **won an active contradiction** (reusing 6.0.2
+  rather than inventing a new tag) — cluster ≥2 corrections sharing a
+  directory, draft steps from the raw content (oldest first, capped, no LLM),
+  file as a proposal. Approval lands the script as `draft`, never `active` —
+  same "reviewer saw a summary, not every word" caution already applied to
+  `promote_semantic`.
+
+CLI: `pnpm cli script {add,list,activate,archive,fire}`, `contradict` now
+accepts a script id as the loser. API: `POST/GET /scripts`,
+`POST /scripts/:id/{activate,archive,fire}`.
+
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
 - **Phase 7: vector memory** ✅ shipped (2026-08-08) — `Embedder` interface +
@@ -260,7 +314,10 @@ verification and the dreamer's cross-agent recurrence signal.
 
 ## 🐛 Known issues
 - ~~SQLite multi-process: advisory lock~~ — fixed in Sprint 5 (S5-00a): WAL + write-queue (Sprint 4) plus file-based cross-process `AdvisoryLock`.
-- `tests/fixtures/` missing — suites seed ad hoc literals (BUG-05, due with S5-00b).
+- ~~`tests/fixtures/` missing~~ — closed: `tests/fixtures/{memories,events,loops}.basic.json` +
+  `tests/helpers/fixtures.ts` shipped with S5-00b. New Phase 6/7/8 suites still lean on inline
+  literals for scenario-specific content (fine per [docs/TESTING.md](./docs/TESTING.md)'s own
+  rule — a fixture is for shared corpora, not a one-off case a test is *about*).
 - `vitest.config.ts` orphaned; suite runs under `bun test` (BUG-06).
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 

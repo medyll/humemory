@@ -213,12 +213,18 @@ function renderMarkdown(input: {
     const lastFired = script.lastFiredAt ? humanizeAge(script.lastFiredAt, now) : 'never';
     lines.push('', `### 📋 Script: ${script.name} (fired ${script.fireCount}×, last ${lastFired})`);
     const desc = sanitizeTrace(script.description);
+    // Escape-attempt telemetry (6.0.3/R3-B11) was missing for scripts —
+    // flagged twice in PHASE8_DIALOG.md, closed here: same accounting as
+    // the trace loop below, keyed on the script id since a script has no
+    // per-step id of its own.
+    if (desc.escapedMarkers > 0) escapeAttempts.push({ memoryId: script.id, count: desc.escapedMarkers });
     lines.push(`> ${oneLine(desc.text)}`);
     // Same injection rules as traces (6.0.3): human-authored renders bare,
     // agent/dreamer-authored stays wrapped.
     const bare = script.source === 'human';
     script.steps.slice(0, SCRIPT_STEP_CAP).forEach((step, i) => {
       const s = sanitizeTrace(step);
+      if (s.escapedMarkers > 0) escapeAttempts.push({ memoryId: script.id, count: s.escapedMarkers });
       const body = bare
         ? oneLine(s.text)
         : wrapUntrusted(oneLine(s.text), { source: script.source, agent: script.agent, id: script.id });
