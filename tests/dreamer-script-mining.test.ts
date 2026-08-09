@@ -38,10 +38,11 @@ async function seedCorrections(store: any, n: number, opts: { directory?: string
 
 describe('dreamer script mining (8.5)', () => {
   test('a directory with ≥2 clustered corrections files a script_candidate proposal', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 2);
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.scriptCandidates).toBe(1);
     const p = report.proposals.find((x) => x.kind === 'script_candidate')!;
     expect(p).toBeDefined();
@@ -52,36 +53,40 @@ describe('dreamer script mining (8.5)', () => {
   });
 
   test('a single correction does not qualify — one is not a pattern', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 1);
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.scriptCandidates).toBe(0);
     expect(report.proposals.some((p) => p.kind === 'script_candidate')).toBe(false);
   });
 
   test('corrections in different directories do not combine into one script', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 1, { directory: '/tmp/a' });
     await seedCorrections(store, 1, { directory: '/tmp/b' });
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     // Each directory has only 1 correction — below the min cluster size on its own.
     expect(report.scriptCandidates).toBe(0);
   });
 
   test('idempotent: a second run does not refile the same candidate', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 2);
 
-    const first = await runDreamer({ store });
+    const first = await runDreamer({ store, clock });
     expect(first.scriptCandidates).toBe(1);
-    const second = await runDreamer({ store });
+    const second = await runDreamer({ store, clock });
     expect(second.scriptCandidates).toBe(0); // already pending, dedup by payload_hash
   });
 
   test('a revoked contradiction does not count as a correction', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const winnerIds = await seedCorrections(store, 2);
     const contradictions = await store.listContradictions!({ status: 'active' });
     // Revoke every contradiction won by the first winner.
@@ -89,16 +94,17 @@ describe('dreamer script mining (8.5)', () => {
       await store.revokeContradiction!(c.id);
     }
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     // Only one correction left (winnerIds[1]) — below the min cluster size.
     expect(report.scriptCandidates).toBe(0);
   });
 
   test('approving a script_candidate drafts a script, never active', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 2);
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     const p = report.proposals.find((x) => x.kind === 'script_candidate')!;
 
     const effect = await applyDreamProposal(store, p);
@@ -112,10 +118,11 @@ describe('dreamer script mining (8.5)', () => {
   });
 
   test('mining only ever creates proposals — never touches memories or scripts directly', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCorrections(store, 3);
 
-    await runDreamer({ store });
+    await runDreamer({ store, clock });
     // No script exists until a human approves the proposal.
     expect((await store.listScripts({ status: 'draft' })).length).toBe(0);
     expect((await store.listScripts({ status: 'active' })).length).toBe(0);

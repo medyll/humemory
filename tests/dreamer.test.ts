@@ -28,11 +28,12 @@ async function seedCluster(store: any, n: number, opts: { sessions?: number; age
 
 describe('dreamer', () => {
   test('a qualifying cluster (≥3 traces, ≥2 sessions) files exactly one proposal', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
     await store.add({ ...base, content: 'unrelated cooking recipe tomato basil', keywords: ['cooking'], sessionId: 's9' });
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.filed).toBe(1);
     const p = report.proposals.find((x) => x.kind === 'promote_semantic')!;
     expect(p).toBeDefined();
@@ -41,28 +42,32 @@ describe('dreamer', () => {
   });
 
   test('a single-session cluster does not qualify — but 2 agents do', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 1 });
-    let report = await runDreamer({ store });
+    let report = await runDreamer({ store, clock });
     expect(report.filed).toBe(0);
 
-    const store2 = freshStore({ clock: fakeClock(T0) });
+    const clock2 = fakeClock(T0);
+    const store2 = freshStore({ clock: clock2 });
     await seedCluster(store2, 2, { sessions: 1, agents: ['claude', 'codex'] });
-    report = await runDreamer({ store: store2 });
+    report = await runDreamer({ store: store2, clock: clock2 });
     expect(report.filed).toBe(1);
   });
 
   test('invariant: cluster confidence uses baseTrust only (R1, no feedback loop)', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const ids = await seedCluster(store, 3, { sessions: 3 });
     // Verify all members with the strongest reason — must NOT change confidence
-    const r1 = await runDreamer({ store });
+    const r1 = await runDreamer({ store, clock });
     const c1 = r1.proposals.find((x) => x.kind === 'promote_semantic')!.confidence;
 
-    const store2 = freshStore({ clock: fakeClock(T0) });
+    const clock2 = fakeClock(T0);
+    const store2 = freshStore({ clock: clock2 });
     const ids2 = await seedCluster(store2, 3, { sessions: 3 });
     for (const id of ids2) await store2.verify(id, 'human');
-    const r2 = await runDreamer({ store: store2 });
+    const r2 = await runDreamer({ store: store2, clock: clock2 });
     const c2 = r2.proposals.find((x) => x.kind === 'promote_semantic')!.confidence;
 
     expect(c1).toBe(c2);
@@ -70,21 +75,23 @@ describe('dreamer', () => {
   });
 
   test('idempotent: a second run on a frozen store files zero new proposals', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
-    await runDreamer({ store });
-    const second = await runDreamer({ store });
+    await runDreamer({ store, clock });
+    const second = await runDreamer({ store, clock });
     expect(second.filed).toBe(0);
   });
 
   test('rejected proposals are not resurrected by the next run', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
-    const r = await runDreamer({ store });
+    const r = await runDreamer({ store, clock });
     const p = r.proposals.find((x) => x.kind === 'promote_semantic')!;
     await store.resolveDreamProposal(p.id, 'rejected');
 
-    const second = await runDreamer({ store });
+    const second = await runDreamer({ store, clock });
     expect(second.filed).toBe(0); // same payload_hash → INSERT OR IGNORE no-op
   });
 
@@ -92,21 +99,22 @@ describe('dreamer', () => {
     const clock = fakeClock(T0);
     const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
-    await runDreamer({ store });
+    await runDreamer({ store, clock });
 
     clock.advance((DREAM_CONFIG.proposalTtlDays + 1) * 24 * 3600_000);
-    const second = await runDreamer({ store });
+    const second = await runDreamer({ store, clock });
     expect(second.expired).toBe(1);
     const pending = await store.listDreamProposals({ status: 'pending' });
     expect(pending.length).toBe(0);
   });
 
   test('contradicted losers are excluded from clustering', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const ids = await seedCluster(store, 3, { sessions: 3 });
     const winner = await store.add({ ...base, content: 'winner', sessionId: 'sx' });
     await store.contradict!(winner.id, ids[0], {});
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.considered).toBe(3); // 4 seeded - 1 contradicted loser
   });
 
@@ -120,7 +128,7 @@ describe('dreamer', () => {
       .run({ $old: Date.parse(T0) - 40 * 24 * 3600_000, $id: intention.id });
     (store as any).db.query('UPDATE memories SET current_level = 3 WHERE id = $id').run({ $id: mem.id });
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.staleLoopCandidates).toBe(1);
     const p = report.proposals.find((x) => x.kind === 'close_stale_loop')!;
     expect(p).toBeDefined();
@@ -133,9 +141,10 @@ describe('dreamer', () => {
   });
 
   test('approve promote_semantic creates a verified dream_proposal memory', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
-    const r = await runDreamer({ store });
+    const r = await runDreamer({ store, clock });
     const p = r.proposals.find((x) => x.kind === 'promote_semantic')!;
 
     const effect = await applyDreamProposal(store, p);
@@ -153,16 +162,18 @@ describe('dreamer', () => {
   });
 
   test('resolve twice refuses — a resolved proposal is final', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     await seedCluster(store, 3, { sessions: 3 });
-    const r = await runDreamer({ store });
+    const r = await runDreamer({ store, clock });
     const p = r.proposals.find((x) => x.kind === 'promote_semantic')!;
     await store.resolveDreamProposal(p.id, 'rejected');
     await expect(store.resolveDreamProposal(p.id, 'approved')).rejects.toThrow('not pending');
   });
 
   test('cross-agent recurrence across sessions and directories earns `corroborated`', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const ids: string[] = [];
     for (let i = 0; i < 2; i++) {
       const m = await store.add({
@@ -176,7 +187,7 @@ describe('dreamer', () => {
       ids.push(m.id);
     }
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.corroborated).toBe(2);
     for (const id of ids) {
       const m = await store.getById(id);
@@ -186,18 +197,20 @@ describe('dreamer', () => {
   });
 
   test('agreement is not independence: same directory earns nothing (R1 defect 1)', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     // Two agents, two sessions — but both read the same place. One source
     // wearing two names must not verify itself.
     await seedCluster(store, 2, { sessions: 2, agents: ['claude', 'codex'] });
 
-    const report = await runDreamer({ store });
+    const report = await runDreamer({ store, clock });
     expect(report.filed).toBe(1);        // still worth proposing
     expect(report.corroborated).toBe(0); // but not evidence
   });
 
   test('corroboration never downgrades a stronger existing reason', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const ids: string[] = [];
     for (let i = 0; i < 2; i++) {
       const m = await store.add({
@@ -212,7 +225,7 @@ describe('dreamer', () => {
     }
     await store.verify(ids[0], 'human');
 
-    await runDreamer({ store });
+    await runDreamer({ store, clock });
     expect((await store.getById(ids[0]))!.verificationReason).toBe('human');
     expect((await store.getById(ids[1]))!.verificationReason).toBe('corroborated');
   });
