@@ -1,5 +1,101 @@
 # Changelog
 
+## [0.2.1] - 2026-08-09
+**Features:**
+- correction kills the script — contradictions target scripts too
+- script_candidate dreamer mining from contradiction winners
+- archival notice — script_archived dream proposal on disuse
+- script injection into the SessionStart block
+- script CLI + API with draft gate
+- scripts table + cues target_kind migration + resolver fan-out
+- round 4 — bge-m3 default, per-model cluster thresholds, calibration CLOSED
+- --window <days> CLI flag + DreamOptions.windowDays override
+- e5-base round 2 — corroboration re-enabled at 0.855, defaults flipped
+- calibrate vector thresholds — cluster 0.855, vector corroboration disabled (e5-small overlap)
+- vector memory — embedders, vector clusterer, hybrid search
+- MCP server — one unified memory for every agent
+- dreaming — cross-session consolidation with human gate
+- contradictions — collapse without deletion
+- version derived levels before merge overwrite + unmerge
+- provenance & evidence-earned trust layer
+- injection hardening on SessionStart re-injection
+- serve the React app at /, keep the vanilla dashboard at /legacy
+- replay, merge, encoding and advanced filters — parity reached
+- port the dashboard views to React — wrapped, not rewritten
+- prospective tab — loops, tension, cues, closure
+- React shell — bun bundler, shared types, component tests
+- post-commit hook — a commit closes the loop
+- CLI intent commands + prospective HTTP routes
+- SessionStart hook — inject open loops as context
+- cue resolver — time cues, event cues, expiry
+- prospective data model — intentions & cues tables
+- autonomous test environment — clock seam + event bus
+- add status snapshot for development phase and sprint progress
+- implement cross-process advisory lock for SQLite (closes Bug #3)
+- add internal script runner for bmad-method skill
+- update README.md with usage instructions and examples; add three.js dependency
+- consolidate documentation into README.md, add testing guidelines
+- SQLite WAL mode, write queue serialization, build docs
+- photographic badge, merge UI, filtres avancés
+- photographic mode — désactiver dégradation pour traces critiques
+- search enrichie — filtres type, date, saillance, recalls
+- hook agent Claude Code — parse sessions, extraction apprentissages
+- détection et fusion de souvenirs similaires
+- auto-génération niveaux N1/N2/N3 via LLM
+
+**Bug Fixes:**
+- thread the fake clock into every runDreamer() call
+- round 3 — hard negatives falsify the 0.855 gate, corroboration back OFF
+- establish agent identity instead of accepting it
+- implement corroboration, stop dream output rendering bare
+- prevent path traversal in static handlers + land roadmap dashboard work
+- update dev scripts to use bun and add mcp.json for context-mode
+- migrate better-sqlite3 → bun:sqlite, fix build config
+
+**Documentation:**
+- re-flag escapedMarkers gap in script rendering — shipped in 8.2 unfixed
+- note escapedMarkers not counted for script steps in 8.2 WIP
+- note the leftover intention_id call site breaking the cues rebuild
+- annotate the Phase 8 draft, answer Kimi's three open questions
+- cognitive scripts spec — cue-triggered drill bundles, draft pending approval
+- reply to round 4 — calibration closed, per-model thresholds are the right shape
+- reply to round 3 — agree hard negatives need a stronger signal, not more fixture
+- reply on the Phase 7 dialog log
+- fix the sequencing row that still said embed-on-add
+- integrate Claude's annotations A1-A5 into the plan
+- annotate the Phase 7 draft against the tree at 8bd4d50
+- Phase 7 draft plan — vector memory (embeddings)
+- mark Phase 6 shipped in the roadmap (6.0.3 → 6.2)
+- approve Phase 6 plan — trusted memory & dreaming
+
+**Tests:**
+- attribute-injection defence on the untrusted marker
+
+**Chores:**
+- ship .mcp.json + per-agent MCP registration table
+- untrack .claude/settings.local.json (local file)
+- gitignore PROPOSAL.md (agent collaboration draft)
+- MIT license, and the whole codebase in English
+- remove the vanilla dashboard
+- prepare the 0.2.0 release
+- clear the tracked debt — testable routes, hermetic suites
+- resync status with actual code state
+- record 37/37 test pass after bun install — QA-02 resolved
+- status Sprint 3 UX done — 98% progress
+- status Sprint 2 completed — 37/37 tests, 95% progress
+- init bmad-method with project status, bugs, roadmap
+
+**CI/CD:**
+- add GitHub Actions CI + release workflows
+
+**Other:**
+- docs+fix: close the three gaps between the code and its own record
+- Refactor TracesTab and related components for improved clarity and consistency
+- audit: fix 3 critical issues
+- init: initial commit
+
+
+
 Notable changes to humemory. Format loosely follows [Keep a Changelog](https://keepachangelog.com/);
 versions are pre-1.0, so minor bumps carry breaking changes when they need to.
 
