@@ -236,8 +236,9 @@ top and trusted.
 
 All suites are now hermetic in this sense (BUG-05 closed): `humemory.test.ts` runs
 on `freshStore()` with a frozen clock, `agent.test.ts` drives `processSession`
-against `':memory:'`, and `llm-generator.test.ts` never touched a database. No
-test writes a file, so nothing is left behind when one fails.
+against `':memory:'`, and `llm-generator.test.ts` never touched a database.
+Filesystem behavior such as the maintenance queue uses a unique temporary root
+per test and removes it after each run; production data is never touched.
 
 Inline literals are still fine where the test *is about* that specific content —
 a photographic-mode test needs its own trace. Fixtures are for shared corpora and

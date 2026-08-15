@@ -42,6 +42,7 @@ pnpm cli <cmd>      # run CLI directly
 pnpm test           # bun test, single pass
 pnpm test:watch     # bun test --watch
 pnpm consolidate    # manual decay pass (cron-friendly)
+pnpm maintenance    # process queued sessions (network-free by default)
 ```
 
 Single test file: `bun test tests/humemory.test.ts`
@@ -56,13 +57,15 @@ src/
 │   ├── types.ts          # Memory, DecayLevel, SearchQuery, MemoryStore iface
 │   ├── decay.ts          # degradation curve + thresholds
 │   ├── search.ts         # inverse search (BM25, degraded-first)
-│   └── llm-generator.ts  # auto-generate L1/L2/L3 via Claude Haiku (prompt cache)
+│   └── llm-generator.ts  # deterministic L1/L2/L3; optional injected LLM
 ├── store/
 │   └── sqlite.ts         # bun:sqlite store (WAL), findSimilar/merge/setPhotographic
 ├── agent/
 │   ├── session-parser.ts     # parse Claude Code session transcripts
+│   ├── source-registry.ts    # discover local AI runtimes without reading sessions
 │   ├── learning-extractor.ts # extract decisions/bugs/solutions
-│   ├── claude-hook.ts        # Stop-hook → auto-encode session learnings
+│   ├── maintenance-queue.ts  # durable async inbox, session checkpoints, dead-letter
+│   ├── claude-hook.ts        # worker-side session learning encoder
 │   └── session-context.ts    # SessionStart → markdown block (open loops + traces)
 ├── core/
 │   ├── clock.ts              # Clock seam (systemClock / FakeClock)
@@ -73,8 +76,9 @@ src/
 ├── cli/index.ts          # commander CLI
 └── index.ts              # library exports
 web/                      # React front (bun bundler → public/app, served at /app)
-scripts/hook-session.ts        # Claude Code Stop hook → encode learnings
+scripts/hook-session.ts        # Claude Code Stop hook → queue raw session only
 scripts/hook-session-start.ts  # Claude Code SessionStart hook → inject context
+scripts/maintenance-worker.ts  # async extraction/storage; deterministic by default
 tests/                    # bun test (hermetic; helpers/ + fixtures/)
 data/humemory.db          # shared DB (created on first run)
 ```
@@ -149,9 +153,9 @@ clock- and event-driven and cannot be trusted without it.
 - Core decay + inverse search; `bun:sqlite` store (WAL, write-queue serialization)
 - CLI + Hono API + web dashboard ("palais de mémoire")
 - Nightly cron consolidation (`0 3 * * *`)
-- LLM auto-generation of L1/L2/L3 (Claude Haiku + prompt caching)
+- Deterministic L1/L2/L3 generation; optional injected LLM enhancement
 - Similar-detection + merge (L4); enriched search (type/period/saillance/recalls)
-- Photographic mode; Claude Code `Stop` hook → session learning capture
+- Photographic mode; Claude Code `Stop` hook → durable async maintenance queue
 
 ### 🎯 Phase 5 — Prospective memory (the destiny)
 > Detailed corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary below.

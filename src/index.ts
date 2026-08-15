@@ -8,7 +8,7 @@
 export { SQLiteStore } from './store/sqlite.js';
 export { InverseSearchEngine } from './core/search.js';
 export { calculateDecayLevel, calculateSaillance, calculateDecayRate, updateAllDecay, DECAY_CONFIG } from './core/decay.js';
-export { generateMemoryLevels, setLLMClient } from './core/llm-generator.js';
+export { generateMemoryLevels, generateMemoryLevelsDeterministic, setLLMClient } from './core/llm-generator.js';
 export { systemClock, FakeClock } from './core/clock.js';
 export { InMemoryEventBus } from './core/event-bus.js';
 export { SqliteCueResolver, attachResolverToBus, intentionSaillance, parseCron, cronMatches, cronDueSince, eventTriggerMatches, loopId, extractLoopIds, matchIntentionByShortId } from './core/cues.js';
@@ -16,7 +16,9 @@ export { parseCueArg, formatTriggerSpec, CueArgError } from './core/cue-arg.js';
 export { buildSessionContext, humanizeAge, DEFAULT_SESSION_BUDGET, DEFAULT_SAILLANCE_THRESHOLD } from './agent/session-context.js';
 export { processSession } from './agent/claude-hook.js';
 export { parseClaudeHookPayload } from './agent/session-parser.js';
-export { extractLearnings } from './agent/learning-extractor.js';
+export { extractLearnings, extractLearningsDeterministic } from './agent/learning-extractor.js';
+export { enqueueSession, processMaintenanceQueue } from './agent/maintenance-queue.js';
+export { discoverLocalAgentSources, KNOWN_AGENT_SOURCES } from './agent/source-registry.js';
 export type { Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MergeResult,
   Intention, Cue, IntentionStatus, CueStatus, CueKind, TriggerSpec, TimeTriggerSpec, EventTriggerSpec,
   NewIntention, NewCue, IntentionStore } from './core/types.js';
@@ -29,3 +31,5 @@ export type { GeneratedLevels, LLMClient } from './core/llm-generator.js';
 export type { ParsedSession, SessionMessage } from './agent/session-parser.js';
 export type { ExtractedLearning } from './agent/learning-extractor.js';
 export type { HookOptions, HookResult } from './agent/claude-hook.js';
+export type { MaintenanceJob, EnqueueOptions, QueueResult, WorkerOptions, WorkerResult } from './agent/maintenance-queue.js';
+export type { AgentSourceDefinition, AgentSourceId, DiscoveredAgentSource, DiscoveryOptions } from './agent/source-registry.js';

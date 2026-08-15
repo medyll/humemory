@@ -9,6 +9,51 @@ export interface ExtractedLearning {
   level3Keywords: string;
 }
 
+const STOP_WORDS = new Set([
+  'about', 'after', 'again', 'avec', 'cette', 'dans', 'elle', 'from', 'have', 'mais',
+  'pour', 'that', 'this', 'tout', 'une', 'with', 'your', 'être', 'plus', 'then', 'when',
+]);
+
+function deterministicKeywords(content: string): string[] {
+  const words = content
+    .toLocaleLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .match(/[a-z0-9_-]{4,}/g) ?? [];
+  return [...new Set(words.filter((word) => !STOP_WORDS.has(word)))].slice(0, 8);
+}
+
+/** Fast, network-free baseline used whenever no maintenance model is available. */
+export function extractLearningsDeterministic(
+  session: ParsedSession,
+  maxLearnings = 5,
+): ExtractedLearning[] {
+  const unique = new Set<string>();
+  const candidates = session.messages
+    .filter((message) => message.role === 'assistant')
+    .map((message) => message.content.trim())
+    .filter((content) => content.length >= 40)
+    .filter((content) => {
+      const key = content.replace(/\s+/g, ' ').toLocaleLowerCase();
+      if (unique.has(key)) return false;
+      unique.add(key);
+      return true;
+    })
+    .slice(-maxLearnings);
+
+  return candidates.map((content) => {
+    const clipped = content.slice(0, 1_000);
+    const keywords = deterministicKeywords(clipped);
+    const procedural = /\b(fix(?:ed)?|implement(?:ed)?|add(?:ed)?|use|run|step|corrig|ajout|remplac|configur)/i.test(clipped);
+    return {
+      content: clipped,
+      memoryType: procedural ? 'procedural' : 'episodic',
+      keywords,
+      level3Keywords: keywords.join(' '),
+    };
+  });
+}
+
 const SYSTEM_PROMPT = `You are a system that extracts mnemonic learnings.
 Analyse the session and extract the key learnings worth remembering.
 Write them in the same language as the session itself.
@@ -77,17 +122,7 @@ Format JSON requis:
       }))
       .slice(0, maxLearnings);
   } catch {
-    // Fallback: store the last assistant message as single episodic memory
-    const lastAssistant = session.messages.filter(m => m.role === 'assistant').pop();
-    if (!lastAssistant) return [];
-
-    return [
-      {
-        content: lastAssistant.content.slice(0, 500),
-        memoryType: 'episodic',
-        keywords: [],
-        level3Keywords: '',
-      },
-    ];
+    return extractLearningsDeterministic(session, 1)
+      .map((learning) => ({ ...learning, memoryType: 'episodic' }));
   }
 }

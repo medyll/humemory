@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
-import { generateMemoryLevels, type LLMClient } from '../src/core/llm-generator.js';
+import { generateMemoryLevels, setLLMClient, type LLMClient } from '../src/core/llm-generator.js';
 
 function makeMockClient(responseText: string): LLMClient {
   return {
@@ -18,6 +18,22 @@ const VALID_RESPONSE = JSON.stringify({
 });
 
 describe('generateMemoryLevels', () => {
+  test('works locally with no provider or API key', async () => {
+    setLLMClient(null);
+    const result = await generateMemoryLevels('Décision: conserver SQLite comme source canonique et les vecteurs comme index dérivé.');
+
+    expect(result.level1Summary).toContain('SQLite');
+    expect(result.level3Keywords).toContain('sqlite');
+  });
+
+  test('falls back locally when the optional provider is unavailable', async () => {
+    const unavailable: LLMClient = { messages: { create: async () => { throw new Error('quota exhausted'); } } };
+    const result = await generateMemoryLevels('The maintenance flow must never block on a provider quota.', 'semantic', unavailable);
+
+    expect(result.level2Essential).toBeTruthy();
+    expect(result.level3Keywords).toContain('maintenance');
+  });
+
   test('generates 3 levels from the content', async () => {
     const client = makeMockClient(VALID_RESPONSE);
     const result = await generateMemoryLevels(

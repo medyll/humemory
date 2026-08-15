@@ -37,7 +37,8 @@ the curve. A **photographic** flag pins critical traces so they never fade.
 escalates toward full content only on a match — the human recall pattern, fast by
 construction.
 
-A Claude Code `Stop` hook already auto-encodes the learnings of each dev session.
+A Claude Code `Stop` hook can queue each completed session instantly; maintenance
+extracts and stores its learnings afterward, outside the agent's critical path.
 
 ### 2. Prospective memory — *what to resurface* 🎯 the destiny
 
@@ -63,8 +64,36 @@ pnpm install
 pnpm build:web      # bundle the React front (bun's own bundler, no extra tooling)
 pnpm start:api      # API + dashboards → http://localhost:3456
 pnpm cli status     # state of the memory palace
+pnpm cli sources discover # discover local AI runtimes; reads no sessions
 pnpm test           # bun test — backend and React components, one runner
 ```
+
+### Local AI sources — a non-exhaustive registry
+
+humemory keeps acquisition outside the cognitive core: the registry discovers
+local producers, while humemory decides what becomes a trace, how it decays, and
+when it resurfaces. Discovery only checks commands and known data roots; importing
+historical sessions remains an explicit, opt-in step.
+
+The non-exhaustive catalog currently recognizes:
+
+| Runtime | Vendor | Discovery hints |
+| --- | --- | --- |
+| Claude Code | Anthropic | `claude`, `~/.claude` |
+| Codex | OpenAI | `codex`, `~/.codex` |
+| Kimi Code / Kimi Desktop | Moonshot AI | `kimi`, `~/.kimi-code`, desktop data roots |
+| Mistral Vibe | **Mistral AI** | `vibe`, `$VIBE_HOME`, `~/.vibe` |
+| OpenCode | SST | `opencode`, `~/.opencode` |
+| Qwen Code | Alibaba Cloud | `qwen`, `$QWEN_RUNTIME_DIR`, `$QWEN_HOME`, `~/.qwen` |
+| Gemini CLI | Google | `gemini`, `$GEMINI_CLI_HOME`, `~/.gemini` |
+| GitHub Copilot CLI | GitHub | `copilot`, `~/.copilot` |
+| Aider | Aider-AI | `aider`, `~/.aider.conf.yml` |
+| Cursor | Anysphere | `cursor`, desktop data roots |
+| Windsurf | Cognition | `windsurf`, desktop data roots |
+
+An entry means **ready to be discovered**, not that its evolving private session
+format is already parsed. Run `pnpm cli sources discover --installed-only` for a
+local inventory without exposing conversation content.
 
 The React app is served at **`/`** (and `/app`). The original vanilla dashboard
 has been removed — the React front reached parity first, and git keeps the old
@@ -133,7 +162,8 @@ more than leaving one open.
 
 ### Wiring the Claude Code hooks
 
-Two hooks, both optional and both fail-open — neither will ever block a session:
+Two hooks, both optional and both fail-open. `Stop` only writes the raw session to
+a durable local queue; it never waits for a model or a network request:
 
 ```jsonc
 // ~/.claude/settings.json
@@ -143,7 +173,7 @@ Two hooks, both optional and both fail-open — neither will ever block a sessio
     "SessionStart": [{ "matcher": "", "hooks": [
       { "type": "command", "command": "bun /path/to/humemory/scripts/hook-session-start.ts" }
     ]}],
-    // end of session: encodes what was learned
+    // end of session: queues the transcript for asynchronous maintenance
     "Stop": [{ "matcher": "", "hooks": [
       { "type": "command", "command": "bun /path/to/humemory/scripts/hook-session.ts" }
     ]}]
@@ -155,9 +185,34 @@ Two hooks, both optional and both fail-open — neither will ever block a sessio
 fires any due time cues, and writes a markdown block on stdout — which Claude Code
 injects into the session. Nothing relevant means nothing written.
 
+Process queued sessions independently from the agent flow:
+
+```bash
+pnpm maintenance
+```
+
+The default maintenance path is deterministic and network-free. To opt into
+Claude as an asynchronous quality enhancement, set
+`HUMEMORY_MAINTENANCE_LLM=anthropic` and `ANTHROPIC_API_KEY`; quota errors and
+timeouts fall back to the deterministic extractor. A queue item is deleted only
+after its extracted memories are committed successfully.
+
+The queue directory is the whole contract, and it is inspectable at any time:
+
+| Entry | Meaning |
+| --- | --- |
+| `<id>.json` | a session waiting to be encoded, keyed on session — not on transcript content, since `Stop` resends a longer transcript every turn |
+| `<id>.json.processing` | claimed by the running worker; a newer transcript may land on the free `<id>.json` slot meanwhile, and survives |
+| `checkpoints/<id>.json` | how many messages of that session are already encoded, so a resent transcript only contributes its delta |
+| `<id>.dead.json` | gave up after `maxAttempts` (5), or unparseable on disk; never retried, never deleted |
+| `.worker.lock` | single-worker token; a lock left by a dead worker is reclaimed atomically after 5 min |
+
 | Env var | Default | Effect |
 | --- | --- | --- |
 | `HUMEMORY_DB` | `data/humemory.db` | database path |
+| `HUMEMORY_QUEUE` | `data/maintenance-queue` | durable raw-session inbox |
+| `HUMEMORY_MAINTENANCE_LLM` | `none` | optional enhancement (`anthropic`) |
+| `HUMEMORY_MAINTENANCE_TIMEOUT_MS` | `8000` | model timeout; never affects the agent hook |
 | `HUMEMORY_DIR` | `cwd` | mental place to scope loops and traces to |
 | `HUMEMORY_SESSION_BUDGET` | `10` | max items listed per section |
 | `HUMEMORY_SAILLANCE_MIN` | `60` | salience floor for recalling a decayed trace |
@@ -171,10 +226,42 @@ A log remembers everything and reminds you of nothing. A human memory forgets mo
 of it and hands you the one thing that matters, at the moment it matters. humemory
 is an attempt to give an AI agent the second kind.
 
+## A memory engine, not an integration bundle
+
+humemory has a narrow job: decide what deserves to become a memory, how that
+trace changes with time, and when it should return. Everything that brings data
+in sits outside the cognitive core.
+
+- **Connectors live in a registry.** Discovery and future import adapters identify
+  Claude Code, Codex, Kimi, Qwen, Mistral and other local producers; they don't
+  become memory primitives. Adding a source doesn't change decay, recall, trust
+  or cue logic.
+- **SQLite owns the truth.** Provenance, decay levels, intentions, scripts and
+  review decisions remain queryable and recoverable. Vector embeddings form a
+  second, disposable search lane: humemory can rebuild them, change the embedding
+  model or disable semantic search without putting the memory store at risk.
+- **Several agents can share one brain.** MCP and source attribution let Claude,
+  Codex, Kimi, OpenCode and future clients use the same store. Every write keeps
+  its agent and device provenance instead of inheriting one vendor's session model.
+- **Maintenance stays out of the agent's path.** Hooks queue a raw session locally,
+  then exit. A separate worker filters, consolidates and stores it; a slow GPU,
+  a network outage or an exhausted quota doesn't make the agent wait.
+- **LLMs are optional, not governors.** Decay, salience, recall, cues, scripts,
+  trust and deterministic consolidation work without an API key. A configured
+  model may improve the generated text, but failure always returns to the local
+  deterministic path.
+- **Automation stops before judgment.** The dreamer files proposals, agent-authored
+  scripts begin as drafts, and contradictions stay inspectable. A model doesn't
+  silently turn a guess into permanent memory.
+
+Historical absorption stays opt-in. `sources discover` checks commands and known
+paths without reading conversations. Each runtime still needs a parser before
+humemory can import its sessions, and discovery never pretends otherwise.
+
 ## Stack
 
 TypeScript · `bun:sqlite` (WAL) · `flexsearch` (BM25) · `hono` (API) ·
-`commander` (CLI) · `@anthropic-ai/sdk` (level generation).
+`commander` (CLI) · `@anthropic-ai/sdk` (optional maintenance adapter).
 
 ---
 
@@ -202,7 +289,7 @@ The CLI provides several commands to interact with humemory:
   - `-l2, --level2 <essential>`: Essential for consolidation N2
   - `-l3, --level3 <keywords>`: Trace for fast search N3
   - `-t, --type <type>`: Memory type (episodic/semantic/procedural)
-  - `--auto`: Auto-generate N1/N2/N3 via LLM (requires ANTHROPIC_API_KEY)
+  - `--auto`: Auto-generate N1/N2/N3 locally; an injected LLM may enhance them
   - `--photographic`: Photographic mode — disable degradation
 
 - **Search for memory traces**:
@@ -446,9 +533,9 @@ keywords >5. `photographic: true` disables decay entirely.
 - Core decay + inverse search; `bun:sqlite` store (WAL, write-queue serialization)
 - CLI + Hono API + web dashboard ("palais de mémoire")
 - Nightly cron consolidation (`0 3 * * *`)
-- LLM auto-generation of L1/L2/L3 (Claude Haiku + prompt caching)
+- Deterministic L1/L2/L3 generation; optional injected LLM enhancement
 - Similar-detection + merge (L4); enriched search (type/period/saillance/recalls)
-- Photographic mode; Claude Code `Stop` hook → session learning capture
+- Photographic mode; Claude Code `Stop` hook → durable async maintenance queue
 
 ### 🎯 Phase 5 — Prospective memory (the destiny)
 > Corrected plan in **[PHASE5_PLAN.md](./PHASE5_PLAN.md)**. Summary:

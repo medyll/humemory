@@ -8,6 +8,7 @@ import type { IntentionStatus, TriggerSpec } from '../core/types.js';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
+import { discoverLocalAgentSources } from '../agent/source-registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,7 +49,7 @@ program
   .option('-l2, --level2 <essential>', 'Gist for consolidation level 2')
   .option('-l3, --level3 <keywords>', 'Keywords for fast level 3 retrieval')
   .option('-t, --type <type>', 'Memory type (episodic/semantic/procedural)', 'semantic')
-  .option('--auto', 'Auto-generate levels 1-3 through the LLM (needs ANTHROPIC_API_KEY)')
+  .option('--auto', 'Auto-generate levels 1-3 locally (an injected LLM may enhance them)')
   .option('--photographic', 'Photographic mode — disable decay')
   .option('--agent <name>', 'Who is encoding (claude/codex/kimi/…)', 'cli')
   .action(async (content, options) => {
@@ -875,6 +876,26 @@ for (const verb of ['approve', 'reject'] as const) {
       }
     });
 }
+
+// === LOCAL AGENT SOURCES ===
+const sources = program
+  .command('sources')
+  .description('Discover local AI agent runtimes without reading their sessions');
+
+sources
+  .command('discover', { isDefault: true })
+  .description('Show known runtimes and the local evidence found for each one')
+  .option('--installed-only', 'Hide known runtimes that were not found')
+  .action((options) => {
+    const discovered = discoverLocalAgentSources()
+      .filter((source) => !options.installedOnly || source.installed);
+
+    console.log('\nLocal AI sources (discovery only — no session was read):\n');
+    for (const source of discovered) {
+      console.log(`${source.installed ? '✓' : '·'} ${source.name} — ${source.vendor}`);
+      for (const evidence of source.evidence) console.log(`    ${evidence}`);
+    }
+  });
 
 // Parse and run
 program.parse();

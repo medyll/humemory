@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Claude Code Stop hook — reads the transcript from stdin and stores the learnings.
+ * Claude Code Stop hook — durably queues the transcript and exits without an LLM call.
  *
  * Usage dans Claude Code settings.json:
  * {
@@ -10,19 +10,19 @@
  * }
  *
  * Environment variables:
- *   HUMEMORY_DB     — database path (default: data/humemory.db, relative to this script)
+ *   HUMEMORY_QUEUE  — durable inbox (default: data/maintenance-queue)
  *   HUMEMORY_DIR    — project directory (default: cwd)
  *   HUMEMORY_MAX    — max learnings per session (default: 5)
  */
 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { processSession } from '../src/agent/claude-hook.js';
+import { enqueueSession } from '../src/agent/maintenance-queue.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../data/humemory.db');
+const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../data/maintenance-queue');
 const DIRECTORY = process.env.HUMEMORY_DIR ?? process.cwd();
 const MAX_LEARNINGS = parseInt(process.env.HUMEMORY_MAX ?? '5');
 
@@ -39,18 +39,19 @@ async function main() {
   }
 
   try {
-    const result = await processSession(rawInput, {
-      dbPath: DB_PATH,
+    const result = await enqueueSession(rawInput, {
+      queueDir: QUEUE_DIR,
       directory: DIRECTORY,
       maxLearnings: MAX_LEARNINGS,
-      verbose: process.env.HUMEMORY_VERBOSE === '1',
+      source: 'claude-code',
+      agent: process.env.HUMEMORY_AGENT ?? 'claude',
     });
 
-    if (result.memoriesStored > 0) {
-      console.error(`[humemory] ${result.memoriesStored} learning(s) stored — session ${result.sessionId}`);
+    if (process.env.HUMEMORY_VERBOSE === '1') {
+      console.error(`[humemory] session ${result.created ? 'queued' : 'already queued'} — ${result.job.sessionId}`);
     }
   } catch (err) {
-    // Never block Claude Code — log to stderr only
+    // Never block Claude Code — the raw transcript remains with the source on failure.
     console.error(`[humemory] hook error: ${err}`);
   }
 
