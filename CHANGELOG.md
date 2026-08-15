@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-08-15
+**Features:**
+- add async multi-agent session capture
+
+
+
 ## [0.2.1] - 2026-08-09
 **Features:**
 - correction kills the script — contradictions target scripts too
