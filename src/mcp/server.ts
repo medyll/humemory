@@ -25,7 +25,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { SQLiteStore } from '../store/sqlite.js';
 import { trustScore } from '../core/trust.js';
-import { sanitizeTrace } from '../core/sanitize.js';
+import { sanitizeTrace, wrapUntrusted } from '../core/sanitize.js';
 
 const store = new SQLiteStore(process.env.HUMEMORY_DB);
 
@@ -144,7 +144,11 @@ server.registerTool(
       },
       cues
     );
-    return { content: [{ type: 'text', text: `loop armed: ${i.id}\n${i.content}` }] };
+    // Echoes the caller's own content back into the tool result, which lands
+    // in the agent's context like any other tool output — sanitized the same
+    // way a recalled trace would be (SECURITY_AUDIT.md H-03).
+    const s = sanitizeTrace(i.content);
+    return { content: [{ type: 'text', text: `loop armed: ${i.id}\n${s.text}` }] };
   }
 );
 
@@ -176,12 +180,18 @@ server.registerTool(
   async () => {
     const pending = await store.listDreamProposals({ status: 'pending' });
     if (!pending.length) return { content: [{ type: 'text', text: 'no dream pending' }] };
+    // Dream proposals are synthesized cross-session patterns, never
+    // human-verified at this stage — wrapped like any other unverified
+    // recalled content (SECURITY_AUDIT.md H-03), not returned raw.
     return {
       content: [
         {
           type: 'text',
           text: pending
-            .map((p) => `[${p.kind}] ${p.id} — confidence ${p.confidence}\n${p.payload.slice(0, 400)}`)
+            .map((p) => {
+              const s = sanitizeTrace(p.payload.slice(0, 400));
+              return `[${p.kind}] ${p.id} — confidence ${p.confidence}\n${wrapUntrusted(s.text, { id: p.id })}`;
+            })
             .join('\n---\n'),
         },
       ],

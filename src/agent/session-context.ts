@@ -218,10 +218,14 @@ function renderMarkdown(input: {
     // the trace loop below, keyed on the script id since a script has no
     // per-step id of its own.
     if (desc.escapedMarkers > 0) escapeAttempts.push({ memoryId: script.id, count: desc.escapedMarkers });
-    lines.push(`> ${oneLine(desc.text)}`);
     // Same injection rules as traces (6.0.3): human-authored renders bare,
-    // agent/dreamer-authored stays wrapped.
+    // agent/dreamer-authored stays wrapped. The description used to render
+    // bare unconditionally while the steps below were correctly gated
+    // (SECURITY_AUDIT.md H-03) — both now share the same `bare` check.
     const bare = script.source === 'human';
+    lines.push(
+      `> ${bare ? oneLine(desc.text) : wrapUntrusted(oneLine(desc.text), { source: script.source, agent: script.agent, id: script.id })}`
+    );
     script.steps.slice(0, SCRIPT_STEP_CAP).forEach((step, i) => {
       const s = sanitizeTrace(step);
       if (s.escapedMarkers > 0) escapeAttempts.push({ memoryId: script.id, count: s.escapedMarkers });
@@ -235,11 +239,21 @@ function renderMarkdown(input: {
     }
   }
 
+  // Intentions carry the same provenance shape as memories (6.0.1) but used to
+  // render bare unconditionally regardless of it (SECURITY_AUDIT.md H-03).
+  // Only a human-verified loop skips the untrusted wrapper now.
+  const renderIntentionBody = (i: Intention, s: { text: string }): string => {
+    const bare = i.verified === true && i.verificationReason === 'human';
+    return bare
+      ? oneLine(s.text)
+      : wrapUntrusted(oneLine(s.text), { source: i.source, agent: i.agent, verified: i.verified, id: i.id });
+  };
+
   if (firedNow.length) {
     lines.push('', '### ⏰ Deadlines reached', RECALLED_NOTES_PREFACE);
     for (const i of firedNow) {
       const s = sanitizeTrace(i.content);
-      lines.push(`- **[${loopId(i.id)}]** ${oneLine(s.text)}`);
+      lines.push(`- **[${loopId(i.id)}]** ${renderIntentionBody(i, s)}`);
     }
   }
 
@@ -252,7 +266,7 @@ function renderMarkdown(input: {
           ? ` — due in ${humanizeAge(now, i.expiresAt).replace(' ago', '')}`
           : '';
       const s = sanitizeTrace(i.content);
-      lines.push(`- **[${loopId(i.id)}]** ${oneLine(s.text)} (armed ${age}${deadline})`);
+      lines.push(`- **[${loopId(i.id)}]** ${renderIntentionBody(i, s)} (armed ${age}${deadline})`);
     }
     lines.push('', `_To close a loop: mention \`Closes ${loopId(openLoops[0].id)}\` in a commit message._`);
   }

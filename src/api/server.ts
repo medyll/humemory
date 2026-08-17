@@ -40,6 +40,7 @@ import { createScriptRoutes } from './scripts-routes.js';
 import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
+import { timingSafeEqual } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,6 +77,39 @@ app.use('*', cors({
   credentials: true,
   maxAge: 600,
 }));
+
+// === AUTH (SECURITY_AUDIT.md H-01) ===
+// HUMEMORY_API_TOKEN, when set, is required (Bearer or x-humemory-token) on every
+// data/mutation route. Static dashboard assets and /health stay open so the front
+// end can load; the front end then attaches the token to its own API calls.
+const API_TOKEN = process.env.HUMEMORY_API_TOKEN;
+const PUBLIC_PATHS = new Set(['/health']);
+
+function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.has(path) || path === '/' || path === '/app' || path === '/session' || path.startsWith('/app/');
+}
+
+function tokenMatches(supplied: string | undefined, expected: string): boolean {
+  if (!supplied) return false;
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  // Constant-time compare requires equal length; a length check alone leaks
+  // little (token lengths aren't secret), and avoids throwing on mismatch.
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+app.use('*', async (c, next) => {
+  if (!API_TOKEN || isPublicPath(c.req.path)) return next();
+
+  const header = c.req.header('authorization');
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  const supplied = bearer ?? c.req.header('x-humemory-token');
+
+  if (!tokenMatches(supplied, API_TOKEN)) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  return next();
+});
 
 // Static files (dashboard)
 const APP_DIR = join(PUBLIC_DIR, 'app');
@@ -166,9 +200,25 @@ export { app };
 // raise a server or seize the port.
 if (import.meta.main) {
   const port = parseInt(process.env.PORT || '3456');
+  // Default loopback-only (SECURITY_AUDIT.md H-01): the previous code passed no
+  // hostname, which node-server forwards straight to server.listen(), binding
+  // every interface while the log line still claimed "localhost".
+  const hostname = process.env.HUMEMORY_HOST || '127.0.0.1';
+  const isLoopback = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
 
-  console.log(`🧠 humemory API running on http://localhost:${port}`);
-  console.log(`📊 Dashboard: http://localhost:${port}/`);
+  if (!isLoopback && !API_TOKEN) {
+    console.error(
+      `Refusing to start: HUMEMORY_HOST=${hostname} exposes the API beyond loopback ` +
+      `without HUMEMORY_API_TOKEN set. Set a token or unset HUMEMORY_HOST.`
+    );
+    process.exit(1);
+  }
 
-  serve({ fetch: app.fetch, port });
+  console.log(`🧠 humemory API running on http://${hostname}:${port}`);
+  console.log(`📊 Dashboard: http://${hostname}:${port}/`);
+  if (!API_TOKEN) {
+    console.warn('⚠️  HUMEMORY_API_TOKEN not set — data routes are unauthenticated (loopback only).');
+  }
+
+  serve({ fetch: app.fetch, port, hostname });
 }

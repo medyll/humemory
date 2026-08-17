@@ -93,20 +93,45 @@ export function createMount(ctx: VizContext = {}) {
 
     let timeOffset = 0;
 
+    // Content, level labels and dates are all attacker-controllable through the API
+    // (SECURITY_AUDIT.md H-02): built with createElement/textContent, never innerHTML,
+    // so nothing in a memory's content can execute as markup.
     function showTooltip(event: MouseEvent, d: Memory) {
       const at = new Date(Date.now() + timeOffset);
       const level = calculateDecayLevel(d, at);
       const saillance = calculateSaillance(d, at);
 
-      tooltip.innerHTML = `
-        <div style="margin-bottom:.5rem;font-weight:600;">${LEVEL_LABELS[level]}</div>
-        <div style="margin-bottom:.5rem;">${d.content.slice(0, 100)}${d.content.length > 100 ? '…' : ''}</div>
-        <div style="color:var(--muted);font-size:.8rem;">
-          <div>Strength: ${saillance}/100</div>
-          <div>Recalls: ${d.recallCount}</div>
-          <div>Encoded: ${new Date(d.createdAt).toLocaleDateString()}</div>
-          ${d.photographic ? '<div style="color:#8b5cf6;">🔒 Photographic</div>' : ''}
-        </div>`;
+      tooltip.replaceChildren();
+
+      const title = document.createElement('div');
+      title.style.marginBottom = '.5rem';
+      title.style.fontWeight = '600';
+      title.textContent = LEVEL_LABELS[level];
+
+      const excerpt = document.createElement('div');
+      excerpt.style.marginBottom = '.5rem';
+      excerpt.textContent = d.content.slice(0, 100) + (d.content.length > 100 ? '…' : '');
+
+      const meta = document.createElement('div');
+      meta.style.color = 'var(--muted)';
+      meta.style.fontSize = '.8rem';
+
+      const strengthLine = document.createElement('div');
+      strengthLine.textContent = `Strength: ${saillance}/100`;
+      const recallsLine = document.createElement('div');
+      recallsLine.textContent = `Recalls: ${d.recallCount}`;
+      const encodedLine = document.createElement('div');
+      encodedLine.textContent = `Encoded: ${new Date(d.createdAt).toLocaleDateString()}`;
+      meta.append(strengthLine, recallsLine, encodedLine);
+
+      if (d.photographic) {
+        const photoLine = document.createElement('div');
+        photoLine.style.color = '#8b5cf6';
+        photoLine.textContent = '🔒 Photographic';
+        meta.append(photoLine);
+      }
+
+      tooltip.append(title, excerpt, meta);
       tooltip.style.display = 'block';
       tooltip.style.left = `${event.pageX + 10}px`;
       tooltip.style.top = `${event.pageY - 10}px`;

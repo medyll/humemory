@@ -28,10 +28,37 @@ export class ApiError extends Error {
   }
 }
 
+// Optional bearer token, required server-side only when HUMEMORY_API_TOKEN is set
+// (SECURITY_AUDIT.md H-01). Kept in localStorage so the dashboard survives reloads
+// without re-prompting; never sent anywhere but this same-origin API.
+const TOKEN_KEY = 'humemory_api_token';
+
+export function getApiToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? '';
+  } catch {
+    return ''; // localStorage unavailable (privacy mode, SSR, etc.)
+  }
+}
+
+export function setApiToken(token: string): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Non-fatal: the token just won't persist across reloads.
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getApiToken();
   const res = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'x-humemory-token': token } : {}),
+      ...init?.headers,
+    },
   });
 
   const body = await res.json().catch(() => null);

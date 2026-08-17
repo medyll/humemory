@@ -152,4 +152,25 @@ describe('Script injection (8.2)', () => {
     expect(ctx.escapeAttempts.length).toBeGreaterThan(0);
     store.close();
   });
+
+  test('H-03: an agent-sourced description is wrapped, not rendered bare', async () => {
+    const { clock, store, resolver, directory } = setup();
+    await store.addScript({ ...DRILL, source: 'agent', status: 'active' }, [BRANCH_MAIN]);
+
+    const ctx = await buildSessionContext({ store, resolver, directory, branch: 'main', clock });
+
+    expect(ctx.markdown).toContain('<humemory-untrusted');
+    expect(ctx.markdown).toContain('source="agent"');
+    store.close();
+  });
+
+  test('H-03: a human-sourced description renders bare, unwrapped', async () => {
+    const { clock, store, resolver, directory } = setup();
+    await store.addScript({ ...DRILL, source: 'human', status: 'active' }, [BRANCH_MAIN]);
+
+    const ctx = await buildSessionContext({ store, resolver, directory, branch: 'main', clock });
+
+    expect(ctx.markdown).not.toContain('<humemory-untrusted');
+    store.close();
+  });
 });

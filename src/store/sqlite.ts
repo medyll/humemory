@@ -1448,6 +1448,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       source: intention.source ?? 'agent',
       agent: intention.agent,
       verified: intention.verified ?? false,
+      verificationReason: intention.verificationReason,
       device: intention.device ?? this.deviceId,
     };
 
