@@ -13,6 +13,7 @@ import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
 import type { Script, ScriptStatus, TriggerSpec } from '../core/types.js';
 import { validateTriggerSpec } from './intentions-routes.js';
+import { serverErrorBody } from './errors.js';
 import {
   boundedString,
   MAX_CONTENT_LENGTH,
@@ -61,7 +62,7 @@ export function createScriptRoutes(store: SQLiteStore) {
       if (err instanceof Error && (err.name === 'BadRequest' || err.name === 'LimitExceeded')) {
         return c.json({ error: err.message }, 400);
       }
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, err), 500);
     }
   };
 

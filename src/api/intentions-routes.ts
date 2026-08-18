@@ -32,6 +32,7 @@ import type {
   TriggerSpec,
 } from '../core/types.js';
 import type { Clock } from '../core/clock.js';
+import { serverErrorBody } from './errors.js';
 
 const INTENTION_STATUSES: IntentionStatus[] = ['armed', 'fired', 'closed', 'expired'];
 const CUE_STATUSES: CueStatus[] = ['armed', 'fired', 'cancelled'];
@@ -175,7 +176,7 @@ export function createIntentionRoutes(store: SQLiteStore, options: IntentionRout
       if (err instanceof BadRequest || err instanceof LimitExceeded) {
         return c.json({ error: err.message }, 400);
       }
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, err), 500);
     }
   };
 

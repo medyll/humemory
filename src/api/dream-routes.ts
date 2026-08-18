@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
 import { runDreamer, applyDreamProposal } from '../core/dreamer.js';
+import { serverErrorBody } from './errors.js';
 
 export function createDreamRoutes(store: SQLiteStore) {
   const app = new Hono();
@@ -36,7 +37,7 @@ export function createDreamRoutes(store: SQLiteStore) {
         const proposal = await store.resolveDreamProposal(id, 'rejected');
         return c.json({ success: true, proposal });
       } catch (error) {
-        return c.json({ success: false, error: String(error) }, 500);
+        return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
       }
     });
   }

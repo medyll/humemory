@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
+import { serverErrorBody } from './errors.js';
 import {
   LimitExceeded,
   boundedInt,
@@ -82,7 +83,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
 
       return c.json({ success: true, memory }, 201);
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -121,7 +122,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       const memory = await store.recall(c.req.param('id'), agent, { identityTrusted: false });
       return c.json({ success: true, memory });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -142,7 +143,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       const memory = await store.refute(c.req.param('id'), body.reason);
       return c.json({ success: true, memory });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -157,7 +158,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       });
       return c.json({ success: true, ...result });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -218,7 +219,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       const memory = await store.setPhotographic(c.req.param('id'), enable);
       return c.json({ success: true, memory });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -241,7 +242,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       const results = await store.findSimilar(c.req.param('id'), { limit, threshold });
       return c.json({ success: true, results });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
@@ -257,7 +258,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       });
       return c.json({ success: true, result });
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return c.json(serverErrorBody(`${c.req.method} ${c.req.path}`, error), 500);
     }
   });
 
