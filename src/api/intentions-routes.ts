@@ -15,6 +15,13 @@ import {
   MAX_PATTERN_LENGTH,
   MAX_MATCH_TEXT_LENGTH,
 } from '../core/cues.js';
+import {
+  LimitExceeded,
+  boundedString,
+  MAX_CONTENT_LENGTH,
+  MAX_SHORT_FIELD_LENGTH,
+  MAX_COLLECTION_ITEMS,
+} from './limits.js';
 import type { AppEvent } from '../core/event-bus.js';
 import type {
   Cue,
@@ -159,12 +166,15 @@ export function createIntentionRoutes(store: SQLiteStore, options: IntentionRout
   const app = new Hono();
   const resolver = new SqliteCueResolver(store, { clock: options.clock });
 
-  // Invalid input is the client's error, not the server's.
+  // Invalid input is the client's error, not the server's — including a value
+  // that busts a size limit (SECURITY_AUDIT.md M-02).
   const guard = async (c: any, fn: () => Promise<Response>): Promise<Response> => {
     try {
       return await fn();
     } catch (err) {
-      if (err instanceof BadRequest) return c.json({ error: err.message }, 400);
+      if (err instanceof BadRequest || err instanceof LimitExceeded) {
+        return c.json({ error: err.message }, 400);
+      }
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
     }
   };
@@ -179,20 +189,27 @@ export function createIntentionRoutes(store: SQLiteStore, options: IntentionRout
         throw new BadRequest('"directory" is required');
       }
 
+      // SECURITY_AUDIT.md M-02: bound the stored fields and the cue collection.
+      const content = boundedString(body.content, MAX_CONTENT_LENGTH, 'content');
+      const directory = boundedString(body.directory, MAX_SHORT_FIELD_LENGTH, 'directory');
+
       let expiresAt: Date | undefined;
       if (body.expiresAt) {
         expiresAt = new Date(body.expiresAt);
         if (Number.isNaN(expiresAt.getTime())) throw new BadRequest('"expiresAt" is invalid');
       }
 
+      if (Array.isArray(body.cues) && body.cues.length > MAX_COLLECTION_ITEMS) {
+        throw new BadRequest(`"cues" must hold at most ${MAX_COLLECTION_ITEMS} items`);
+      }
       const cues: TriggerSpec[] = Array.isArray(body.cues)
         ? body.cues.map((spec: unknown) => validateTriggerSpec(spec))
         : [];
 
       const intention = await store.addIntention(
         {
-          content: body.content.trim(),
-          directory: body.directory,
+          content: content.trim(),
+          directory,
           expiresAt,
           relatedMemoryId: typeof body.relatedMemoryId === 'string' ? body.relatedMemoryId : undefined,
         },

@@ -126,9 +126,21 @@ describe('GET /search', () => {
     const { store, call } = setup();
     await seedMemories(store);
 
-    // minSaillance set very high: nothing should pass.
-    const strict = await call('/search?q=sqlite&minSaillance=101');
-    expect(strict.body.results.length).toBe(0);
+    // A filter inside the valid range reaches the store and narrows the result set.
+    const loose = await call('/search?q=sqlite&minSaillance=0');
+    const strict = await call('/search?q=sqlite&minSaillance=100');
+    expect(strict.body.results.length).toBeLessThanOrEqual(loose.body.results.length);
+  });
+
+  test('a saillance filter outside 0-100 is refused, not silently applied', async () => {
+    // SECURITY_AUDIT.md M-02: cost/range parameters are bounded rather than
+    // handed to the store as-is.
+    const { store, call } = setup();
+    await seedMemories(store);
+
+    const { status, body } = await call('/search?q=sqlite&minSaillance=101');
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/minSaillance/);
   });
 });
 

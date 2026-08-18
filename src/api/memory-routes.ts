@@ -8,31 +8,76 @@
 
 import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
+import {
+  LimitExceeded,
+  boundedInt,
+  boundedOptionalInt,
+  boundedString,
+  boundedOptionalString,
+  boundedStringArray,
+  MAX_CONTENT_LENGTH,
+  MAX_KEYWORDS,
+  MAX_KEYWORD_LENGTH,
+  MAX_SHORT_FIELD_LENGTH,
+  MAX_QUERY_LENGTH,
+  MAX_RESULT_LIMIT,
+} from './limits.js';
 
 export function createMemoryRoutes(store: SQLiteStore) {
   const app = new Hono();
 
+  // Limit violations are the caller's fault, not ours: 400, not 500
+  // (SECURITY_AUDIT.md M-02).
+  app.onError((error, c) => {
+    if (error instanceof LimitExceeded) {
+      return c.json({ success: false, error: error.message }, 400);
+    }
+    throw error;
+  });
+
   // === MEMORIES ===
   app.post('/memories', async (c) => {
     const body = await c.req.json();
+
+    // Every user-supplied field is bounded before it reaches the store: without
+    // this a single request could write an arbitrarily large row (M-02).
+    const content = boundedString(body.content, MAX_CONTENT_LENGTH, 'content');
+    const keywords = boundedStringArray(body.keywords, {
+      maxItems: MAX_KEYWORDS,
+      maxItemLength: MAX_KEYWORD_LENGTH,
+      name: 'keywords',
+    });
+    // level3Keywords is the flat BM25 keyword line, not an array (core/types.ts).
+    const level3Keywords = boundedOptionalString(body.level3Keywords, MAX_CONTENT_LENGTH, 'level3Keywords');
+    const directory = boundedOptionalString(body.directory, MAX_SHORT_FIELD_LENGTH, 'directory');
+    const day = boundedOptionalString(body.day, MAX_SHORT_FIELD_LENGTH, 'day');
+    const sessionId = boundedOptionalString(body.sessionId, MAX_SHORT_FIELD_LENGTH, 'sessionId');
+    const level1Summary = boundedOptionalString(body.level1Summary, MAX_CONTENT_LENGTH, 'level1Summary');
+    const level2Essential = boundedOptionalString(body.level2Essential, MAX_CONTENT_LENGTH, 'level2Essential');
+    const agentField = boundedOptionalString(body.agent, MAX_SHORT_FIELD_LENGTH, 'agent');
+    const agentHeader = boundedOptionalString(
+      c.req.header('X-Humemory-Agent'),
+      MAX_SHORT_FIELD_LENGTH,
+      'X-Humemory-Agent'
+    );
 
     try {
       const validTypes = ['episodic', 'semantic', 'procedural'];
       const memoryType = validTypes.includes(body.memoryType) ? body.memoryType : 'semantic';
 
       const memory = await store.add({
-        content: body.content,
-        directory: body.directory || process.cwd(),
-        day: body.day || new Date().toISOString().split('T')[0],
-        keywords: body.keywords || [],
-        sessionId: body.sessionId || 'default',
-        level1Summary: body.level1Summary,
-        level2Essential: body.level2Essential,
-        level3Keywords: body.level3Keywords,
+        content,
+        directory: directory || process.cwd(),
+        day: day || new Date().toISOString().split('T')[0],
+        keywords,
+        sessionId: sessionId || 'default',
+        level1Summary,
+        level2Essential,
+        level3Keywords,
         memoryType: memoryType as 'episodic' | 'semantic' | 'procedural',
         // Phase 6.0.1 — attribution on every write path
         source: body.source ?? 'agent',
-        agent: c.req.header('X-Humemory-Agent') ?? body.agent ?? 'unknown',
+        agent: agentHeader ?? agentField ?? 'unknown',
       });
 
       return c.json({ success: true, memory }, 201);
@@ -42,13 +87,15 @@ export function createMemoryRoutes(store: SQLiteStore) {
   });
 
   app.get('/memories', async (c) => {
-    const limit = parseInt(c.req.query('limit') || '50');
-    const level = c.req.query('level');
-  
-    const memories = await store.list({
-      limit,
-      level: level !== undefined ? parseInt(level) as any : undefined,
+    const limit = boundedInt(c.req.query('limit'), {
+      fallback: 50,
+      min: 1,
+      max: MAX_RESULT_LIMIT,
+      name: 'limit',
     });
+    const level = boundedOptionalInt(c.req.query('level'), { min: 0, max: 4, name: 'level' });
+
+    const memories = await store.list({ limit, level: level as any });
 
     return c.json({ success: true, memories });
   });
@@ -122,23 +169,37 @@ export function createMemoryRoutes(store: SQLiteStore) {
   // === SEARCH ===
   app.get('/search', async (c) => {
     const query = c.req.query('q');
-  
+
     if (!query) {
       return c.json({ success: false, error: 'Missing query parameter "q"' }, 400);
     }
+    boundedString(query, MAX_QUERY_LENGTH, 'q');
 
     const dateFrom = c.req.query('dateFrom') ? new Date(c.req.query('dateFrom')!) : undefined;
     const dateTo = c.req.query('dateTo') ? new Date(c.req.query('dateTo')!) : undefined;
-    const minSaillance = c.req.query('minSaillance') ? parseInt(c.req.query('minSaillance')!) : undefined;
-    const minRecalls = c.req.query('minRecalls') ? parseInt(c.req.query('minRecalls')!) : undefined;
+    const minSaillance = boundedOptionalInt(c.req.query('minSaillance'), {
+      min: 0,
+      max: 100,
+      name: 'minSaillance',
+    });
+    const minRecalls = boundedOptionalInt(c.req.query('minRecalls'), {
+      min: 0,
+      max: 1_000_000,
+      name: 'minRecalls',
+    });
     const memoryType = c.req.query('type') as any;
 
     const results = await store.search({
       query,
-      directory: c.req.query('directory'),
-      sessionId: c.req.query('sessionId'),
-      maxLevel: parseInt(c.req.query('maxLevel') || '3') as any,
-      limit: parseInt(c.req.query('limit') || '10'),
+      directory: boundedOptionalString(c.req.query('directory'), MAX_SHORT_FIELD_LENGTH, 'directory'),
+      sessionId: boundedOptionalString(c.req.query('sessionId'), MAX_SHORT_FIELD_LENGTH, 'sessionId'),
+      maxLevel: boundedInt(c.req.query('maxLevel'), { fallback: 3, min: 0, max: 4, name: 'maxLevel' }) as any,
+      limit: boundedInt(c.req.query('limit'), {
+        fallback: 10,
+        min: 1,
+        max: MAX_RESULT_LIMIT,
+        name: 'limit',
+      }),
       memoryType,
       dateFrom,
       dateTo,
@@ -163,9 +224,20 @@ export function createMemoryRoutes(store: SQLiteStore) {
 
   // === SIMILAR ===
   app.get('/memories/:id/similar', async (c) => {
+    const limit = boundedInt(c.req.query('limit'), {
+      fallback: 5,
+      min: 1,
+      max: MAX_RESULT_LIMIT,
+      name: 'limit',
+    });
+    const threshold = boundedInt(c.req.query('threshold'), {
+      fallback: 50,
+      min: 0,
+      max: 100,
+      name: 'threshold',
+    });
+
     try {
-      const limit = parseInt(c.req.query('limit') || '5');
-      const threshold = parseInt(c.req.query('threshold') || '50');
       const results = await store.findSimilar(c.req.param('id'), { limit, threshold });
       return c.json({ success: true, results });
     } catch (error) {

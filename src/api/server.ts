@@ -31,6 +31,8 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
+import { MAX_BODY_BYTES } from './limits.js';
 import { serve } from '@hono/node-server';
 import { SQLiteStore } from '../store/sqlite.js';
 import { createIntentionRoutes } from './intentions-routes.js';
@@ -69,6 +71,14 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   : ['http://localhost:3456', 'http://localhost:3000', 'http://127.0.0.1:3456'];
 
 const app = new Hono();
+
+// Transport-level cap, ahead of any route (SECURITY_AUDIT.md M-02). The
+// per-field caps in `limits.ts` are the business-level floor underneath it.
+app.use('*', bodyLimit({
+  maxSize: MAX_BODY_BYTES,
+  onError: (c) => c.json({ success: false, error: 'Request body too large' }, 413),
+}));
+
 app.use('*', cors({
   origin: (origin) => {
     if (!origin) return '*'; // Allow requests without origin (like mobile apps, curl, etc)

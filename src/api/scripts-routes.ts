@@ -13,6 +13,12 @@ import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
 import type { Script, ScriptStatus, TriggerSpec } from '../core/types.js';
 import { validateTriggerSpec } from './intentions-routes.js';
+import {
+  boundedString,
+  MAX_CONTENT_LENGTH,
+  MAX_SHORT_FIELD_LENGTH,
+  MAX_COLLECTION_ITEMS,
+} from './limits.js';
 
 const SCRIPT_STATUSES: ScriptStatus[] = ['draft', 'active', 'archived'];
 
@@ -30,7 +36,14 @@ function serializeScript(script: Script) {
 
 function validateSteps(raw: unknown): string[] {
   if (!Array.isArray(raw) || !raw.length) throw new BadRequest('"steps" must be a non-empty array');
-  const steps = raw.map((s) => (typeof s === 'string' ? s.trim() : ''));
+  // SECURITY_AUDIT.md M-02: a script could otherwise declare unlimited steps,
+  // each of unlimited length.
+  if (raw.length > MAX_COLLECTION_ITEMS) {
+    throw new BadRequest(`"steps" must hold at most ${MAX_COLLECTION_ITEMS} items`);
+  }
+  const steps = raw.map((s, i) =>
+    typeof s === 'string' ? boundedString(s, MAX_CONTENT_LENGTH, `steps[${i}]`).trim() : ''
+  );
   if (steps.some((s) => !s)) throw new BadRequest('every step must be a non-empty string');
   return steps;
 }
@@ -44,7 +57,8 @@ export function createScriptRoutes(store: SQLiteStore) {
     } catch (err) {
       // validateTriggerSpec throws intentions-routes' own BadRequest class —
       // instanceof would miss it across module boundaries, so match by name.
-      if (err instanceof Error && err.name === 'BadRequest') {
+      // LimitExceeded (SECURITY_AUDIT.md M-02) is the caller's error too.
+      if (err instanceof Error && (err.name === 'BadRequest' || err.name === 'LimitExceeded')) {
         return c.json({ error: err.message }, 400);
       }
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
@@ -72,17 +86,24 @@ export function createScriptRoutes(store: SQLiteStore) {
       if (typeof body.directory !== 'string' || !body.directory) {
         throw new BadRequest('"directory" is required');
       }
+      const name = boundedString(body.name, MAX_SHORT_FIELD_LENGTH, 'name');
+      const description = boundedString(body.description, MAX_CONTENT_LENGTH, 'description');
+      const directory = boundedString(body.directory, MAX_SHORT_FIELD_LENGTH, 'directory');
+
       const steps = validateSteps(body.steps);
+      if (Array.isArray(body.cues) && body.cues.length > MAX_COLLECTION_ITEMS) {
+        throw new BadRequest(`"cues" must hold at most ${MAX_COLLECTION_ITEMS} items`);
+      }
       const cues: TriggerSpec[] = Array.isArray(body.cues)
         ? body.cues.map((spec: unknown) => validateTriggerSpec(spec))
         : [];
 
       const script = await store.addScript(
         {
-          name: body.name.trim(),
-          description: body.description.trim(),
+          name: name.trim(),
+          description: description.trim(),
           steps,
-          directory: body.directory,
+          directory,
           pinned: body.pinned === true,
           // HTTP = agent claim → draft, always (8.3). No source override.
           source: 'agent',
