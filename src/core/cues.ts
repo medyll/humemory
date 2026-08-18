@@ -184,12 +184,66 @@ function directoryMatches(intentionDir: string, eventDir: string | undefined): b
   return b === a || b.startsWith(`${a}/`) || a.startsWith(`${b}/`);
 }
 
-/** Tests an error pattern. An invalid regex falls back to a literal search. */
+/**
+ * Hard caps on regex evaluation (SECURITY_AUDIT.md M-01). The pattern and the
+ * event text both come from unauthenticated callers, and the native RegExp engine
+ * backtracks: `^(a+)+$` against a long non-matching string pins the event loop.
+ * The engine cannot be given a deadline, so the inputs are bounded instead and
+ * the shapes that make catastrophic backtracking possible are refused outright.
+ */
+export const MAX_PATTERN_LENGTH = 200;
+export const MAX_MATCH_TEXT_LENGTH = 10_000;
+
+/**
+ * Detects a quantifier applied to a group that itself contains a quantifier —
+ * the `(a+)+` / `(a*)*` / `(a+|b)*` family behind exponential backtracking.
+ * Conservative: it can reject a benign pattern, which only costs a fallback to
+ * literal search, never a hang.
+ */
+export function isDangerousPattern(pattern: string): boolean {
+  if (pattern.length > MAX_PATTERN_LENGTH) return true;
+
+  // Walk the groups, tracking whether each holds an unescaped quantifier, and
+  // flag any group that is itself quantified on close.
+  const stack: boolean[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\') {
+      i++; // escaped char: never a quantifier or a group delimiter
+      continue;
+    }
+    if (ch === '(') {
+      stack.push(false);
+      continue;
+    }
+    if (ch === ')') {
+      const innerHadQuantifier = stack.pop() ?? false;
+      const next = pattern[i + 1];
+      const outerQuantified = next === '+' || next === '*' || next === '{';
+      if (innerHadQuantifier && outerQuantified) return true;
+      continue;
+    }
+    if (ch === '+' || ch === '*' || ch === '{') {
+      if (stack.length > 0) stack[stack.length - 1] = true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Tests an error pattern. A pattern that is invalid, oversized or shaped for
+ * catastrophic backtracking falls back to a literal, non-backtracking search.
+ */
 function errorPatternMatches(pattern: string, text: string): boolean {
+  const bounded = text.length > MAX_MATCH_TEXT_LENGTH ? text.slice(0, MAX_MATCH_TEXT_LENGTH) : text;
+
+  if (isDangerousPattern(pattern)) {
+    return bounded.toLowerCase().includes(pattern.toLowerCase());
+  }
   try {
-    return new RegExp(pattern, 'i').test(text);
+    return new RegExp(pattern, 'i').test(bounded);
   } catch {
-    return text.toLowerCase().includes(pattern.toLowerCase());
+    return bounded.toLowerCase().includes(pattern.toLowerCase());
   }
 }
 

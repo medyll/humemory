@@ -8,7 +8,13 @@
 
 import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
-import { SqliteCueResolver, loopId } from '../core/cues.js';
+import {
+  SqliteCueResolver,
+  loopId,
+  isDangerousPattern,
+  MAX_PATTERN_LENGTH,
+  MAX_MATCH_TEXT_LENGTH,
+} from '../core/cues.js';
 import type { AppEvent } from '../core/event-bus.js';
 import type {
   Cue,
@@ -84,6 +90,14 @@ export function validateTriggerSpec(raw: unknown): TriggerSpec {
         return { kind: 'event', type: 'branch_switch', branch: spec.branch };
       case 'error_pattern':
         if (typeof spec.pattern !== 'string' || !spec.pattern) throw new BadRequest('"pattern" is required');
+        // SECURITY_AUDIT.md M-01: refuse oversized/backtracking-prone patterns here
+        // rather than silently degrading them to a literal search at match time.
+        if (spec.pattern.length > MAX_PATTERN_LENGTH) {
+          throw new BadRequest(`"pattern" must be at most ${MAX_PATTERN_LENGTH} characters`);
+        }
+        if (isDangerousPattern(spec.pattern)) {
+          throw new BadRequest('"pattern" contains a nested quantifier that risks catastrophic backtracking');
+        }
         return { kind: 'event', type: 'error_pattern', pattern: spec.pattern };
       default:
         throw new BadRequest('unknown event type (file_open | branch_switch | error_pattern)');
@@ -112,6 +126,9 @@ export function validateAppEvent(raw: unknown): AppEvent {
       return { type: 'branch_switch', branch: e.branch, directory: e.directory };
     case 'error_pattern':
       if (typeof e.text !== 'string' || !e.text) throw new BadRequest('"text" is required');
+      if (e.text.length > MAX_MATCH_TEXT_LENGTH) {
+        throw new BadRequest(`"text" must be at most ${MAX_MATCH_TEXT_LENGTH} characters`);
+      }
       return { type: 'error_pattern', text: e.text, directory: e.directory };
     default:
       if (typeof e.sha !== 'string' || !e.sha) throw new BadRequest('"sha" is required');
