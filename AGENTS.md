@@ -322,7 +322,7 @@ accepts a script id as the loser. API: `POST/GET /scripts`,
   `tests/helpers/fixtures.ts` shipped with S5-00b. New Phase 6/7/8 suites still lean on inline
   literals for scenario-specific content (fine per [docs/TESTING.md](./docs/TESTING.md)'s own
   rule — a fixture is for shared corpora, not a one-off case a test is *about*).
-- `vitest.config.ts` orphaned; suite runs under `bun test` (BUG-06).
+- ~~`vitest.config.ts` orphaned~~ — closed: the file is gone, the suite runs under `bun test`.
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## 📝 Notes

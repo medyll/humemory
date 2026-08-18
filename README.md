@@ -16,7 +16,8 @@ not when you run a full-text search for "milk".
 
 ## Two halves of a brain
 
-humemory is built in two halves. The first is shipped. The second is its destiny.
+humemory is built in two halves. The first was shipped first; the second is what it
+was always for. Both are built as of Phase 8.
 
 ### 1. Retrospective memory — *what was learned* ✅ built
 
@@ -40,7 +41,7 @@ construction.
 A Claude Code `Stop` hook can queue each completed session instantly; maintenance
 extracts and stores its learnings afterward, outside the agent's critical path.
 
-### 2. Prospective memory — *what to resurface* 🎯 the destiny
+### 2. Prospective memory — *what to resurface* ✅ built
 
 The second half (see `AGENTS.md` → Phase 5) is what gives humemory its life:
 
@@ -217,6 +218,41 @@ The queue directory is the whole contract, and it is inspectable at any time:
 | `HUMEMORY_SESSION_BUDGET` | `10` | max items listed per section |
 | `HUMEMORY_SAILLANCE_MIN` | `60` | salience floor for recalling a decayed trace |
 | `HUMEMORY_VERBOSE` | unset | `1` logs a one-line summary on stderr |
+
+---
+
+## Serving the API safely
+
+The database holds every learning trace and open loop across all your projects,
+and the API can read, alter and delete all of it. Treat the port as sensitive.
+
+| Env var | Default | Effect |
+| --- | --- | --- |
+| `PORT` | `3456` | API/dashboard port |
+| `HUMEMORY_HOST` | `127.0.0.1` | listen address — **loopback only unless you change it** |
+| `HUMEMORY_API_TOKEN` | unset | when set, required on every data route (`Authorization: Bearer …` or `X-Humemory-Token`) |
+| `CORS_ORIGINS` | `http://localhost:3456` | comma-separated exact origins, honoured when `NODE_ENV=production` |
+| `HUMEMORY_VERBOSE_ERRORS` | unset | `1` returns real error messages instead of a correlation id — local debugging only |
+
+**Defaults are private.** The server binds `127.0.0.1`, so nothing on your network
+can reach it. Without `HUMEMORY_API_TOKEN` it starts anyway and warns, because on
+loopback the OS is the boundary.
+
+**Exposing it is deliberate.** Setting `HUMEMORY_HOST` to anything but loopback
+*without* a token makes the server refuse to start rather than quietly publish your
+memory to the LAN:
+
+```bash
+HUMEMORY_HOST=0.0.0.0 HUMEMORY_API_TOKEN="$(openssl rand -hex 32)" pnpm start:api
+```
+
+The dashboard asks for that token behind the 🔑 button in its header and keeps it
+in `localStorage`. `/health` and the static assets stay open so a probe and the
+page itself still load.
+
+A token is not a substitute for the network layer: over anything but loopback, put
+TLS and a firewall in front of it. The token travels in a header, in clear, over
+plain HTTP.
 
 ---
 
@@ -564,8 +600,9 @@ keywords >5. `photographic: true` disables decay entirely.
 
 ## Known issues
 - ~~SQLite multi-process: advisory lock~~ — fixed in Sprint 5 (S5-00a): WAL + write-queue (Sprint 4) plus file-based cross-process `AdvisoryLock`.
-- `tests/fixtures/` missing — suites seed ad hoc literals (BUG-05, due with S5-00b).
-- `vitest.config.ts` orphaned; suite runs under `bun test` (BUG-06).
+- ~~`tests/fixtures/` missing~~ — closed (S5-00b): `tests/fixtures/*.json` + `tests/helpers/fixtures.ts`.
+  Shared corpora live there; a one-off case a test is specifically *about* stays inline.
+- ~~`vitest.config.ts` orphaned~~ — closed: the file is gone, the suite runs under `bun test`.
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## Notes
