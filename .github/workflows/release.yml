@@ -13,19 +13,25 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # SECURITY_AUDIT.md M-03: `contents: write` is needed to push the release
+    # commit and tags. `id-token: write` was copied from the release tool's
+    # README template and is not used — the tool publishes through
+    # `pnpm publish`, never with `--provenance`, so no OIDC token is minted.
     permissions:
       contents: write
-      id-token: write
 
+    # Actions are pinned by commit SHA, not by mutable tag: a tag can be moved
+    # to new code at any time, and this job holds NPM_TOKEN.
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@v6 # version comes from package.json "packageManager"
+      # version comes from package.json "packageManager"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
@@ -34,9 +40,9 @@ jobs:
       # Needed for both `pnpm test` and the `--build` step below: `tsc` alone
       # is node-runnable, but the build script's second half
       # (`bun run build:web`) and the test suite itself require bun.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -53,8 +59,12 @@ jobs:
       # package must be built before `files: ["dist", ...]` has anything in
       # it to publish. acp-team doesn't need this flag — it ships `src/`
       # directly, no compile step.
+      # `pnpm exec`, not `npx`: npx would resolve the tool from the registry at
+      # release time, so the code running with NPM_TOKEN in scope would be
+      # whatever was published most recently. The tool is an exact-pinned
+      # devDependency installed from the lockfile above (M-03).
       - name: Release (version bump, changelog, npm publish)
-        run: npx @medyll/idae-pnpm-release --build --verbose
+        run: pnpm exec idae-pnpm-release --build --verbose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
