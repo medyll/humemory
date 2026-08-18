@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "humemory-api",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "src/api/server.ts"],
+      "port": 3456
+    }
+  ]
+}

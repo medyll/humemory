@@ -32,7 +32,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
+import { secureHeaders } from 'hono/secure-headers';
+import type { SecureHeadersVariables } from 'hono/secure-headers';
 import { MAX_BODY_BYTES } from './limits.js';
+import { makeOriginChecker } from './cors.js';
+import { SECURE_HEADERS_OPTIONS, injectNonce } from './security-headers.js';
 import { serve } from '@hono/node-server';
 import { SQLiteStore } from '../store/sqlite.js';
 import { createIntentionRoutes } from './intentions-routes.js';
@@ -70,7 +74,8 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   ? (process.env.CORS_ORIGINS || 'http://localhost:3456').split(',')
   : ['http://localhost:3456', 'http://localhost:3000', 'http://127.0.0.1:3456'];
 
-const app = new Hono();
+
+const app = new Hono<{ Variables: SecureHeadersVariables }>();
 
 // Transport-level cap, ahead of any route (SECURITY_AUDIT.md M-02). The
 // per-field caps in `limits.ts` are the business-level floor underneath it.
@@ -80,13 +85,14 @@ app.use('*', bodyLimit({
 }));
 
 app.use('*', cors({
-  origin: (origin) => {
-    if (!origin) return '*'; // Allow requests without origin (like mobile apps, curl, etc)
-    return allowedOrigins.some(allowed => origin.includes(allowed.trim())) ? origin : undefined;
-  },
+  origin: makeOriginChecker(allowedOrigins),
   credentials: true,
   maxAge: 600,
 }));
+
+// === BROWSER DEFENCE HEADERS (SECURITY_AUDIT.md M-04) ===
+// Policy and nonce stamping live in ./security-headers.ts so they stay testable.
+app.use('*', secureHeaders(SECURE_HEADERS_OPTIONS));
 
 // === AUTH (SECURITY_AUDIT.md H-01) ===
 // HUMEMORY_API_TOKEN, when set, is required (Bearer or x-humemory-token) on every
@@ -131,14 +137,14 @@ const APP_DIR = join(PUBLIC_DIR, 'app');
  * `/app/`, the browser resolves them against the root and finds nothing — so they
  * are absolutised to `/app/`.
  */
-function reactAppHtml(): string {
+function reactAppHtml(nonce: string): string {
   const html = readFileSync(join(APP_DIR, 'index.html'), 'utf-8');
-  return html.replace(/(src|href)="\.\//g, '$1="/app/');
+  return injectNonce(html.replace(/(src|href)="\.\//g, '$1="/app/'), nonce);
 }
 
 app.get('/', (c) => {
   try {
-    return c.html(reactAppHtml());
+    return c.html(reactAppHtml(c.get('secureHeadersNonce') ?? ''));
   } catch {
     // Missing bundle: say what to run rather than serve a dead page.
     return c.text('Front non construit. Lance `pnpm build:web`.', 503);
@@ -147,7 +153,7 @@ app.get('/', (c) => {
 
 app.get('/session', (c) => {
   const html = readFileSync(join(PUBLIC_DIR, 'session.html'), 'utf-8');
-  return c.html(html);
+  return c.html(injectNonce(html, c.get('secureHeadersNonce') ?? ''));
 });
 
 // React front end (web/ → public/app/ through `pnpm build:web`), served at / and /app.
@@ -163,7 +169,7 @@ const APP_MIME: Record<string, string> = {
 
 app.get('/app', (c) => {
   try {
-    return c.html(reactAppHtml());
+    return c.html(reactAppHtml(c.get('secureHeadersNonce') ?? ''));
   } catch {
     // Missing bundle: say what to run rather than a silent 404.
     return c.text('Front non construit. Lance `pnpm build:web`.', 503);
