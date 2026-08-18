@@ -4,6 +4,24 @@ Date : 17 août 2026
 Révision auditée : `61328bf`  
 Mode : revue statique du code et des configurations, audit du lockfile, exécution de la suite hermétique. Aucun exploit n’a été lancé contre `data/humemory.db`.
 
+> **Statut de remédiation — 18 août 2026 : les 9 constats sont corrigés.**
+>
+> | Constat | Correction | Commit |
+> | --- | --- | --- |
+> | H-01 | Écoute `127.0.0.1` par défaut, refus de démarrer hors loopback sans jeton, `HUMEMORY_API_TOKEN` sur les routes de données (comparaison à temps constant), jeton câblé dans le tableau de bord | `f4226cd` |
+> | H-02 | Infobulle `river` reconstruite en `createElement`/`textContent` ; test de régression montant la vraie visualisation | `f4226cd` |
+> | H-03 | Frontière non fiable uniformisée (intentions, descriptions de scripts, rêves, sorties MCP) | `f4226cd` |
+> | H-04 | hono 4.13.2, `@hono/node-server` 2.1.1, js-yaml 5.3.0, tsx 4.23.12, overrides `sharp>=0.35.0` / `adm-zip>=0.6.0` — `pnpm audit` : 0 avis | `f4226cd`, `702ad4f` |
+> | M-01 | `isDangerousPattern` refuse les quantificateurs imbriqués, repli en recherche littérale, pattern et texte bornés | `12fe784` |
+> | M-02 | `bodyLimit` 1 Mo + `src/api/limits.ts` (contenu, mots-clés, étapes, cues, paramètres numériques bornés) | `9a4e962` |
+> | M-03 | Outil de release épinglé en devDependency exacte et lancé via `pnpm exec`, actions épinglées par SHA, bun fixé, `id-token: write` retiré, barrière `pnpm audit` en CI | `702ad4f` |
+> | M-04 | Comparaison d’origines exacte via `new URL().origin`, plus jamais `*` avec credentials, CSP à nonce + `frame-ancestors`, `nosniff`, `no-referrer` | `90051cb` |
+> | L-01 | Détail journalisé côté serveur sous un identifiant de corrélation, réponse générique au client | `770abf2` |
+>
+> Le test de chaîne complète demandé en conclusion existe : `tests/security-chain.test.ts` (`8a53fdc`). Suite : 470 tests, 0 échec.
+>
+> **Restent à faire hors code**, car ce sont des réglages GitHub et non des fichiers du dépôt : protéger l’environnement de publication par une approbation obligatoire, et passer à npm Trusted Publishing pour supprimer le `NPM_TOKEN` longue durée (M-03). L’exposition LAN reste déconseillée sans TLS ni filtrage réseau (H-01).
+
 ## Résumé exécutif
 
 Le projet possède de bonnes fondations sur les requêtes SQL, la traçabilité des agents et l’échappement des marqueurs de contexte. Sa principale faiblesse est toutefois située avant ces protections : l’API écoute par défaut sur toutes les interfaces et n’a aucune authentification. Un client réseau peut donc lire, altérer ou supprimer la mémoire partagée, puis créer du contenu qui sera affiché dans le navigateur ou réinjecté dans le contexte d’un agent.
