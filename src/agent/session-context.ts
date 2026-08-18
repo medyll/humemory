@@ -253,6 +253,9 @@ function renderMarkdown(input: {
     lines.push('', '### ⏰ Deadlines reached', RECALLED_NOTES_PREFACE);
     for (const i of firedNow) {
       const s = sanitizeTrace(i.content);
+      // Same reporting as scripts and traces: the content was already
+      // neutralised, but a swallowed count hides the attempt from the operator.
+      if (s.escapedMarkers > 0) escapeAttempts.push({ memoryId: i.id, count: s.escapedMarkers });
       lines.push(`- **[${loopId(i.id)}]** ${renderIntentionBody(i, s)}`);
     }
   }
@@ -266,6 +269,7 @@ function renderMarkdown(input: {
           ? ` — due in ${humanizeAge(now, i.expiresAt).replace(' ago', '')}`
           : '';
       const s = sanitizeTrace(i.content);
+      if (s.escapedMarkers > 0) escapeAttempts.push({ memoryId: i.id, count: s.escapedMarkers });
       lines.push(`- **[${loopId(i.id)}]** ${renderIntentionBody(i, s)} (armed ${age}${deadline})`);
     }
     lines.push('', `_To close a loop: mention \`Closes ${loopId(openLoops[0].id)}\` in a commit message._`);
