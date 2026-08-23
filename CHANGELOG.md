@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.4] - 2026-08-23
+**Bug Fixes:**
+- stop returning internal error detail to clients (L-01)
+- exact-match CORS origins and add browser defence headers (M-04)
+- bound request bodies, collections and cost parameters (M-02)
+- bound error_pattern regex evaluation (M-01)
+
+**Documentation:**
+- document the API security config and correct stale status claims
+- record the remediation status in the security audit
+
+**Tests:**
+- cover the full audit attack chain end to end
+
+**CI/CD:**
+- pin the release chain and drop unused permission (M-03)
+
+
+
 ## [0.2.3] - 2026-08-17
 **Features:**
 - add Streamable HTTP transport and security hardening
