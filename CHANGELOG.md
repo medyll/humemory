@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.5] - 2026-08-26
+**Features:**
+- ingest codex sessions, not just claude ones
+- consolidate through the codex CLI, no API key
+
+**Bug Fixes:**
+- date a trace on the session's clock, not the sweep's
+
+**Documentation:**
+- document codex rollout import
+
+
+
 ## [0.2.4] - 2026-08-23
 **Bug Fixes:**
 - stop returning internal error detail to clients (L-01)
