@@ -96,6 +96,22 @@ An entry means **ready to be discovered**, not that its evolving private session
 format is already parsed. Run `pnpm cli sources discover --installed-only` for a
 local inventory without exposing conversation content.
 
+**Codex is parsed.** Its rollouts (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`,
+`$CODEX_HOME` honoured) import into the same queue the agent hooks write to:
+
+```bash
+pnpm cli sources import-codex --dry-run     # what would be queued, writes nothing
+pnpm cli sources import-codex --since 7     # the last week (default)
+pnpm cli sources import-codex --all         # every rollout ever recorded
+```
+
+Importing only *queues*; the worker still decides what becomes a trace. Jobs are
+keyed on session, so re-importing is idempotent and a thread that grew since the
+last pass contributes only its new messages. Threads codex spawned for itself
+(judges, reviews) are excluded unless `--include-subagents` — they are not
+sessions a human had. Model reasoning and tool calls are dropped like
+`tool_result` already is: a learning is what was decided, not how it was found.
+
 The React app is served at **`/`** (and `/app`). The original vanilla dashboard
 has been removed — the React front reached parity first, and git keeps the old
 one if it is ever needed.
