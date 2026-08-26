@@ -11,6 +11,29 @@ export interface ParsedSession {
   directory: string;
   messages: SessionMessage[];
   rawText: string;
+  /**
+   * When the session was *lived*, not when it was read. A rollout swept weeks
+   * after the fact must encode as a trace of that day, otherwise every import
+   * lands on the import date and the memory loses its timeline — and, with it,
+   * the age decay works from.
+   */
+  occurredAt?: Date;
+}
+
+/** The instant a transcript line carries, when it carries a usable one. */
+export function messageTime(message: SessionMessage | undefined): Date | undefined {
+  if (!message?.timestamp) return undefined;
+  const at = new Date(message.timestamp);
+  return Number.isNaN(at.getTime()) ? undefined : at;
+}
+
+/** The last usable instant in a run of messages — the session's own clock. */
+export function lastMessageTime(messages: SessionMessage[]): Date | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const at = messageTime(messages[i]);
+    if (at) return at;
+  }
+  return undefined;
 }
 
 function extractText(content: unknown): string {
@@ -47,6 +70,7 @@ export function parseClaudeHookPayload(raw: string, directory: string): ParsedSe
         directory: payload.cwd ?? directory,
         messages,
         rawText: messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+        occurredAt: lastMessageTime(messages),
       };
     }
 
@@ -62,6 +86,7 @@ export function parseClaudeHookPayload(raw: string, directory: string): ParsedSe
         directory,
         messages,
         rawText: messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+        occurredAt: lastMessageTime(messages),
       };
     }
   } catch {
@@ -88,6 +113,7 @@ export function parseClaudeHookPayload(raw: string, directory: string): ParsedSe
       directory,
       messages,
       rawText: messages.map(m => `${m.role}: ${m.content}`).join('\n\n'),
+      occurredAt: lastMessageTime(messages),
     };
   }
 

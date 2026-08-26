@@ -112,6 +112,12 @@ last pass contributes only its new messages. Threads codex spawned for itself
 sessions a human had. Model reasoning and tool calls are dropped like
 `tool_result` already is: a learning is what was decided, not how it was found.
 
+A trace is dated on the transcript's own clock, not on the sweep's: a rollout
+read three weeks late encodes on the day it was lived, and arrives already
+degraded to the level that age warrants. Without this a bulk import collapses
+every session into a single import day, and the store loses the timeline that
+`day` exists to hold.
+
 The React app is served at **`/`** (and `/app`). The original vanilla dashboard
 has been removed — the React front reached parity first, and git keeps the old
 one if it is ever needed.

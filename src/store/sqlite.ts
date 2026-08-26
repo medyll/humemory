@@ -559,12 +559,20 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     };
   }
 
+  /**
+   * `createdAt` defaults to now, but a caller encoding an *older* session — a
+   * rollout swept days later — passes the instant it was lived. Age is what
+   * decay runs on, so a backdated trace arrives already degraded, exactly as if
+   * it had been encoded on the day.
+   */
   async add(
-    memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>,
+    memory: Omit<Memory, 'id' | 'createdAt' | 'recallCount' | 'decayRate' | 'currentLevel' | 'saillance'>
+      & { createdAt?: Date },
     options: { autoGenerate?: boolean } = {}
   ): Promise<Memory> {
     const id = crypto.randomUUID();
     const now = this.clock.now();
+    const createdAt = memory.createdAt ?? now;
 
     let generatedLevels = {};
     if (options.autoGenerate && !memory.level1Summary) {
@@ -577,11 +585,11 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       ...memory,
       ...generatedLevels,
       id,
-      createdAt: now,
+      createdAt,
       recallCount: 0,
       decayRate: calculateDecayRate(memory.content, memory.keywords),
       currentLevel: 0,
-      saillance: calculateSaillance({ ...memory, id, createdAt: now, recallCount: 0, decayRate: 0.5 } as Memory, now),
+      saillance: calculateSaillance({ ...memory, id, createdAt, recallCount: 0, decayRate: 0.5 } as Memory, now),
       // Phase 6.0.1 — provenance defaults
       source: memory.source ?? 'agent',
       verified: memory.verified ?? false,

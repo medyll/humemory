@@ -76,3 +76,29 @@ describe('parseAgentSession dispatch', () => {
     expect(session.messages[0].content).toBe('ping');
   });
 });
+
+describe('rollout dating', () => {
+  test('carries the instant the thread ran, not the instant it was swept', () => {
+    const session = parseCodexRollout(userRollout, '/fallback');
+    // Last message of the fixture, not the sweep's own clock.
+    expect(session.occurredAt?.toISOString().split('T')[0]).toBe('2026-08-24');
+    expect(session.occurredAt!.getTime()).toBe(
+      new Date(session.messages.at(-1)!.timestamp!).getTime(),
+    );
+  });
+
+  test('falls back to the session_meta header when no turn is stamped', () => {
+    const stripped = userRollout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const entry = JSON.parse(line);
+        if (entry.type === 'response_item') delete entry.timestamp;
+        return JSON.stringify(entry);
+      })
+      .join('\n');
+
+    const session = parseCodexRollout(stripped, '/fallback');
+    expect(session.occurredAt?.toISOString()).toBe('2026-08-24T16:38:21.717Z');
+  });
+});

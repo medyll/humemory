@@ -135,3 +135,46 @@ describe('processSession (integration)', () => {
     expect(result.memoriesStored).toBe(0);
   });
 });
+
+describe('trace dating (integration)', () => {
+  test('dates a swept rollout on the day it was lived', async () => {
+    const { mkdtempSync, rmSync, readFileSync } = await import('fs');
+    const { tmpdir } = await import('os');
+    const { join, dirname } = await import('path');
+    const { fileURLToPath } = await import('url');
+    const { SQLiteStore } = await import('../src/store/sqlite.js');
+
+    const dir = mkdtempSync(join(tmpdir(), 'humemory-dating-'));
+    const dbPath = join(dir, 'dating.db');
+    const rollout = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'codex-rollout.user.jsonl'),
+      'utf-8',
+    );
+
+    try {
+      const result = await processSession(rollout, {
+        dbPath,
+        directory: '/test',
+        maxLearnings: 5,
+        source: 'hook',
+        agent: 'codex',
+      });
+      expect(result.memoriesStored).toBeGreaterThan(0);
+
+      const store = new SQLiteStore(dbPath);
+      try {
+        const traces = await store.list();
+        expect(traces.length).toBe(result.memoriesStored);
+        for (const trace of traces) {
+          // The import day would be today; the rollout was lived on the 24th.
+          expect(trace.day).toBe('2026-08-24');
+          expect(trace.createdAt.toISOString().split('T')[0]).toBe('2026-08-24');
+        }
+      } finally {
+        store.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

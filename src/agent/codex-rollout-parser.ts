@@ -14,7 +14,7 @@
  * what was decided, not from the mechanics of getting there.
  */
 
-import type { ParsedSession, SessionMessage } from './session-parser.js';
+import { lastMessageTime, type ParsedSession, type SessionMessage } from './session-parser.js';
 
 export interface CodexRolloutMeta {
   sessionId: string;
@@ -104,10 +104,18 @@ export function parseCodexRollout(raw: string, directory: string): ParsedSession
     messages.push({ role: payload.role, content, timestamp: entry.timestamp });
   }
 
+  // A sweep can read a rollout weeks after the thread ran: the transcript's own
+  // clock is what the trace must be dated by, not the moment of the sweep.
+  const metaTime = meta?.timestamp ? new Date(meta.timestamp) : undefined;
+  const occurredAt =
+    lastMessageTime(messages) ??
+    (metaTime && !Number.isNaN(metaTime.getTime()) ? metaTime : undefined);
+
   return {
     sessionId: meta?.sessionId || `codex-${Date.now()}`,
     directory: meta?.directory || directory,
     messages,
+    occurredAt,
     rawText: messages.map((m) => `${m.role}: ${m.content}`).join('\n\n'),
   };
 }

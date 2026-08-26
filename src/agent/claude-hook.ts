@@ -1,5 +1,5 @@
 import { SQLiteStore } from '../store/sqlite.js';
-import { parseAgentSession, type ParsedSession } from './session-parser.js';
+import { lastMessageTime, parseAgentSession, type ParsedSession } from './session-parser.js';
 import { extractLearnings, extractLearningsDeterministic } from './learning-extractor.js';
 import type { LLMClient } from '../core/llm-generator.js';
 import type { TraceSource } from '../core/types.js';
@@ -87,6 +87,11 @@ export async function processSession(
     return { sessionId: session.sessionId, directory: session.directory, memoriesStored: 0, learnings: [], extractionMode, messagesSeen };
   }
 
+  // What is encoded belongs to the day the session ran, not the day it was
+  // read: a rollout sweep runs long after the fact, and dating every trace on
+  // the sweep collapses the timeline into a single import day.
+  const occurredAt = lastMessageTime(pending) ?? session.occurredAt ?? new Date();
+
   const store = new SQLiteStore(options.dbPath);
   const stored: string[] = [];
 
@@ -95,7 +100,8 @@ export async function processSession(
       await store.add({
         content: learning.content,
         directory: session.directory,
-        day: new Date().toISOString().split('T')[0],
+        day: occurredAt.toISOString().split('T')[0],
+        createdAt: occurredAt,
         keywords: learning.keywords,
         sessionId: session.sessionId,
         memoryType: learning.memoryType,
