@@ -198,6 +198,15 @@ Claude as an asynchronous quality enhancement, set
 timeouts fall back to the deterministic extractor. A queue item is deleted only
 after its extracted memories are committed successfully.
 
+Without an API key, `HUMEMORY_MAINTENANCE_LLM=codex` uses the logged-in `codex`
+CLI instead — same fallback, no key, your agent subscription pays. Raise
+`HUMEMORY_MAINTENANCE_TIMEOUT_MS` to ~60000: an agent turn costs seconds of
+start-up before the first token. The adapter runs codex `--ephemeral` and
+`--ignore-user-config` deliberately: a persisted rollout would be re-ingested as
+a trace later, and a humemory hook wired into codex would re-enter humemory
+mid-maintenance. Expect ~12k tokens of agent preamble per call regardless of
+trace size — this buys summary quality, not economy.
+
 The queue directory is the whole contract, and it is inspectable at any time:
 
 | Entry | Meaning |
@@ -212,8 +221,9 @@ The queue directory is the whole contract, and it is inspectable at any time:
 | --- | --- | --- |
 | `HUMEMORY_DB` | `data/humemory.db` | database path |
 | `HUMEMORY_QUEUE` | `data/maintenance-queue` | durable raw-session inbox |
-| `HUMEMORY_MAINTENANCE_LLM` | `none` | optional enhancement (`anthropic`) |
-| `HUMEMORY_MAINTENANCE_TIMEOUT_MS` | `8000` | model timeout; never affects the agent hook |
+| `HUMEMORY_MAINTENANCE_LLM` | `none` | optional enhancement (`anthropic`, `codex`) |
+| `HUMEMORY_MAINTENANCE_TIMEOUT_MS` | `8000` | model timeout; never affects the agent hook. `codex` needs ~60000 |
+| `HUMEMORY_LLM_MODEL` | provider default | model id; mini models are rejected on ChatGPT accounts |
 | `HUMEMORY_DIR` | `cwd` | mental place to scope loops and traces to |
 | `HUMEMORY_SESSION_BUDGET` | `10` | max items listed per section |
 | `HUMEMORY_SAILLANCE_MIN` | `60` | salience floor for recalling a decayed trace |
