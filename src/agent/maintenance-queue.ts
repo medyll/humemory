@@ -3,7 +3,7 @@ import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'fs/
 import { join } from 'path';
 import type { LLMClient } from '../core/llm-generator.js';
 import { processSession } from './claude-hook.js';
-import { parseClaudeHookPayload } from './session-parser.js';
+import { parseAgentSession } from './session-parser.js';
 
 export interface MaintenanceJob {
   version: 1;
@@ -99,7 +99,7 @@ export async function enqueueSession(rawTranscript: string, options: EnqueueOpti
   if (!raw) throw new Error('Cannot queue an empty session');
 
   const directory = options.directory ?? process.cwd();
-  const parsed = parseClaudeHookPayload(rawTranscript, directory);
+  const parsed = parseAgentSession(rawTranscript, directory);
   const source = options.source ?? 'claude-code';
   // Keyed on session, not transcript content: `Stop` fires once per turn and the
   // transcript grows each time, so hashing the raw text would enqueue one job

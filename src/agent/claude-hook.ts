@@ -1,5 +1,5 @@
 import { SQLiteStore } from '../store/sqlite.js';
-import { parseClaudeHookPayload, type ParsedSession } from './session-parser.js';
+import { parseAgentSession, type ParsedSession } from './session-parser.js';
 import { extractLearnings, extractLearningsDeterministic } from './learning-extractor.js';
 import type { LLMClient } from '../core/llm-generator.js';
 import type { TraceSource } from '../core/types.js';
@@ -50,7 +50,7 @@ export async function processSession(
   options: HookOptions
 ): Promise<HookResult> {
   const directory = options.directory ?? process.cwd();
-  const session = parseClaudeHookPayload(rawTranscript, directory);
+  const session = parseAgentSession(rawTranscript, directory);
   const maxLearnings = options.maxLearnings ?? 5;
   const messagesSeen = session.messages.length;
 

@@ -1,3 +1,5 @@
+import { isCodexRollout, parseCodexRollout } from './codex-rollout-parser.js';
+
 export interface SessionMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -96,4 +98,13 @@ export function parseClaudeHookPayload(raw: string, directory: string): ParsedSe
     messages: [{ role: 'assistant', content: raw }],
     rawText: raw,
   };
+}
+
+/**
+ * Entry point for any local agent transcript: detects the producer and hands
+ * off. Claude hook payloads and Codex rollouts are both JSON on stdin, so the
+ * dispatch is on shape, not on a flag the caller has to remember to pass.
+ */
+export function parseAgentSession(raw: string, directory: string): ParsedSession {
+  return isCodexRollout(raw) ? parseCodexRollout(raw, directory) : parseClaudeHookPayload(raw, directory);
 }

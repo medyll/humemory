@@ -16,6 +16,8 @@ const __dirname = dirname(__filename);
 // Shared store. HUMEMORY_DB points at another database — same convention as the
 // hooks, and required to exercise the CLI without touching production.
 const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
+// Same inbox the agent hooks write to — the CLI only ever queues, never encodes.
+const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../../data/maintenance-queue');
 let store: SQLiteStore;
 
 function getStore(): SQLiteStore {
@@ -881,6 +883,48 @@ for (const verb of ['approve', 'reject'] as const) {
 const sources = program
   .command('sources')
   .description('Discover local AI agent runtimes without reading their sessions');
+
+sources
+  .command('import-codex')
+  .description('Queue Codex CLI rollouts for maintenance (nothing is encoded until the worker runs)')
+  .option('--since <days>', 'Only rollouts touched in the last N days', '7')
+  .option('--all', 'Every rollout ever recorded, ignoring --since')
+  .option('--limit <n>', 'Stop after N queued sessions')
+  .option('--include-subagents', 'Also import threads codex spawned for itself')
+  .option('--dry-run', 'Report what would be queued, write nothing')
+  .option('--sessions-dir <dir>', 'Override $CODEX_HOME/sessions')
+  .action(async (options) => {
+    const { importCodexRollouts, defaultCodexSessionsDir } = await import('../agent/codex-import.js');
+    const sessionsDir = options.sessionsDir ? resolve(options.sessionsDir) : defaultCodexSessionsDir();
+    const days = Number(options.since);
+    const since = options.all || !Number.isFinite(days)
+      ? undefined
+      : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    console.log(`⏳ Scanning ${sessionsDir}${since ? ` (last ${days} day(s))` : ' (all)'}...`);
+
+    const result = await importCodexRollouts({
+      queueDir: QUEUE_DIR,
+      sessionsDir,
+      since,
+      limit: options.limit ? parseInt(options.limit) : undefined,
+      includeSubagents: options.includeSubagents,
+      dryRun: options.dryRun,
+    });
+
+    console.log(
+      `\n${options.dryRun ? 'Would queue' : '✓ Queued'} ${result.queued} session(s)` +
+      `${options.dryRun ? '' : ` (${result.created} new)`} out of ${result.scanned} scanned.`
+    );
+    console.log(
+      `  skipped — ${result.skippedOld} older than the window, ` +
+      `${result.skippedSubagent} subagent thread(s), ${result.skippedEmpty} without a turn, ` +
+      `${result.unreadable} unreadable`
+    );
+    if (!options.dryRun && result.queued > 0) {
+      console.log('\nRun `pnpm maintenance` to encode them (or wait for the scheduled pass).');
+    }
+  });
 
 sources
   .command('discover', { isDefault: true })

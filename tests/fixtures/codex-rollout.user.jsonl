@@ -1,0 +1,10 @@
+{"timestamp":"2026-08-24T16:38:21.978Z","type":"session_meta","payload":{"session_id":"01a02f57-4c91-7bc3-9435-d479f2c1ec44","id":"01a034a3-22cd-78d2-82a9-e6f002a89616","timestamp":"2026-08-24T16:38:21.717Z","cwd":"/dev/humemory","originator":"codex_work_desktop","cli_version":"0.147.0","thread_source":"user","model_provider":"openai"}}
+{"timestamp":"2026-08-24T16:38:22.100Z","type":"turn_context","payload":{"model":"gpt-5.6-sol"}}
+{"timestamp":"2026-08-24T16:38:22.720Z","type":"response_item","payload":{"type":"message","id":"msg_1","role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>/dev/humemory</cwd>\n</environment_context>"}]}}
+{"timestamp":"2026-08-24T16:38:22.800Z","type":"response_item","payload":{"type":"message","id":"msg_2","role":"developer","content":[{"type":"input_text","text":"You are a coding agent. Follow the base instructions."}]}}
+{"timestamp":"2026-08-24T16:38:23.000Z","type":"response_item","payload":{"type":"message","id":"msg_3","role":"user","content":[{"type":"input_text","text":"pourquoi l'API ecoute sur 127.0.0.1 par defaut ?"}]}}
+{"timestamp":"2026-08-24T16:38:24.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"internal chain of thought that must never be encoded"}]}}
+{"timestamp":"2026-08-24T16:38:25.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"shell","input":"rg HUMEMORY_HOST src/"}}
+{"timestamp":"2026-08-24T16:38:25.500Z","type":"response_item","payload":{"type":"custom_tool_call_output","output":"src/api/server.ts:41"}}
+{"timestamp":"2026-08-24T16:38:26.225Z","type":"event_msg","payload":{"type":"agent_message","message":"duplicate of the response_item below"}}
+{"timestamp":"2026-08-24T16:38:26.300Z","type":"response_item","payload":{"type":"message","id":"msg_4","role":"assistant","content":[{"type":"output_text","text":"Decision: bind loopback par defaut ; un host non-loopback sans token refuse de demarrer."}]}}

@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-24T16:40:00.000Z","type":"session_meta","payload":{"session_id":"01a034a3-guardian","id":"01a034a3-guardian","cwd":"/dev/humemory","thread_source":"subagent","source":{"subagent":{"other":"guardian"}}}}
+{"timestamp":"2026-08-24T16:40:01.000Z","type":"response_item","payload":{"type":"message","id":"msg_1","role":"assistant","content":[{"type":"output_text","text":"{\"risk_level\":\"low\",\"outcome\":\"allow\"}"}]}}
