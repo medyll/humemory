@@ -879,6 +879,59 @@ for (const verb of ['approve', 'reject'] as const) {
     });
 }
 
+// === MAINTENANCE ===
+const maintenance = program
+  .command('maintenance')
+  .description('Health of the consolidation loop, and a way to force a pass');
+
+maintenance
+  .command('status', { isDefault: true })
+  .description('Is consolidation still running, and when did it last succeed?')
+  .option('--json', 'Machine-readable output')
+  .option('--stale-after <minutes>', 'Staleness budget before the loop is called overdue', '60')
+  .action(async (options) => {
+    const { readMaintenanceState, assessMaintenance, defaultStatePath } = await import('../agent/maintenance-state.js');
+    const staleAfterMs = Math.max(1, Number(options.staleAfter)) * 60_000;
+    const health = assessMaintenance(await readMaintenanceState(defaultStatePath(QUEUE_DIR)), { staleAfterMs });
+
+    if (options.json) {
+      console.log(JSON.stringify(health, null, 2));
+    } else {
+      console.log(`\n${health.stale ? '✗' : '✓'} ${health.summary}`);
+      if (health.lastRunAt) console.log(`  last attempt   ${health.lastRunAt}`);
+      if (health.lastSuccessAt) console.log(`  last success   ${health.lastSuccessAt}`);
+      if (health.lastError) console.log(`  last error     ${health.lastError}`);
+      if (health.lastResult) {
+        const r = health.lastResult;
+        console.log(`  last counts    ${r.processed}/${r.discovered} jobs, ${r.memoriesStored} memories, ${r.failed} failed, ${r.deadLettered} dead-lettered`);
+      }
+      console.log();
+      if (health.stale) {
+        console.log('The loop lives in the API process — check that it is running, then `humemory maintenance run`.\n');
+      }
+    }
+    // Non-zero on staleness so a checker can act on it without parsing text.
+    if (health.stale) process.exitCode = 1;
+  });
+
+maintenance
+  .command('run')
+  .description('Force one consolidation pass here and now, in this process')
+  .option('--skip-codex', 'Do not import codex rollouts first')
+  .action(async (options) => {
+    const { runMaintenancePass, resolveMaintenanceClient } = await import('../agent/maintenance-runner.js');
+    const client = await resolveMaintenanceClient();
+    const { worker } = await runMaintenancePass({
+      client,
+      codexSinceDays: options.skipCodex ? false : undefined,
+      runner: 'cli',
+    });
+    console.log(
+      `✓ ${worker.processed}/${worker.discovered} jobs, ${worker.memoriesStored} memories, ` +
+      `${worker.failed} failed, ${worker.deadLettered} dead-lettered${worker.busy ? ' (another worker held the lock)' : ''}`
+    );
+  });
+
 // === LOCAL AGENT SOURCES ===
 const sources = program
   .command('sources')

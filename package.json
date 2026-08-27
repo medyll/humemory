@@ -60,6 +60,8 @@
     "cli": "bun run src/cli/index.ts",
     "consolidate": "bun run scripts/consolidate.js",
     "maintenance": "bun run scripts/maintenance-worker.ts",
+    "maintenance:status": "bun run src/cli/index.ts maintenance status",
+    "win:install": "pwsh -File scripts/windows/install.ps1",
     "dream": "bun run src/cli/index.ts dream",
     "mcp": "bun run src/mcp/server.ts",
     "build:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\" && bun build web/index.html --outdir public/app --production --splitting",
