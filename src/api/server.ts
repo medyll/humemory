@@ -43,6 +43,13 @@ import { createIntentionRoutes } from './intentions-routes.js';
 import { createMemoryRoutes } from './memory-routes.js';
 import { createDreamRoutes } from './dream-routes.js';
 import { createScriptRoutes } from './scripts-routes.js';
+import { createMaintenanceRoutes } from './maintenance-routes.js';
+import { defaultStatePath } from '../agent/maintenance-state.js';
+import {
+  startMaintenanceLoop,
+  configuredIntervalMs,
+  type MaintenanceLoop,
+} from '../agent/maintenance-runner.js';
 import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
@@ -68,6 +75,12 @@ function safeJoin(baseDir: string, ...segments: string[]): string | null {
 const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
 const store = new SQLiteStore(DB_PATH);
 const PUBLIC_DIR = join(__dirname, '../../public');
+const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../../data/maintenance-queue');
+const MAINTENANCE_STATE_PATH = defaultStatePath(QUEUE_DIR);
+
+// Assigned only when this process hosts the loop; the routes read it to report
+// whether maintenance lives here and whether a pass is in flight right now.
+let maintenanceLoop: MaintenanceLoop | undefined;
 
 // Configure CORS securely (allow localhost for development, restrict in production)
 const allowedOrigins = process.env.NODE_ENV === 'production'
@@ -205,6 +218,13 @@ app.route('/', createDreamRoutes(store));
 // === COGNITIVE SCRIPTS (Phase 8.3) ===
 app.route('/', createScriptRoutes(store));
 
+// === MAINTENANCE HEALTH ===
+// Behind the token like every other data route: `lastError` is internal detail.
+app.route('/', createMaintenanceRoutes({
+  statePath: MAINTENANCE_STATE_PATH,
+  loop: () => maintenanceLoop,
+}));
+
 // === HEALTH ===
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -242,11 +262,30 @@ if (import.meta.main) {
   // scheduled task under an interactive token flashes a console window at every
   // tick, and running it "whether the user is logged on or not" needs elevation
   // this machine does not grant. This process is already resident and hidden.
-  // HUMEMORY_MAINTENANCE_INTERVAL_MS=0 disables it (external scheduler instead).
-  const maintenanceInterval = Number(process.env.HUMEMORY_MAINTENANCE_INTERVAL_MS ?? 15 * 60 * 1000);
+  // HUMEMORY_MAINTENANCE_INTERVAL_MS=0 hands the job back to a scheduler; the
+  // state file and /maintenance/status stay meaningful either way.
+  const maintenanceInterval = configuredIntervalMs();
   if (maintenanceInterval > 0) {
-    const { startMaintenanceLoop } = await import('../agent/maintenance-runner.js');
-    startMaintenanceLoop({ intervalMs: maintenanceInterval });
+    maintenanceLoop = startMaintenanceLoop({
+      intervalMs: maintenanceInterval,
+      queueDir: QUEUE_DIR,
+      dbPath: DB_PATH,
+      statePath: MAINTENANCE_STATE_PATH,
+      runner: `api:${process.pid}`,
+    });
     console.log(`🧹 Maintenance pass every ${Math.round(maintenanceInterval / 60_000)} min (in-process)`);
+  } else {
+    console.log('🧹 Maintenance loop disabled — an external scheduler is expected to run it.');
   }
+
+  // In-flight work finishes before the process goes: a pass killed mid-write
+  // leaves a job in `.processing` that only the stale-lock timeout recovers.
+  const shutdown = (signal: string) => {
+    console.log(`\n${signal} — stopping maintenance loop and closing the store.`);
+    maintenanceLoop?.stop();
+    try { store.close?.(); } catch { /* already closed */ }
+    process.exit(0);
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
