@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.6] - 2026-08-27
+**Bug Fixes:**
+- stop the 15-min console flash, and make consolidation supervised (#1)
+
+
+
 ## [0.2.5] - 2026-08-26
 **Features:**
 - ingest codex sessions, not just claude ones
