@@ -237,4 +237,16 @@ if (import.meta.main) {
   }
 
   serve({ fetch: app.fetch, port, hostname });
+
+  // Maintenance runs here rather than in an external scheduler: on Windows a
+  // scheduled task under an interactive token flashes a console window at every
+  // tick, and running it "whether the user is logged on or not" needs elevation
+  // this machine does not grant. This process is already resident and hidden.
+  // HUMEMORY_MAINTENANCE_INTERVAL_MS=0 disables it (external scheduler instead).
+  const maintenanceInterval = Number(process.env.HUMEMORY_MAINTENANCE_INTERVAL_MS ?? 15 * 60 * 1000);
+  if (maintenanceInterval > 0) {
+    const { startMaintenanceLoop } = await import('../agent/maintenance-runner.js');
+    startMaintenanceLoop({ intervalMs: maintenanceInterval });
+    console.log(`🧹 Maintenance pass every ${Math.round(maintenanceInterval / 60_000)} min (in-process)`);
+  }
 }
