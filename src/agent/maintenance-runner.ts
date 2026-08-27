@@ -137,9 +137,11 @@ export async function runMaintenancePass(
     // A pass where every job failed is not a healthy pass. The queue isolates
     // jobs on purpose — a bad transcript must not stop the others — but that
     // isolation also makes an infrastructure failure (unopenable database, full
-    // disk) look exactly like a batch of bad sessions, and after `maxAttempts`
-    // it quietly dead-letters everything. Recording it as a failure is what
-    // makes that case visible before the queue has drained itself into nothing.
+    // disk) look exactly like a batch of bad sessions. The queue no longer
+    // dead-letters its way through an outage (retries are refunded and the
+    // circuit breaker cuts the pass short), but silence would still leave the
+    // machine broken and nothing consolidated, so the pass is recorded as a
+    // failure and `maintenance status` says so.
     const wholesaleFailure = worker.discovered > 0 && worker.processed === 0 && worker.failed > 0;
 
     await recordMaintenanceRun({
@@ -147,9 +149,7 @@ export async function runMaintenancePass(
       startedAt,
       clock,
       runner: options.runner,
-      error: wholesaleFailure
-        ? new Error(`every job failed this pass (${worker.failed}/${worker.discovered}) — suspect the database or the disk, not the sessions`)
-        : undefined,
+      error: wholesaleFailure ? new Error(wholesaleFailureMessage(worker)) : undefined,
       result: {
         discovered: worker.discovered,
         processed: worker.processed,
@@ -157,6 +157,8 @@ export async function runMaintenancePass(
         deadLettered: worker.deadLettered,
         memoriesStored: worker.memoriesStored,
         busy: worker.busy,
+        retriesRefunded: worker.retriesRefunded,
+        aborted: worker.aborted,
       },
     });
 
@@ -165,6 +167,20 @@ export async function runMaintenancePass(
     await recordMaintenanceRun({ path: statePath, startedAt, clock, runner: options.runner, error });
     throw error;
   }
+}
+
+/**
+ * One line naming what the pass looked like, so `maintenance status` can be
+ * read without opening the queue directory.
+ */
+function wholesaleFailureMessage(worker: WorkerResult): string {
+  const scope = worker.aborted
+    ? `pass aborted after ${worker.failed} consecutive failures`
+    : `every job failed this pass (${worker.failed}/${worker.discovered})`;
+  const budget = worker.retriesRefunded > 0
+    ? `; ${worker.retriesRefunded} retry(ies) refunded, nothing dead-lettered`
+    : '';
+  return `${scope} — suspect the database or the disk, not the sessions${budget}`;
 }
 
 /** Minimal timer seam, so the loop is testable without waiting on wall time. */
@@ -226,7 +242,8 @@ export function startMaintenanceLoop(options: MaintenanceLoopOptions = {}): Main
       if (process.env.HUMEMORY_VERBOSE === '1' || worker.failed > 0) {
         console.error(
           `[humemory] maintenance: ${worker.processed}/${worker.discovered} jobs, ` +
-          `${worker.memoriesStored} memories, ${worker.failed} failed, ${worker.deadLettered} dead-lettered`
+          `${worker.memoriesStored} memories, ${worker.failed} failed, ${worker.deadLettered} dead-lettered` +
+          (worker.aborted ? ' (pass aborted — suspected outage)' : '')
         );
       }
     } catch (error) {
