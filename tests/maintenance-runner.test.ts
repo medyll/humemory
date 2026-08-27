@@ -229,13 +229,55 @@ describe('maintenance pass', () => {
     expect(worker.processed).toBe(0);
     expect(worker.failed).toBe(1);
 
+    // The retry was refunded rather than spent: visibility is not enough on its
+    // own, the session also has to still be there when the machine is fixed.
+    expect(worker.deadLettered).toBe(0);
+    expect(worker.retriesRefunded).toBe(1);
+
     const state = await readMaintenanceState(statePath);
     expect(state.consecutiveFailures).toBe(1);
-    expect(state.lastError).toContain('every job failed');
+    expect(state.lastError).toContain('suspect the database or the disk');
+    expect(state.lastError).toContain('refunded');
     expect(state.lastSuccessAt).toBeUndefined();
     // The counts survive the failure — they are the diagnosis.
     expect(state.lastResult?.discovered).toBe(1);
+    expect(state.lastResult?.retriesRefunded).toBe(1);
     expect(assessMaintenance(state, { clock }).stale).toBe(true);
+  });
+
+  test('an outage the pass sits through leaves every session recoverable', async () => {
+    // The end-to-end shape of the bug this guards: a database that will not
+    // open, several queued sessions, and pass after pass going nowhere. What
+    // must never happen is the queue quietly draining itself into `.dead.json`.
+    const clock = fakeClock();
+    const unopenable = join(root, 'db-as-directory');
+    await mkdir(unopenable, { recursive: true });
+    for (const sessionId of ['one', 'two', 'three']) {
+      await enqueueSession(
+        JSON.stringify({ session_id: sessionId, cwd: '/project', transcript: JSON.parse(RAW).transcript }),
+        { queueDir, now: () => clock.now() },
+      );
+    }
+
+    for (let pass = 0; pass < 8; pass += 1) {
+      const { worker } = await runMaintenancePass({
+        queueDir, dbPath: unopenable, statePath, clock, codexSinceDays: false,
+      });
+      expect(worker.deadLettered).toBe(0);
+      clock.advance(15 * 60_000);
+    }
+
+    // Nothing was lost, and the outage is loud in the state file.
+    const state = await readMaintenanceState(statePath);
+    expect(state.consecutiveFailures).toBe(8);
+    expect(state.lastSuccessAt).toBeUndefined();
+
+    // Fix the machine: the same sessions consolidate on the very next pass.
+    const { worker } = await runMaintenancePass({
+      queueDir, dbPath, statePath, clock, codexSinceDays: false,
+    });
+    expect(worker.processed).toBe(3);
+    expect((await readMaintenanceState(statePath)).consecutiveFailures).toBe(0);
   });
 
   test('a partial failure still counts as a successful pass', async () => {

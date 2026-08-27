@@ -17,6 +17,10 @@ export interface MaintenanceJob {
   queuedAt: string;
   attempts: number;
   lastError?: string;
+  /** Set when the job was moved to dead-letter; absent on a live job. */
+  deadLetteredAt?: string;
+  /** Set when a dead-letter was put back in the queue by hand. */
+  requeuedAt?: string;
 }
 
 export interface EnqueueOptions {
@@ -42,6 +46,11 @@ export interface WorkerOptions {
   maxJobs?: number;
   lockStaleMs?: number;
   maxAttempts?: number;
+  /**
+   * Consecutive job failures that trip the circuit breaker and end the pass.
+   * `false` disables the breaker. See `processMaintenanceQueue`.
+   */
+  failureThreshold?: number | false;
   now?: () => Date;
 }
 
@@ -52,13 +61,101 @@ export interface WorkerResult {
   deadLettered: number;
   memoriesStored: number;
   busy: boolean;
+  /** Failures that look like the machine, not the transcript — these cost no retry. */
+  infrastructureFailures: number;
+  /** Retries handed back because the failure was an outage rather than a bad job. */
+  retriesRefunded: number;
+  /** True when the circuit breaker cut the pass short instead of working the queue. */
+  aborted: boolean;
 }
 
 const DEFAULT_LOCK_STALE_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_ATTEMPTS = 5;
+const DEFAULT_FAILURE_THRESHOLD = 3;
 const DEAD_LETTER_SUFFIX = '.dead.json';
 const PROCESSING_SUFFIX = '.processing';
 const CHECKPOINT_DIR = 'checkpoints';
+
+/**
+ * Why a job failed, as far as the retry budget is concerned.
+ *
+ * `job` — this transcript is the problem, and every future pass will fail on it
+ * the same way. Retrying a few times then dead-lettering is right.
+ *
+ * `infrastructure` — the machine is the problem (the database will not open,
+ * the disk is full, the file is locked). Every job in the queue would fail the
+ * same way right now and all of them would succeed once the machine is fixed,
+ * so burning a retry punishes the session for an outage it had no part in.
+ */
+export type FailureKind = 'job' | 'infrastructure';
+
+/** errno values that mean "the machine", never "this transcript". */
+const INFRASTRUCTURE_CODES = new Set([
+  'EACCES', 'EAGAIN', 'EBUSY', 'EDQUOT', 'EIO', 'EISDIR', 'EMFILE',
+  'ENFILE', 'ENOMEM', 'ENOSPC', 'EPERM', 'EROFS', 'ETIMEDOUT',
+]);
+
+const INFRASTRUCTURE_PATTERNS = [
+  /unable to open database/i,
+  /database is locked/i,
+  /database disk image is malformed/i,
+  /attempt to write a readonly database/i,
+  /disk i\/o error/i,
+  /no space left/i,
+  /out of memory/i,
+  /too many open files/i,
+  /read-?only file system/i,
+];
+
+/**
+ * Classify a failure so an outage does not consume the queue's retry budget.
+ *
+ * Deliberately biased towards `job`: mislabelling a bad transcript as an outage
+ * only costs a few wasted passes, while mislabelling an outage as a bad job
+ * dead-letters real sessions permanently. Anything not recognisably about the
+ * machine is therefore treated as being about the transcript.
+ */
+export function classifyMaintenanceFailure(error: unknown): FailureKind {
+  const err = error as { code?: unknown; name?: unknown; message?: unknown; cause?: unknown } | null;
+  if (!err || typeof err !== 'object') return 'job';
+
+  const message = typeof err.message === 'string' ? err.message : String(error);
+  if (INFRASTRUCTURE_PATTERNS.some((pattern) => pattern.test(message))) return 'infrastructure';
+  if (typeof err.code === 'string') {
+    if (INFRASTRUCTURE_CODES.has(err.code)) return 'infrastructure';
+    // bun:sqlite reports the extended result code, e.g. SQLITE_CANTOPEN_ISDIR.
+    if (err.code.startsWith('SQLITE_') && !err.code.startsWith('SQLITE_CONSTRAINT')) return 'infrastructure';
+  }
+  // A constraint violation is a schema bug, not an outage — retrying cannot fix
+  // it, so it stays on the job's own budget. Every other SQLite error is the
+  // storage layer refusing to work at all.
+  if (err.name === 'SQLiteError' && !/constraint/i.test(message)) return 'infrastructure';
+  if (err.cause !== undefined && err.cause !== err) return classifyMaintenanceFailure(err.cause);
+  return 'job';
+}
+
+function emptyResult(): WorkerResult {
+  return {
+    discovered: 0,
+    processed: 0,
+    failed: 0,
+    deadLettered: 0,
+    memoriesStored: 0,
+    busy: false,
+    infrastructureFailures: 0,
+    retriesRefunded: 0,
+    aborted: false,
+  };
+}
+
+/** One failed job, held until the end of the pass so the verdict has full context. */
+interface PendingFailure {
+  path: string;
+  claimed: string;
+  job: MaintenanceJob;
+  lastError: string;
+  kind: FailureKind;
+}
 
 interface SessionCheckpoint {
   sessionId: string;
@@ -162,11 +259,11 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
         }
         continue;
       }
-      return { discovered: 0, processed: 0, failed: 0, deadLettered: 0, memoriesStored: 0, busy: true };
+      return { ...emptyResult(), busy: true };
     }
   }
 
-  if (!lock) return { discovered: 0, processed: 0, failed: 0, deadLettered: 0, memoriesStored: 0, busy: true };
+  if (!lock) return { ...emptyResult(), busy: true };
 
   try {
     const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -204,14 +301,15 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
       .slice(0, options.maxJobs ?? 20)
       .map((entry) => entry.file);
 
-    const result: WorkerResult = {
-      discovered: files.length,
-      processed: 0,
-      failed: 0,
-      deadLettered: 0,
-      memoriesStored: 0,
-      busy: false,
-    };
+    const result: WorkerResult = { ...emptyResult(), discovered: files.length };
+    const failureThreshold = options.failureThreshold === false
+      ? Number.POSITIVE_INFINITY
+      : options.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
+    // Failures are held rather than settled on the spot: whether a retry should
+    // be charged depends on how the *pass* ended, which is not known until the
+    // loop is over. See the finalisation block below.
+    const pending: PendingFailure[] = [];
+    let consecutiveFailures = 0;
 
     for (const file of files) {
       const path = join(options.queueDir, file);
@@ -249,9 +347,13 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
         await rm(claimed, { force: true });
         result.processed += 1;
         result.memoriesStored += processed.memoriesStored;
+        consecutiveFailures = 0;
       } catch (error) {
         result.failed += 1;
+        consecutiveFailures += 1;
         const lastError = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+        const kind = classifyMaintenanceFailure(error);
+        if (kind === 'infrastructure') result.infrastructureFailures += 1;
         try {
           if (!job) {
             // Unparseable on disk: no attempt counter can live in it, so retrying
@@ -259,32 +361,62 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
             // failing this file on every future pass.
             await rename(claimed, join(options.queueDir, `${file.replace(/\.json$/, '')}${DEAD_LETTER_SUFFIX}`));
             result.deadLettered += 1;
-            continue;
-          }
-          job.attempts = (job.attempts ?? 0) + 1;
-          job.lastError = lastError;
-          if (job.attempts >= maxAttempts) {
-            // Exhausted retries: move out of the active queue so it stops being
-            // picked up and stops inflating `failed` on every future pass, but
-            // keep the raw transcript on disk for manual inspection.
-            await atomicWrite(join(options.queueDir, `${job.id}${DEAD_LETTER_SUFFIX}`), JSON.stringify(job));
-            await rm(claimed, { force: true });
-            result.deadLettered += 1;
           } else {
-            // Restore for a later pass — unless a newer transcript already took
-            // the slot, which supersedes this one.
-            try {
-              await stat(path);
-              await rm(claimed, { force: true });
-            } catch {
-              await atomicWrite(path, JSON.stringify(job));
-              await rm(claimed, { force: true });
-            }
+            pending.push({ path, claimed, job, lastError, kind });
           }
         } catch {
           // Never erase evidence: the claimed file stays for manual inspection
           // and the orphan sweep restores it on the next pass.
         }
+
+        // Circuit breaker. Working through the rest of the queue during an
+        // outage is how every queued session used to burn its retries in a
+        // single afternoon; a run of failures this long is far more likely to
+        // be the machine than a coincidence of bad transcripts, so stop and
+        // leave the untouched jobs for the next pass.
+        if (consecutiveFailures >= failureThreshold) {
+          result.aborted = true;
+          break;
+        }
+      }
+    }
+
+    // A pass that aborted without encoding anything is an outage by definition,
+    // whatever the individual error messages happened to look like: refund those
+    // retries too, so an unrecognised failure mode cannot drain the queue either.
+    const wholesaleFailure = result.aborted && result.processed === 0;
+    for (const entry of pending) {
+      const refund = entry.kind === 'infrastructure' || wholesaleFailure;
+      try {
+        entry.job.lastError = entry.lastError;
+        if (refund) {
+          result.retriesRefunded += 1;
+        } else {
+          entry.job.attempts = (entry.job.attempts ?? 0) + 1;
+        }
+
+        if (!refund && entry.job.attempts >= maxAttempts) {
+          // Exhausted retries: move out of the active queue so it stops being
+          // picked up and stops inflating `failed` on every future pass, but
+          // keep the raw transcript on disk for manual inspection.
+          entry.job.deadLetteredAt = now().toISOString();
+          await atomicWrite(join(options.queueDir, `${entry.job.id}${DEAD_LETTER_SUFFIX}`), JSON.stringify(entry.job));
+          await rm(entry.claimed, { force: true });
+          result.deadLettered += 1;
+        } else {
+          // Restore for a later pass — unless a newer transcript already took
+          // the slot, which supersedes this one.
+          try {
+            await stat(entry.path);
+            await rm(entry.claimed, { force: true });
+          } catch {
+            await atomicWrite(entry.path, JSON.stringify(entry.job));
+            await rm(entry.claimed, { force: true });
+          }
+        }
+      } catch {
+        // Never erase evidence: the claimed file stays for manual inspection
+        // and the orphan sweep restores it on the next pass.
       }
     }
 
@@ -300,4 +432,136 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
       // Already gone or unreadable — nothing of ours left to release.
     }
   }
+}
+
+
+// === DEAD-LETTER RECOVERY ===
+
+export interface DeadLetter {
+  /** Filename in the queue directory, so a caller can name one precisely. */
+  file: string;
+  id: string;
+  /** Absent when the file could not be parsed — the bytes are still there. */
+  job?: MaintenanceJob;
+  sessionId?: string;
+  source?: string;
+  attempts?: number;
+  lastError?: string;
+  deadLetteredAt?: string;
+}
+
+export interface RequeueOptions {
+  queueDir: string;
+  /**
+   * Restrict to these dead-letters. Each entry matches a job id, a session id,
+   * or a filename. Omitted means every dead-letter in the directory.
+   */
+  ids?: string[];
+  /** Report what would happen and write nothing. */
+  dryRun?: boolean;
+  limit?: number;
+  now?: () => Date;
+}
+
+export interface RequeueResult {
+  scanned: number;
+  requeued: number;
+  /** A live job already holds the slot — the newer transcript wins, so the dead-letter is left alone. */
+  skippedLive: number;
+  /** The file is not a usable job; requeuing it would only dead-letter it again. */
+  unreadable: number;
+  /** What was (or would be) put back. */
+  entries: DeadLetter[];
+}
+
+function toDeadLetter(file: string, raw: string): DeadLetter {
+  const id = file.slice(0, -DEAD_LETTER_SUFFIX.length);
+  try {
+    const job = JSON.parse(raw) as MaintenanceJob;
+    if (job?.version !== 1 || !job.rawTranscript || typeof job.id !== 'string') return { file, id };
+    return {
+      file,
+      id: job.id,
+      job,
+      sessionId: job.sessionId,
+      source: job.source,
+      attempts: job.attempts,
+      lastError: job.lastError,
+      deadLetteredAt: job.deadLetteredAt,
+    };
+  } catch {
+    return { file, id };
+  }
+}
+
+/** Everything currently parked in dead-letter, newest failure first. */
+export async function listDeadLetters(queueDir: string): Promise<DeadLetter[]> {
+  let files: string[];
+  try {
+    files = (await readdir(queueDir)).filter((file) => file.endsWith(DEAD_LETTER_SUFFIX));
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+
+  const entries = await Promise.all(
+    files.map(async (file) => toDeadLetter(file, await readFile(join(queueDir, file), 'utf8').catch(() => ''))),
+  );
+  return entries.sort((a, b) => (b.deadLetteredAt ?? '').localeCompare(a.deadLetteredAt ?? ''));
+}
+
+/**
+ * Put dead-lettered jobs back in the queue with a fresh retry budget.
+ *
+ * Dead-lettering is not always a verdict on the transcript: before the retry
+ * budget learned to tell an outage from a bad job, a single unopenable database
+ * could park an entire afternoon of sessions in `.dead.json` files that nothing
+ * would ever look at again. This is the way back, and the reason the raw
+ * transcript is kept on disk rather than deleted.
+ *
+ * Restoring resets `attempts` to 0 — the point is a clean chance now that
+ * whatever broke has been fixed. A dead-letter whose slot is already held by a
+ * live job is left alone: that job carries a newer transcript for the same
+ * session and supersedes it.
+ */
+export async function requeueDeadLetters(options: RequeueOptions): Promise<RequeueResult> {
+  const now = options.now ?? (() => new Date());
+  const wanted = options.ids?.length ? new Set(options.ids) : undefined;
+  const result: RequeueResult = { scanned: 0, requeued: 0, skippedLive: 0, unreadable: 0, entries: [] };
+
+  const all = await listDeadLetters(options.queueDir);
+  const selected = wanted
+    ? all.filter((entry) => wanted.has(entry.id) || wanted.has(entry.file) || (entry.sessionId !== undefined && wanted.has(entry.sessionId)))
+    : all;
+
+  for (const entry of selected) {
+    if (options.limit !== undefined && result.requeued >= options.limit) break;
+    result.scanned += 1;
+
+    if (!entry.job) {
+      result.unreadable += 1;
+      continue;
+    }
+
+    const live = jobPath(options.queueDir, entry.job.id);
+    try {
+      await stat(live);
+      result.skippedLive += 1;
+      continue;
+    } catch {
+      // Slot is free — the dead-letter is still the best copy of this session.
+    }
+
+    result.entries.push(entry);
+    result.requeued += 1;
+    if (options.dryRun) continue;
+
+    const job: MaintenanceJob = { ...entry.job, attempts: 0, requeuedAt: now().toISOString() };
+    delete job.lastError;
+    delete job.deadLetteredAt;
+    await atomicWrite(live, JSON.stringify(job));
+    await rm(join(options.queueDir, entry.file), { force: true });
+  }
+
+  return result;
 }

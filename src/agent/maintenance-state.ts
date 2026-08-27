@@ -37,6 +37,10 @@ export interface MaintenanceState {
     memoriesStored: number;
     /** True when another worker held the lock — not a failure. */
     busy: boolean;
+    /** Retries handed back because the pass looked like an outage, not a bad job. */
+    retriesRefunded?: number;
+    /** True when the circuit breaker cut the pass short. */
+    aborted?: boolean;
   };
   /** Which process last wrote here, so two schedulers fighting is visible. */
   lastRunner?: string;

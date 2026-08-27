@@ -43,6 +43,11 @@ pnpm test           # bun test, single pass
 pnpm test:watch     # bun test --watch
 pnpm consolidate    # manual decay pass (cron-friendly)
 pnpm maintenance    # process queued sessions (network-free by default)
+
+pnpm cli maintenance status        # is consolidation alive, and since when
+pnpm cli maintenance run           # force one pass here and now
+pnpm cli maintenance dead-letters  # sessions parked after exhausting their retries
+pnpm cli maintenance requeue --all # give every dead-letter a fresh retry budget
 ```
 
 Single test file: `bun test tests/humemory.test.ts`
@@ -64,7 +69,9 @@ src/
 │   ├── session-parser.ts     # parse Claude Code session transcripts
 │   ├── source-registry.ts    # discover local AI runtimes without reading sessions
 │   ├── learning-extractor.ts # extract decisions/bugs/solutions
-│   ├── maintenance-queue.ts  # durable async inbox, session checkpoints, dead-letter
+│   ├── maintenance-queue.ts  # durable async inbox, checkpoints, retry policy, dead-letter
+│   ├── maintenance-runner.ts # one pass (codex import + drain), and the in-API loop
+│   ├── maintenance-state.ts  # durable health record of the loop (data/maintenance-state.json)
 │   ├── claude-hook.ts        # worker-side session learning encoder
 │   └── session-context.ts    # SessionStart → markdown block (open loops + traces)
 ├── core/
@@ -123,6 +130,40 @@ keywords >5. `photographic: true` disables decay entirely.
 | GET | `/search?query=X` | inverse search |
 | POST | `/decay` | run consolidation |
 | GET | `/status` | pool stats |
+
+---
+
+## 🔁 Maintenance retry policy — an outage must not cost a session
+
+The queue isolates jobs so one bad transcript cannot stop the others. That same
+isolation once made an outage indistinguishable from a batch of bad sessions:
+against an unopenable database every queued job simply failed, burned its five
+attempts over five passes, and landed in a `.dead.json` file nothing ever read.
+Three rules now separate "this transcript is bad" from "this machine is down":
+
+1. **Failures are classified** (`classifyMaintenanceFailure`). Anything that
+   names the machine — `unable to open database`, `database is locked`, `ENOSPC`,
+   `EROFS`, a `SQLITE_*` code that is not a constraint violation — is
+   *infrastructure* and costs no retry. Everything else is *job* and spends the
+   budget as before. The bias is deliberate: mislabelling a bad transcript wastes
+   a few passes, mislabelling an outage loses real sessions for good.
+2. **A circuit breaker ends the pass** after `failureThreshold` consecutive
+   failures (default 3, `false` disables it). The untouched jobs are never
+   claimed, so an outage costs one job's worth of damage instead of the queue's.
+3. **An aborted pass that encoded nothing refunds every retry it charged**, even
+   ones classified as job-level — a run of failures with zero successes is an
+   outage shape whatever the messages said. `processed > 0` proves the machine
+   works, and cancels the amnesty.
+
+The verdict is therefore deferred: failures are held until the end of the pass,
+because whether a retry is owed depends on how the pass finished.
+
+A pass that discovers jobs and encodes none is still recorded as a **failure** in
+`data/maintenance-state.json`, so `humemory maintenance status` shows it. Jobs
+that genuinely exhaust their budget keep their raw transcript in `.dead.json` —
+`humemory maintenance dead-letters` lists them and `humemory maintenance requeue`
+puts them back with `attempts` reset. Requeuing never clobbers a live job for the
+same session: that transcript is newer and supersedes the parked one.
 
 ---
 

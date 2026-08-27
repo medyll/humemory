@@ -904,6 +904,8 @@ maintenance
       if (health.lastResult) {
         const r = health.lastResult;
         console.log(`  last counts    ${r.processed}/${r.discovered} jobs, ${r.memoriesStored} memories, ${r.failed} failed, ${r.deadLettered} dead-lettered`);
+        if (r.retriesRefunded) console.log(`  retries kept   ${r.retriesRefunded} refunded — the failures looked like the machine, not the sessions`);
+        if (r.aborted) console.log('  breaker        pass aborted early; the untouched jobs are still queued');
       }
       console.log();
       if (health.stale) {
@@ -930,6 +932,76 @@ maintenance
       `✓ ${worker.processed}/${worker.discovered} jobs, ${worker.memoriesStored} memories, ` +
       `${worker.failed} failed, ${worker.deadLettered} dead-lettered${worker.busy ? ' (another worker held the lock)' : ''}`
     );
+  });
+
+maintenance
+  .command('dead-letters')
+  .description('Sessions parked after exhausting their retries, newest first')
+  .option('--json', 'Machine-readable output')
+  .action(async (options) => {
+    const { listDeadLetters } = await import('../agent/maintenance-queue.js');
+    const entries = await listDeadLetters(QUEUE_DIR);
+
+    if (options.json) {
+      // The raw transcript is deliberately left out: this is a triage listing,
+      // not an export, and a dump of every session is not what a terminal wants.
+      console.log(JSON.stringify(entries.map(({ job, ...rest }) => rest), null, 2));
+      return;
+    }
+
+    if (entries.length === 0) {
+      console.log('\n✓ No dead-lettered sessions.\n');
+      return;
+    }
+
+    console.log(`\n${entries.length} dead-lettered session(s):\n`);
+    for (const entry of entries) {
+      console.log(`  ${entry.id.slice(0, 12)}  ${entry.sessionId ?? '(unreadable)'}${entry.source ? `  [${entry.source}]` : ''}`);
+      if (entry.deadLetteredAt) console.log(`    parked     ${entry.deadLetteredAt} after ${entry.attempts ?? '?'} attempt(s)`);
+      if (entry.lastError) console.log(`    last error ${entry.lastError}`);
+    }
+    console.log('\nPut them back with `humemory maintenance requeue --all` once the cause is fixed.\n');
+  });
+
+maintenance
+  .command('requeue')
+  .description('Put dead-lettered sessions back in the queue with a fresh retry budget')
+  .argument('[ids...]', 'Job ids, session ids or filenames; omit with --all for every dead-letter')
+  .option('--all', 'Requeue every dead-lettered session')
+  .option('--limit <n>', 'Stop after N sessions')
+  .option('--dry-run', 'Report what would be requeued, write nothing')
+  .action(async (ids: string[], options) => {
+    if (!options.all && ids.length === 0) {
+      console.error('Nothing selected — name at least one id, or pass --all.');
+      process.exitCode = 1;
+      return;
+    }
+
+    const { requeueDeadLetters } = await import('../agent/maintenance-queue.js');
+    const result = await requeueDeadLetters({
+      queueDir: QUEUE_DIR,
+      ids: options.all ? undefined : ids,
+      limit: options.limit ? parseInt(options.limit) : undefined,
+      dryRun: options.dryRun,
+    });
+
+    console.log(
+      `\n${options.dryRun ? 'Would requeue' : '✓ Requeued'} ${result.requeued} of ${result.scanned} dead-letter(s).`
+    );
+    for (const entry of result.entries) {
+      console.log(`  ${entry.id.slice(0, 12)}  ${entry.sessionId ?? '(unknown session)'}`);
+    }
+    if (result.skippedLive > 0) {
+      console.log(`  skipped ${result.skippedLive} already superseded by a newer queued transcript`);
+    }
+    if (result.unreadable > 0) {
+      console.log(`  skipped ${result.unreadable} unreadable file(s) — inspect them in ${QUEUE_DIR}`);
+    }
+    if (!options.dryRun && result.requeued > 0) {
+      console.log('\nRun `humemory maintenance run` to encode them (or wait for the scheduled pass).\n');
+    } else {
+      console.log();
+    }
   });
 
 // === LOCAL AGENT SOURCES ===
