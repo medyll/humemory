@@ -1,6 +1,6 @@
 {
   "name": "humemory",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Memory for AI agents that forgets like a human — decaying traces, inverse search, and prospective loops that resurface on a cue",
   "type": "module",
   "main": "dist/index.js",

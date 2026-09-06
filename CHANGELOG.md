@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.7] - 2026-08-27
+**Bug Fixes:**
+- spend retries on bad jobs, not on outages (#2)
+
+
+
 ## [0.2.6] - 2026-08-27
 **Bug Fixes:**
 - stop the 15-min console flash, and make consolidation supervised (#1)
