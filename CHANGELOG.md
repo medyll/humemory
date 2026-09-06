@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.8] - 2026-09-06
+**Other:**
+- Add comprehensive tests for audit, maintenance, and import functionalities
+
+
+
 ## [0.2.7] - 2026-08-27
 **Bug Fixes:**
 - spend retries on bad jobs, not on outages (#2)
