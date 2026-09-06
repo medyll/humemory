@@ -137,7 +137,7 @@ describe('asynchronous maintenance queue', () => {
     const lock = new AdvisoryLock(join(queueDir, '.worker-lock'));
     await lock.acquire();
     try {
-      const result = await processMaintenanceQueue({ queueDir, dbPath, lockStaleMs: -1 });
+      const result = await processMaintenanceQueue({ queueDir, dbPath });
       expect(result.busy).toBe(true);
       expect((await readdir(queueDir)).filter((file) => file.endsWith('.json'))).toHaveLength(1);
     } finally { lock.release(); }
@@ -283,7 +283,7 @@ describe('asynchronous maintenance queue', () => {
     await mkdir(queueDir, { recursive: true });
     await writeFile(join(queueDir, '.worker.lock'), JSON.stringify({ pid: 1, token: 'dead-worker' }));
 
-    const result = await processMaintenanceQueue({ queueDir, dbPath, lockStaleMs: -1 });
+    const result = await processMaintenanceQueue({ queueDir, dbPath });
 
     expect(result.busy).toBe(false);
     expect(result.processed).toBe(1);

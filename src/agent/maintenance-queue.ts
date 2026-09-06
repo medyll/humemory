@@ -45,7 +45,6 @@ export interface WorkerOptions {
   client?: LLMClient;
   llmTimeoutMs?: number;
   maxJobs?: number;
-  lockStaleMs?: number;
   maxAttempts?: number;
   /**
    * Consecutive job failures that trip the circuit breaker and end the pass.
@@ -70,7 +69,6 @@ export interface WorkerResult {
   aborted: boolean;
 }
 
-const DEFAULT_LOCK_STALE_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_FAILURE_THRESHOLD = 3;
 const DEAD_LETTER_SUFFIX = '.dead.json';
