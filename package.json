@@ -68,6 +68,7 @@
     "build:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\" && bun build web/index.html --outdir public/app --production --splitting",
     "dev:web": "bun build web/index.html --outdir public/app --splitting --watch",
     "typecheck:web": "tsc -p web/tsconfig.json",
+    "verify:package": "bun run scripts/verify-package.ts",
     "clean:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\""
   },
   "dependencies": {

@@ -15,6 +15,8 @@ pnpm cli <cmd>      # run CLI directly
 pnpm test           # bun test, single pass
 pnpm test:watch     # bun test --watch
 pnpm consolidate    # manual decay pass (cron-friendly)
+pnpm cli doctor     # diagnose an installation (paths, rights, schema, locks, entry points)
+pnpm verify:package # pack + install outside the checkout, then drive every entry point
 ```
 
 Single test file: `bun test tests/humemory.test.ts` (other suites: `tests/agent.test.ts`, `tests/llm-generator.test.ts`)
@@ -25,7 +27,7 @@ Runtime is **bun**, not node — `bun:sqlite` is used directly in `src/store/sql
 
 humemory has two halves, **both built** as of Phase 8 (2026-08-08):
 
-1. **Retrospective memory** (✅ shipped) — past learnings are encoded then degrade through 5 levels (L0 full detail → L1 summary → L2 essential → L3 keywords → L4 lost/merged) on a human-forgetting curve. Recall reinforces a trace and slows its decay; `photographic: true` disables decay entirely. Inverse search (`src/core/search.ts`) queries degraded layers first (cheap BM25 over L3 keywords) and escalates to full content only on a match.
+1. **Retrospective memory** (✅ shipped) — past learnings are encoded then degrade through 5 levels (L0 full detail → L1 summary → L2 essential → L3 keywords → L4 lost/merged) on a human-forgetting curve. Recall reinforces a trace and slows its decay; `photographic: true` disables decay entirely. Inverse search (`src/core/search.ts`) queries degraded layers first (cheap lexical match over L3 keywords) and escalates to full content only on a match.
 2. **Prospective memory** (✅ shipped, Phase 5) — intentions live in their own `intentions` table, not as a `MemoryType`. `src/core/cues.ts` resolves time and event cues; `src/agent/session-context.ts` composes the block injected at `SessionStart`. On top of both: a trust layer (Phase 6), vector recall (Phase 7) and cognitive scripts (Phase 8).
 
 AGENTS.md is the canonical roadmap — check it before assuming a phase is unbuilt.
