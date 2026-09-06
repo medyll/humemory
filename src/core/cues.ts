@@ -10,6 +10,7 @@
  * nothing but decisions here. See PHASE5_PLAN.md § 5.2.
  */
 
+import { projectPath } from './project-path.js';
 import type {
   Cue,
   Intention,
@@ -179,8 +180,8 @@ function normalizePath(p: string): string {
  */
 function directoryMatches(intentionDir: string, eventDir: string | undefined): boolean {
   if (!eventDir) return true; // event without context: no filtering
-  const a = normalizePath(intentionDir).replace(/\/$/, '');
-  const b = normalizePath(eventDir).replace(/\/$/, '');
+  const a = projectPath(intentionDir);
+  const b = projectPath(eventDir);
   return b === a || b.startsWith(`${a}/`) || a.startsWith(`${b}/`);
 }
 
@@ -361,14 +362,15 @@ export class SqliteCueResolver implements CueResolver {
       return script && script.status === 'active' ? script.directory : null;
     }
     const intention = await this.store.getIntention(cue.targetId);
-    return intention && intention.status === 'armed' ? intention.directory : null;
+    const recurring = cue.triggerSpec.kind === 'time' && Boolean(cue.triggerSpec.cron);
+    return intention && (intention.status === 'armed' || (recurring && intention.status === 'fired'))
+      ? intention.directory : null;
   }
 
   async resolveTimeCues(now: Date = this.clock.now()): Promise<Cue[]> {
-    const cues = await this.store.listCues({ status: 'armed', kind: 'time', limit: 500 });
     const due: Cue[] = [];
 
-    for (const cue of cues) {
+    for await (const cue of this.armedCues('time')) {
       const spec = cue.triggerSpec as TimeTriggerSpec;
       if (spec.kind !== 'time') continue;
 
@@ -394,10 +396,9 @@ export class SqliteCueResolver implements CueResolver {
     // post-commit hook's job (S5-03b), not this resolver's.
     if (event.type === 'commit') return [];
 
-    const cues = await this.store.listCues({ status: 'armed', kind: 'event', limit: 500 });
     const matched: Cue[] = [];
 
-    for (const cue of cues) {
+    for await (const cue of this.armedCues('event')) {
       const spec = cue.triggerSpec as EventTriggerSpec;
       if (spec.kind !== 'event') continue;
       if (!eventTriggerMatches(spec, event)) continue;
@@ -410,6 +411,16 @@ export class SqliteCueResolver implements CueResolver {
     }
 
     return matched;
+  }
+
+  private async *armedCues(kind: 'time' | 'event'): AsyncGenerator<Cue> {
+    let afterId = '';
+    while (true) {
+      const page = await this.store.listCues({ status: 'armed', kind, limit: 500, afterId });
+      for (const cue of page) yield cue;
+      if (page.length < 500) return;
+      afterId = page[page.length - 1].id;
+    }
   }
 
   /**

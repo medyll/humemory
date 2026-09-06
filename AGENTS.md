@@ -68,9 +68,12 @@ src/
 ├── agent/
 │   ├── session-parser.ts     # parse Claude Code session transcripts
 │   ├── source-registry.ts    # discover local AI runtimes without reading sessions
+│   ├── kimi-session-parser.ts / kimi-import.ts          # Kimi wire → maintenance queue
+│   ├── opencode-session-parser.ts / opencode-import.ts  # public OpenCode export → queue
+│   ├── mcp-client-setup.ts   # merge humemory into Kimi/OpenCode MCP configs
 │   ├── learning-extractor.ts # extract decisions/bugs/solutions
 │   ├── maintenance-queue.ts  # durable async inbox, checkpoints, retry policy, dead-letter
-│   ├── maintenance-runner.ts # one pass (codex import + drain), and the in-API loop
+│   ├── maintenance-runner.ts # one pass (Codex/Kimi/OpenCode import + drain), in-API loop
 │   ├── maintenance-state.ts  # durable health record of the loop (data/maintenance-state.json)
 │   ├── claude-hook.ts        # worker-side session learning encoder
 │   └── session-context.ts    # SessionStart → markdown block (open loops + traces)
@@ -271,8 +274,9 @@ Claude, Codex, Kimi, OpenCode share one store with agent attribution on every
 write (`agent` arg or `$HUMEMORY_AGENT`; `HUMEMORY_DB` override for tests).
 
 **Client registration** — the repo ships `.mcp.json` (Claude Code project
-scope, `HUMEMORY_AGENT=claude`). For other agents, register the same server
-with their own identity:
+scope, `HUMEMORY_AGENT=claude`). `pnpm cli sources setup` merge-registers the
+same server in installed Kimi Code and OpenCode configs without removing other
+MCP servers, using the identities below:
 
 | Agent | Config | `HUMEMORY_AGENT` |
 |-------|--------|------------------|
@@ -353,7 +357,7 @@ accepts a script id as the loser. API: `POST/GET /scripts`,
   [PHASE7_DIALOG.md](./PHASE7_DIALOG.md)
 - Multi-device sync of the shared store (the `device` column from 6.0.1 makes
   it migration-free; conflict policy TBD)
-- OpenCode / other-agent integration; export/import memories between projects
+- Other-agent integration; export/import memories between projects
 
 ---
 

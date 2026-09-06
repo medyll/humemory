@@ -5,9 +5,10 @@ const { Document } = flexsearch;
 
 import type { Memory, SearchQuery, SearchResult, DecayLevel } from './types.js';
 import { systemClock, type Clock } from './clock.js';
+import { projectPath } from './project-path.js';
 
 /**
- * Inverse search engine, BM25-backed.
+ * Inverse search engine, FlexSearch candidates with heuristic ranking.
  * Queries the degraded layers first (level 3), then escalates.
  */
 export class InverseSearchEngine {
@@ -87,7 +88,7 @@ export class InverseSearchEngine {
       const matches = this.index.search({
         query: searchQuery,
         field,
-        limit: limit * 2, // over-fetch, filtering happens below
+        limit: Math.max(1, this.memories.size), // rank all candidates after filtering
       });
 
       // FlexSearch retourne [{field, result: [ids]}]
@@ -110,7 +111,7 @@ export class InverseSearchEngine {
         if (!memory) continue;
 
         // Filtres optionnels
-        if (query.directory && memory.directory !== query.directory) continue;
+        if (query.directory && projectPath(memory.directory) !== projectPath(query.directory)) continue;
         if (query.sessionId && memory.sessionId !== query.sessionId) continue;
         if (query.memoryType && memory.memoryType !== query.memoryType) continue;
         if (query.dateFrom && new Date(memory.day) < query.dateFrom) continue;
@@ -124,13 +125,10 @@ export class InverseSearchEngine {
           score: this.calculateScore(memory, searchQuery, level),
         });
 
-        if (results.length >= limit) {
-          return results.sort((a, b) => b.score - a.score);
-        }
       }
     }
 
-    return results.sort((a, b) => b.score - a.score);
+    return results.sort((a, b) => b.score - a.score || a.memory.id.localeCompare(b.memory.id)).slice(0, Math.max(0, limit));
   }
 
   /**
@@ -140,7 +138,7 @@ export class InverseSearchEngine {
     let score = 100;
 
     // Bonus for matching on a degraded level: cheaper to reach, more useful
-    const levelBonus = (4 - matchLevel) * 10;
+    const levelBonus = matchLevel * 10;
     score += levelBonus;
 
     // Recency bonus
@@ -163,7 +161,7 @@ export class InverseSearchEngine {
       score -= 10;
     }
 
-    return Math.min(100, score);
+    return score;
   }
 
   /**

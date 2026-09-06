@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { SQLiteStore } from '../src/store/sqlite.js';
+import { SQLiteStore, AdvisoryLock } from '../src/store/sqlite.js';
 import {
   classifyMaintenanceFailure,
   enqueueSession,
@@ -22,6 +22,13 @@ const RAW = JSON.stringify({
 });
 
 describe('asynchronous maintenance queue', () => {
+  test('concurrent enqueues retain the fuller transcript', async () => {
+    const longer = JSON.stringify({ ...JSON.parse(RAW), transcript: [...JSON.parse(RAW).transcript, { role: 'assistant', content: 'A further complete decision.' }] });
+    const results = await Promise.all([enqueueSession(longer, { queueDir }), enqueueSession(RAW, { queueDir }), enqueueSession(longer, { queueDir })]);
+    const saved = JSON.parse(await readFile(results[0].path, 'utf8'));
+    expect(saved.rawTranscript).toBe(longer);
+    expect((await readdir(queueDir)).filter(f => f.endsWith('.json'))).toHaveLength(1);
+  });
   let root: string;
   let queueDir: string;
   let dbPath: string;
@@ -65,14 +72,14 @@ describe('asynchronous maintenance queue', () => {
     return dead;
   }
 
-  test('enqueue is durable and idempotent without opening a database or model', async () => {
+  test('enqueue is durable and idempotent without opening the memory store or a model', async () => {
     const options = { queueDir, now: () => new Date('2026-08-15T12:00:00Z') };
     const first = await enqueueSession(RAW, options);
     const second = await enqueueSession(RAW, options);
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
-    expect(await readdir(queueDir)).toHaveLength(1);
+    expect((await readdir(queueDir)).filter(f => f.endsWith('.json'))).toHaveLength(1);
     const saved = JSON.parse(await readFile(first.path, 'utf8'));
     expect(saved).toEqual(expect.objectContaining({ sessionId: 'queued-session', attempts: 0 }));
   });
@@ -127,12 +134,13 @@ describe('asynchronous maintenance queue', () => {
 
   test('a concurrent worker leaves queued jobs untouched', async () => {
     await enqueueSession(RAW, { queueDir });
-    await writeFile(join(queueDir, '.worker.lock'), 'active');
-
-    const result = await processMaintenanceQueue({ queueDir, dbPath });
-
-    expect(result.busy).toBe(true);
-    expect((await readdir(queueDir)).filter((file) => file.endsWith('.json'))).toHaveLength(1);
+    const lock = new AdvisoryLock(join(queueDir, '.worker-lock'));
+    await lock.acquire();
+    try {
+      const result = await processMaintenanceQueue({ queueDir, dbPath, lockStaleMs: -1 });
+      expect(result.busy).toBe(true);
+      expect((await readdir(queueDir)).filter((file) => file.endsWith('.json'))).toHaveLength(1);
+    } finally { lock.release(); }
   });
 
   test('re-enqueuing the same session overwrites the job instead of piling up duplicates', async () => {
@@ -155,7 +163,7 @@ describe('asynchronous maintenance queue', () => {
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(first.path).toBe(second.path);
-    expect(await readdir(queueDir)).toHaveLength(1);
+    expect((await readdir(queueDir)).filter(f => f.endsWith('.json'))).toHaveLength(1);
     const saved = JSON.parse(await readFile(second.path, 'utf8'));
     expect(saved.rawTranscript).toBe(grown);
   });
@@ -270,7 +278,7 @@ describe('asynchronous maintenance queue', () => {
     expect((await readdir(queueDir)).filter((f) => f.endsWith('.dead.json'))).toEqual(['corrupt.dead.json']);
   });
 
-  test('a stale lock is reclaimed without deleting a lock another worker just took', async () => {
+  test('a legacy orphan is irrelevant to the OS-owned worker lock', async () => {
     await enqueueSession(RAW, { queueDir });
     await mkdir(queueDir, { recursive: true });
     await writeFile(join(queueDir, '.worker.lock'), JSON.stringify({ pid: 1, token: 'dead-worker' }));
@@ -279,8 +287,8 @@ describe('asynchronous maintenance queue', () => {
 
     expect(result.busy).toBe(false);
     expect(result.processed).toBe(1);
-    // The reclaiming worker released its own lock on the way out.
-    expect((await readdir(queueDir)).filter((f) => f.startsWith('.worker.lock'))).toEqual([]);
+    // Legacy evidence is preserved; no age-based deletion is needed.
+    expect(JSON.parse(await readFile(join(queueDir, '.worker.lock'), 'utf8')).token).toBe('dead-worker');
   });
 
   test('jobs are processed oldest-first regardless of job id ordering', async () => {

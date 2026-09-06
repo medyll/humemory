@@ -1,0 +1,45 @@
+bun test v1.3.14 (0d9b296a)
+
+tests\audit-regressions.test.ts:
+(pass) A09: failed Windows replacement preserves the old file and a complete recovery file [10.44ms]
+(pass) A11: remap previews, backs up WAL data and moves traces and absolute file cues together [66.61ms]
+(pass) A01/A02: process reader refreshes and a killed lock owner releases exclusion [1214.49ms]
+(pass) A01/A05: independent connections refresh additions, recalls and deletions in a new parent [45.57ms]
+(pass) A02: an orphan legacy lock cannot block writes [28.67ms]
+(pass) A03: cron wakes on successive days, once per occurrence, until closed [6.43ms]
+(pass) A07: time and event cues beyond 500 candidates remain reachable [14.81ms]
+(pass) A06: ranking considers later candidates and recall bonuses [3.25ms]
+
+tests\maintenance-queue.test.ts:
+(pass) asynchronous maintenance queue > concurrent enqueues retain the fuller transcript [233.40ms]
+(pass) asynchronous maintenance queue > enqueue is durable and idempotent without opening the memory store or a model [7.98ms]
+(pass) asynchronous maintenance queue > worker processes a session with the deterministic network-free path [49.18ms]
+(pass) asynchronous maintenance queue > quota failure falls back locally instead of blocking or losing the job [46.31ms]
+(pass) asynchronous maintenance queue > storage failure retains the job and records the error without spending a retry [21.16ms]
+(pass) asynchronous maintenance queue > a concurrent worker leaves queued jobs untouched [7.24ms]
+(pass) asynchronous maintenance queue > re-enqueuing the same session overwrites the job instead of piling up duplicates [17.92ms]
+(pass) asynchronous maintenance queue > a job past maxAttempts is dead-lettered instead of retried forever [12.82ms]
+(pass) asynchronous maintenance queue > a second pass over a grown transcript encodes only the new messages [69.89ms]
+(pass) asynchronous maintenance queue > a transcript enqueued mid-processing is not deleted by the finishing worker [47.79ms]
+(pass) asynchronous maintenance queue > an unparseable job file is dead-lettered instead of failing on every pass [7.83ms]
+(pass) asynchronous maintenance queue > a legacy orphan is irrelevant to the OS-owned worker lock [40.91ms]
+(pass) asynchronous maintenance queue > jobs are processed oldest-first regardless of job id ordering [42.09ms]
+(pass) asynchronous maintenance queue > an unopenable database is classified as the machine, a bad job as the job [1.08ms]
+(pass) asynchronous maintenance queue > a database outage never dead-letters a session, however long it lasts [73.83ms]
+(pass) asynchronous maintenance queue > the circuit breaker ends the pass instead of failing every job in turn [27.59ms]
+(pass) asynchronous maintenance queue > an aborted pass that encoded nothing refunds even failures it could not classify [24.26ms]
+(pass) asynchronous maintenance queue > a pass that encodes something keeps judging jobs on their own merits [46.39ms]
+(pass) asynchronous maintenance queue > dead-letters are listable with the diagnosis that put them there [11.95ms]
+(pass) asynchronous maintenance queue > requeuing restores the retry budget and the session is encoded on the next pass [52.74ms]
+(pass) asynchronous maintenance queue > requeuing selects by id or session id, and leaves the rest parked [17.71ms]
+(pass) asynchronous maintenance queue > a dead-letter superseded by a newer queued transcript is left alone [13.67ms]
+(pass) asynchronous maintenance queue > an unreadable dead-letter is reported rather than requeued into failing again [2.83ms]
+
+tests\mcp-client-setup.test.ts:
+(pass) MCP client setup > rejects invalid object shapes without rewriting and backs up valid originals [31.52ms]
+(pass) MCP client setup > merges humemory into Kimi and OpenCode without removing existing servers [17.69ms]
+
+ 33 pass
+ 0 fail
+ 167 expect() calls
+Ran 33 tests across 3 files. [2.54s]

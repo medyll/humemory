@@ -18,11 +18,12 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { enqueueSession } from '../src/agent/maintenance-queue.js';
+import { queueDirectory } from '../src/core/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../data/maintenance-queue');
+const QUEUE_DIR = queueDirectory();
 const DIRECTORY = process.env.HUMEMORY_DIR ?? process.cwd();
 const MAX_LEARNINGS = parseInt(process.env.HUMEMORY_MAX ?? '5');
 

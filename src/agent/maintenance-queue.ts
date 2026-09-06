@@ -4,6 +4,7 @@ import { join } from 'path';
 import type { LLMClient } from '../core/llm-generator.js';
 import { processSession } from './claude-hook.js';
 import { parseAgentSession } from './session-parser.js';
+import { AdvisoryLock } from '../store/sqlite.js';
 
 export interface MaintenanceJob {
   version: 1;
@@ -179,15 +180,15 @@ async function readCheckpoint(queueDir: string, id: string): Promise<SessionChec
   }
 }
 
-async function atomicWrite(path: string, content: string): Promise<void> {
-  const temporary = `${path}.${process.pid}.tmp`;
+export async function atomicWrite(path: string, content: string, replace: typeof rename = rename): Promise<void> {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, content, { encoding: 'utf8', mode: 0o600 });
   try {
-    await rename(temporary, path);
-  } catch (error: any) {
-    if (error?.code !== 'EEXIST' && error?.code !== 'EPERM') throw error;
-    await rm(path, { force: true });
-    await rename(temporary, path);
+    await replace(temporary, path);
+  } catch (error) {
+    // Leave the destination intact and the complete temporary recoverable.
+    // Never emulate replacement by deleting the only acknowledged version.
+    throw error;
   }
 }
 
@@ -219,51 +220,37 @@ export async function enqueueSession(rawTranscript: string, options: EnqueueOpti
   };
 
   await mkdir(options.queueDir, { recursive: true });
+  return new AdvisoryLock(path + '.enqueue', 50).withLock(async () => {
   let created = true;
   try {
-    await readFile(path, 'utf8');
+    const previous = JSON.parse(await readFile(path, 'utf8')) as MaintenanceJob;
     created = false;
+    const previousMessages = parseAgentSession(previous.rawTranscript, previous.directory).messages.length;
+    if (previousMessages > parsed.messages.length ||
+        (previousMessages === parsed.messages.length && previous.rawTranscript.length > rawTranscript.length)) {
+      return { job: previous, created: false, path };
+    }
   } catch (error: any) {
     if (error?.code !== 'ENOENT') throw error;
   }
 
   await atomicWrite(path, JSON.stringify(job));
   return { job, created, path };
+  });
 }
 
 export async function processMaintenanceQueue(options: WorkerOptions): Promise<WorkerResult> {
   await mkdir(options.queueDir, { recursive: true });
   await mkdir(join(options.queueDir, CHECKPOINT_DIR), { recursive: true });
   const now = options.now ?? (() => new Date());
-  const lockPath = join(options.queueDir, '.worker.lock');
-  const token = `${process.pid}-${randomUUID()}`;
-  let lock;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      lock = await open(lockPath, 'wx', 0o600);
-      await lock.writeFile(JSON.stringify({ pid: process.pid, token, startedAt: now().toISOString() }));
-      break;
-    } catch (error: any) {
-      if (error?.code !== 'EEXIST') throw error;
-      const age = now().getTime() - (await stat(lockPath)).mtimeMs;
-      if (attempt === 0 && age > (options.lockStaleMs ?? DEFAULT_LOCK_STALE_MS)) {
-        // Atomic takeover: renaming the stale lock away can only succeed once,
-        // so two workers seeing the same stale lock cannot both reclaim it. A
-        // plain unlink would instead delete a lock the winner just acquired.
-        try {
-          await rename(lockPath, `${lockPath}.stale.${token}`);
-          await rm(`${lockPath}.stale.${token}`, { force: true });
-        } catch (renameError: any) {
-          if (renameError?.code !== 'ENOENT') throw renameError;
-          // Another worker won the takeover; the retry below will see its lock.
-        }
-        continue;
-      }
-      return { ...emptyResult(), busy: true };
-    }
+  // Ownership is an OS-backed SQLite lock, with no wall-clock expiry. A slow
+  // worker retains it; a killed worker releases it without a lease takeover race.
+  const lock = new AdvisoryLock(join(options.queueDir, '.worker-lock'), 1);
+  try { await lock.acquire(); }
+  catch (error: any) {
+    if (error?.code === 'SQLITE_BUSY') return { ...emptyResult(), busy: true };
+    throw error;
   }
-
-  if (!lock) return { ...emptyResult(), busy: true };
 
   try {
     const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
@@ -422,15 +409,7 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
 
     return result;
   } finally {
-    await lock.close();
-    // Only release a lock still held by this worker: if ours went stale and was
-    // reclaimed, the file now belongs to whoever took over.
-    try {
-      const held = JSON.parse(await readFile(lockPath, 'utf8'));
-      if (held?.token === token) await rm(lockPath, { force: true });
-    } catch {
-      // Already gone or unreadable — nothing of ours left to release.
-    }
+    lock.release();
   }
 }
 

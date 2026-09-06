@@ -12,6 +12,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { enqueueSession } from '../src/agent/maintenance-queue.js';
+import { SQLiteStore } from '../src/store/sqlite.js';
 import {
   runMaintenancePass,
   startMaintenanceLoop,
@@ -39,6 +40,12 @@ const RAW = JSON.stringify({
     },
   ],
 });
+
+const NO_IMPORTS = {
+  codexSinceDays: false,
+  kimiSinceDays: false,
+  opencodeSinceDays: false,
+} as const;
 
 /** Timer seam that fires only when the test says so. */
 function manualTimers() {
@@ -176,7 +183,7 @@ describe('maintenance pass', () => {
       dbPath,
       statePath,
       clock,
-      codexSinceDays: false,
+      ...NO_IMPORTS,
       runner: 'test',
     });
 
@@ -198,6 +205,8 @@ describe('maintenance pass', () => {
       statePath,
       clock: fakeClock(),
       codexSinceDays: 1,
+      kimiSinceDays: false,
+      opencodeSinceDays: false,
       codexSessionsDir: join(root, 'no-such-codex-dir'),
     });
 
@@ -206,6 +215,52 @@ describe('maintenance pass', () => {
     expect(codexError).toBeUndefined();
     expect(worker.processed).toBe(1);
     expect((await readMaintenanceState(statePath)).lastSuccessAt).toBeDefined();
+  });
+
+  test('one pass imports and drains Kimi and OpenCode through the shared queue', async () => {
+    const kimiHome = join(root, 'kimi');
+    const sessionDir = join(kimiHome, 'sessions', 'wd_project', 'session_kimi-pass');
+    await mkdir(join(sessionDir, 'agents', 'main'), { recursive: true });
+    await writeFile(
+      join(kimiHome, 'session_index.jsonl'),
+      JSON.stringify({ sessionDir: join('sessions', 'wd_project', 'session_kimi-pass') }),
+    );
+    await writeFile(join(sessionDir, 'state.json'), JSON.stringify({ id: 'kimi-pass', cwd: '/project' }));
+    await writeFile(join(sessionDir, 'agents', 'main', 'wire.jsonl'), [
+      { type: 'context.append_message', time: Date.now(), message: { role: 'user', origin: { kind: 'user' }, content: [{ type: 'text', text: 'Remember the Kimi fix' }] } },
+      { type: 'context.append_loop_event', time: Date.now(), event: { type: 'content.part', turnId: '1', part: { type: 'text', text: 'The Kimi fix is stable and should be reused in future sessions.' } } },
+    ].map((entry) => JSON.stringify(entry)).join('\n'));
+
+    const opencodeExport = JSON.stringify({
+      info: { id: 'open-pass', directory: '/project' },
+      messages: [
+        { info: { role: 'user', time: { created: Date.now() } }, parts: [{ type: 'text', text: 'Remember the OpenCode fix' }] },
+        { info: { role: 'assistant', time: { created: Date.now() } }, parts: [{ type: 'text', text: 'The OpenCode fix is stable and should be reused in future sessions.' }] },
+      ],
+    });
+    const opencodeRun = async (args: string[]) => args[0] === 'db'
+      ? JSON.stringify([{ id: 'open-pass', directory: '/project' }])
+      : opencodeExport;
+
+    const result = await runMaintenancePass({
+      queueDir,
+      dbPath,
+      statePath,
+      clock: fakeClock(),
+      ...NO_IMPORTS,
+      kimiSinceDays: 1,
+      kimiHome,
+      opencodeSinceDays: 1,
+      opencodeRun,
+    });
+
+    expect(result.kimi).toMatchObject({ queued: 1, created: 1 });
+    expect(result.opencode).toMatchObject({ queued: 1, created: 1 });
+    expect(result.worker).toMatchObject({ discovered: 2, processed: 2, failed: 0 });
+    const store = new SQLiteStore(dbPath);
+    const agents = new Set((await store.list({ limit: 10 })).map((memory) => memory.agent));
+    store.close();
+    expect(agents).toEqual(new Set(['kimi', 'opencode']));
   });
 
   test('an infrastructure failure is recorded as a failure, not as a quiet success', async () => {
@@ -222,7 +277,7 @@ describe('maintenance pass', () => {
       dbPath: unopenable,
       statePath,
       clock,
-      codexSinceDays: false,
+      ...NO_IMPORTS,
     });
 
     expect(worker.discovered).toBe(1);
@@ -261,7 +316,7 @@ describe('maintenance pass', () => {
 
     for (let pass = 0; pass < 8; pass += 1) {
       const { worker } = await runMaintenancePass({
-        queueDir, dbPath: unopenable, statePath, clock, codexSinceDays: false,
+        queueDir, dbPath: unopenable, statePath, clock, ...NO_IMPORTS,
       });
       expect(worker.deadLettered).toBe(0);
       clock.advance(15 * 60_000);
@@ -274,7 +329,7 @@ describe('maintenance pass', () => {
 
     // Fix the machine: the same sessions consolidate on the very next pass.
     const { worker } = await runMaintenancePass({
-      queueDir, dbPath, statePath, clock, codexSinceDays: false,
+      queueDir, dbPath, statePath, clock, ...NO_IMPORTS,
     });
     expect(worker.processed).toBe(3);
     expect((await readMaintenanceState(statePath)).consecutiveFailures).toBe(0);
@@ -291,7 +346,7 @@ describe('maintenance pass', () => {
       dbPath,
       statePath,
       clock,
-      codexSinceDays: false,
+      ...NO_IMPORTS,
     });
 
     expect(worker.processed).toBeGreaterThan(0);
@@ -315,7 +370,7 @@ describe('maintenance pass', () => {
         dbPath,
         statePath,
         clock,
-        codexSinceDays: false,
+        ...NO_IMPORTS,
       })
     ).rejects.toThrow();
 
@@ -352,7 +407,7 @@ describe('maintenance loop', () => {
       dbPath,
       statePath,
       clock: fakeClock(),
-      codexSinceDays: false,
+      ...NO_IMPORTS,
       timers: timers.timers,
     });
 
@@ -379,7 +434,7 @@ describe('maintenance loop', () => {
       dbPath,
       statePath,
       clock: fakeClock(),
-      codexSinceDays: false,
+      ...NO_IMPORTS,
       timers: timers.timers,
       client: {
         messages: {
@@ -419,7 +474,7 @@ describe('maintenance loop', () => {
       dbPath,
       statePath,
       clock: fakeClock(),
-      codexSinceDays: false,
+      ...NO_IMPORTS,
       timers: timers.timers,
     });
 
@@ -446,7 +501,7 @@ describe('maintenance loop', () => {
       dbPath,
       statePath,
       clock: fakeClock(),
-      codexSinceDays: false,
+      ...NO_IMPORTS,
       timers: timers.timers,
     });
 

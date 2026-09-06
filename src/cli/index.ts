@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { databasePath, queueDirectory } from '../core/paths.js';
 import { SQLiteStore } from '../store/sqlite.js';
 import { calculateDecayLevel } from '../core/decay.js';
 import { SqliteCueResolver, loopId, matchIntentionByShortId } from '../core/cues.js';
@@ -15,9 +16,9 @@ const __dirname = dirname(__filename);
 
 // Shared store. HUMEMORY_DB points at another database — same convention as the
 // hooks, and required to exercise the CLI without touching production.
-const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
+const DB_PATH = databasePath();
 // Same inbox the agent hooks write to — the CLI only ever queues, never encodes.
-const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../../data/maintenance-queue');
+const QUEUE_DIR = queueDirectory();
 let store: SQLiteStore;
 
 function getStore(): SQLiteStore {
@@ -919,13 +920,18 @@ maintenance
 maintenance
   .command('run')
   .description('Force one consolidation pass here and now, in this process')
-  .option('--skip-codex', 'Do not import codex rollouts first')
+  .option('--skip-imports', 'Do not import any local agent sessions first')
+  .option('--skip-codex', 'Do not import Codex rollouts first')
+  .option('--skip-kimi', 'Do not import Kimi Code sessions first')
+  .option('--skip-opencode', 'Do not import OpenCode sessions first')
   .action(async (options) => {
     const { runMaintenancePass, resolveMaintenanceClient } = await import('../agent/maintenance-runner.js');
     const client = await resolveMaintenanceClient();
     const { worker } = await runMaintenancePass({
       client,
-      codexSinceDays: options.skipCodex ? false : undefined,
+      codexSinceDays: options.skipImports || options.skipCodex ? false : 1,
+      kimiSinceDays: options.skipImports || options.skipKimi ? false : 1,
+      opencodeSinceDays: options.skipImports || options.skipOpencode ? false : 1,
       runner: 'cli',
     });
     console.log(
@@ -1052,6 +1058,92 @@ sources
   });
 
 sources
+  .command('import-kimi')
+  .description('Queue Kimi Code sessions for maintenance')
+  .option('--since <days>', 'Only sessions touched in the last N days', '7')
+  .option('--all', 'Every session ever recorded, ignoring --since')
+  .option('--limit <n>', 'Stop after N queued sessions')
+  .option('--dry-run', 'Report what would be queued, write nothing')
+  .option('--kimi-home <dir>', 'Override $KIMI_CODE_HOME')
+  .action(async (options) => {
+    const { importKimiSessions, defaultKimiHome } = await import('../agent/kimi-import.js');
+    const kimiHome = options.kimiHome ? resolve(options.kimiHome) : defaultKimiHome();
+    const days = Number(options.since);
+    const since = options.all || !Number.isFinite(days)
+      ? undefined
+      : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    console.log(`⏳ Scanning ${kimiHome}${since ? ` (last ${days} day(s))` : ' (all)'}...`);
+    const result = await importKimiSessions({
+      queueDir: QUEUE_DIR,
+      kimiHome,
+      since,
+      limit: options.limit ? parseInt(options.limit) : undefined,
+      dryRun: options.dryRun,
+    });
+    console.log(
+      `\n${options.dryRun ? 'Would queue' : '✓ Queued'} ${result.queued} session(s)` +
+      `${options.dryRun ? '' : ` (${result.created} new)`} out of ${result.scanned} scanned.\n` +
+      `  skipped — ${result.skippedOld} older than the window, ${result.skippedEmpty} without a complete turn, ` +
+      `${result.unreadable} unreadable`
+    );
+  });
+
+sources
+  .command('import-opencode')
+  .description('Queue OpenCode session exports for maintenance')
+  .option('--since <days>', 'Only sessions touched in the last N days', '7')
+  .option('--all', 'Every session ever recorded, ignoring --since')
+  .option('--limit <n>', 'Stop after N queued sessions')
+  .option('--include-subagents', 'Also import child sessions OpenCode spawned')
+  .option('--dry-run', 'Report what would be queued, write nothing')
+  .option('--command <path>', 'Override the OpenCode executable')
+  .action(async (options) => {
+    const { importOpenCodeSessions } = await import('../agent/opencode-import.js');
+    const days = Number(options.since);
+    const since = options.all || !Number.isFinite(days)
+      ? undefined
+      : new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    console.log(`⏳ Asking OpenCode for sessions${since ? ` from the last ${days} day(s)` : ' from all time'}...`);
+    const result = await importOpenCodeSessions({
+      queueDir: QUEUE_DIR,
+      since,
+      limit: options.limit ? parseInt(options.limit) : undefined,
+      includeSubagents: options.includeSubagents,
+      dryRun: options.dryRun,
+      command: options.command,
+    });
+    console.log(
+      `\n${options.dryRun ? 'Would queue' : '✓ Queued'} ${result.queued} session(s)` +
+      `${options.dryRun ? '' : ` (${result.created} new)`} out of ${result.scanned} scanned.\n` +
+      `  skipped — ${result.skippedEmpty} without a complete turn, ${result.unreadable} unreadable`
+    );
+  });
+
+sources
+  .command('setup')
+  .description('Register humemory as a local MCP server in Kimi Code and OpenCode')
+  .option('--kimi', 'Configure Kimi Code only')
+  .option('--opencode', 'Configure OpenCode only')
+  .option('--dry-run', 'Show which files would change, write nothing')
+  .action(async (options) => {
+    const { setupHumemoryMcpClients } = await import('../agent/mcp-client-setup.js');
+    const clients = options.kimi || options.opencode
+      ? [...(options.kimi ? ['kimi'] as const : []), ...(options.opencode ? ['opencode'] as const : [])]
+      : ['kimi', 'opencode'] as const;
+    const projectRoot = resolve(__dirname, '../..');
+    const result = await setupHumemoryMcpClients({
+      clients: [...clients],
+      projectRoot,
+      dbPath: DB_PATH,
+      dryRun: options.dryRun,
+    });
+    for (const entry of result) {
+      const verb = entry.changed ? (options.dryRun ? 'would update' : 'updated') : 'already configured';
+      console.log(`✓ ${entry.client}: ${verb} ${entry.path}`);
+    }
+  });
+
+sources
   .command('discover', { isDefault: true })
   .description('Show known runtimes and the local evidence found for each one')
   .option('--installed-only', 'Hide known runtimes that were not found')
@@ -1064,6 +1156,14 @@ sources
       console.log(`${source.installed ? '✓' : '·'} ${source.name} — ${source.vendor}`);
       for (const evidence of source.evidence) console.log(`    ${evidence}`);
     }
+  });
+
+program.command('remap-project <from> <to>')
+  .description('Preview a project root relocation; --apply requires a coherent SQLite backup')
+  .option('--apply', 'Apply the previewed mapping in a transaction')
+  .option('--backup <path>', 'New SQLite backup destination (required with --apply)')
+  .action(async (from, to, options) => {
+    console.log(JSON.stringify(await getStore().remapProjectRoot(from, to, { apply: options.apply, backupPath: options.backup }), null, 2));
   });
 
 // Parse and run

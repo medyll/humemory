@@ -1,4 +1,6 @@
 import type { MemoryType } from './types.js';
+import type { LLMClient } from './types.js';
+export type { LLMClient } from './types.js';
 
 export interface GeneratedLevels {
   level1Summary: string;
@@ -6,11 +8,6 @@ export interface GeneratedLevels {
   level3Keywords: string;
 }
 
-export interface LLMClient {
-  messages: {
-    create(params: any): Promise<{ content: Array<{ type: string; text?: string }> }>;
-  };
-}
 
 const SYSTEM_PROMPT = `You are a memory consolidation system.
 For each trace, produce 3 decay levels as strict JSON.

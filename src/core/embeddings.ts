@@ -1,3 +1,4 @@
+import { modelCacheDirectory } from './paths.js';
 /**
  * Embedders — Phase 7.1.
  *
@@ -122,7 +123,7 @@ export class OnnxEmbedder implements Embedder {
     if (this.extractor) return this.extractor;
     this.loading ??= (async () => {
       const { pipeline, env } = await import('@huggingface/transformers');
-      env.cacheDir = this.options.cacheDir ?? './data/models';
+      env.cacheDir = this.options.cacheDir ?? modelCacheDirectory();
       env.allowLocalModels = true;
       const model = this.options.model ?? BGE_M3_MODEL_ID;
       return pipeline('feature-extraction', model, { dtype: this.options.dtype ?? 'q8' });

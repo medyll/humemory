@@ -8,6 +8,13 @@
  */
 export type DecayLevel = 0 | 1 | 2 | 3 | 4;
 
+/** Injection contract shared with browser-safe store interfaces. */
+export interface LLMClient {
+  messages: {
+    create(params: any): Promise<{ content: Array<{ type: string; text?: string }> }>;
+  };
+}
+
 /**
  * Memory types (cognitive neuroscience).
  * - Episodic: lived events, with their temporal and spatial context
@@ -264,6 +271,7 @@ export interface IntentionStore {
   addCue(cue: NewCue): Promise<Cue>;
   getCue(id: string): Promise<Cue | null>;
   listCues(options?: {
+    afterId?: string;
     intentionId?: string;
     targetKind?: CueTargetKind;
     targetId?: string;
@@ -361,7 +369,7 @@ export interface MemoryStore {
     minSaillance?: number;
   }): Promise<Memory[]>;
   findSimilar(id: string, options?: { limit?: number; threshold?: number }): Promise<SearchResult[]>;
-  merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: import('./llm-generator.js').LLMClient }): Promise<MergeResult>;
+  merge(sourceId: string, targetId: string, options?: { autoMergeContent?: boolean; client?: LLMClient }): Promise<MergeResult>;
   setPhotographic(id: string, value: boolean): Promise<Memory>;
   /** Phase 6.0.1 — human override verification; automatic paths set the flag directly. */
   verify?(id: string, by?: string): Promise<Memory>;

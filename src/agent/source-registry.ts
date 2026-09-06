@@ -62,7 +62,7 @@ export const KNOWN_AGENT_SOURCES: readonly AgentSourceDefinition[] = [
   },
   {
     id: 'opencode', name: 'OpenCode', vendor: 'SST', commands: ['opencode'],
-    roots: [home('.opencode'), appData('opencode'), localAppData('opencode')],
+    roots: [home('.opencode'), home('.local', 'share', 'opencode'), home('.config', 'opencode'), appData('opencode'), localAppData('opencode')],
   },
   {
     id: 'qwen-code', name: 'Qwen Code', vendor: 'Alibaba Cloud', commands: ['qwen'],

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { openSync, closeSync, unlinkSync, existsSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { hostname } from 'os';
 import type {
   Memory, SearchQuery, SearchResult, DecayLevel, MemoryStore, MemoryType, MergeResult,
@@ -17,6 +17,8 @@ import { createHash } from 'crypto';
 import { InverseSearchEngine } from '../core/search.js';
 import { generateMemoryLevels, type LLMClient } from '../core/llm-generator.js';
 import { systemClock, type Clock } from '../core/clock.js';
+import { databasePath, dataDirectory } from '../core/paths.js';
+import { remapPath } from '../core/project-path.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,7 +62,7 @@ function assertNotProdDbUnderTest(dbPath: string): void {
   if (process.env.NODE_ENV !== 'test') return;
   if (dbPath === ':memory:') return;
   const resolved = resolve(dbPath);
-  if (resolved === resolve(DEFAULT_DB_PATH)) {
+  if (resolved === resolve(DEFAULT_DB_PATH) || resolved === resolve(join(dataDirectory(), 'humemory.db'))) {
     throw new Error(
       `Refusing to open the production database (${resolved}) under NODE_ENV=test. ` +
         `Use freshStore() / ':memory:' — see docs/TESTING.md.`
@@ -69,9 +71,9 @@ function assertNotProdDbUnderTest(dbPath: string): void {
 }
 
 // Advisory lock for cross-process synchronization
-class AdvisoryLock {
+export class AdvisoryLock {
   private lockFile: string;
-  private lockFd: number | null = null;
+  private connection: Database | null = null;
   private maxRetries: number;
   private retryDelay: number;
 
@@ -86,26 +88,23 @@ class AdvisoryLock {
       let attempts = 0;
       const tryAcquire = () => {
         try {
-          // Use exclusive lock (LOCK_EX) with non-blocking (LOCK_NB)
-          // On Windows, we'll simulate this with file operations
-          if (existsSync(this.lockFile)) {
-            // Lock file exists, wait and retry
-            attempts++;
-            if (attempts >= this.maxRetries) {
-              reject(new Error(`Failed to acquire lock after ${attempts} attempts`));
-              return;
-            }
-            setTimeout(tryAcquire, this.retryDelay);
-          } else {
-            // Create the lock file
-            this.lockFd = openSync(this.lockFile, 'wx'); // wx = create file exclusively
-            resolve();
-          }
+          // SQLite's OS lock is released on process death, including SIGKILL.
+          // A separate database keeps the lock across asynchronous store work.
+          this.connection = new Database(this.lockFile + '.sqlite');
+          this.connection.exec('PRAGMA busy_timeout=0; BEGIN IMMEDIATE');
+          resolve();
         } catch (error) {
+          this.connection?.close();
+          this.connection = null;
+          const code = (error as { code?: string }).code ?? '';
+          if (!code.startsWith('SQLITE_BUSY') && !code.startsWith('SQLITE_LOCKED')) {
+            reject(error);
+            return;
+          }
           attempts++;
           if (attempts >= this.maxRetries) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            reject(new Error(`Failed to acquire lock: ${errorMessage}`));
+            reject(Object.assign(new Error(`Failed to acquire lock: ${errorMessage}`), { code: 'SQLITE_BUSY' }));
             return;
           }
           setTimeout(tryAcquire, this.retryDelay);
@@ -116,15 +115,8 @@ class AdvisoryLock {
   }
 
   release(): void {
-    if (this.lockFd !== null) {
-      try {
-        closeSync(this.lockFd);
-        this.lockFd = null;
-        unlinkSync(this.lockFile);
-      } catch (error) {
-        console.error('Failed to release lock:', error);
-      }
-    }
+    this.connection?.close();
+    this.connection = null;
   }
 
   async withLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -154,6 +146,7 @@ type Lock = Pick<AdvisoryLock, 'withLock'>;
 export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
   private db: Database;
   private searchEngine: InverseSearchEngine;
+  private indexDataVersion = -1;
   private writeQueue: Promise<any> = Promise.resolve();
   private advisoryLock: Lock;
   private clock: Clock;
@@ -173,10 +166,15 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     return this.enqueueWrite(() => this.withAdvisoryLock(fn));
   }
 
-  constructor(dbPath: string = DEFAULT_DB_PATH, options: StoreOptions = {}) {
+  constructor(dbPath?: string, options: StoreOptions = {}) {
+    if (dbPath === undefined && process.env.NODE_ENV === 'test') {
+      throw new Error('Refusing to open the production database under NODE_ENV=test; pass an explicit temporary database.');
+    }
+    dbPath ??= databasePath();
     assertNotProdDbUnderTest(dbPath);
     this.clock = options.clock ?? systemClock;
     this.deviceId = resolveDevice(options.device);
+    if (dbPath !== ':memory:') mkdirSync(dirname(resolve(dbPath)), { recursive: true });
     this.db = new Database(dbPath);
     this.db.exec('PRAGMA journal_mode=WAL');
     this.db.exec('PRAGMA busy_timeout=5000');
@@ -221,13 +219,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
 
     try {
       this.db.exec("ALTER TABLE memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'semantic'");
-    } catch {
-      // column already exists
+    } catch (error) {
+      if (!/duplicate column name/i.test(String(error))) throw error;
     }
     try {
       this.db.exec("ALTER TABLE memories ADD COLUMN photographic INTEGER DEFAULT 0");
-    } catch {
-      // column already exists
+    } catch (error) {
+      if (!/duplicate column name/i.test(String(error))) throw error;
     }
 
     // Phase 6.0.1 — provenance & trust (additive, defaults on every column;
@@ -243,8 +241,8 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     for (const stmt of memoryTrustColumns) {
       try {
         this.db.exec(stmt);
-      } catch {
-        // column already exists
+      } catch (error) {
+        if (!/duplicate column name/i.test(String(error))) throw error;
       }
     }
 
@@ -487,14 +485,18 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
     for (const stmt of intentionTrustColumns) {
       try {
         this.db.exec(stmt);
-      } catch {
-        // column already exists
+      } catch (error) {
+        if (!/duplicate column name/i.test(String(error))) throw error;
       }
     }
   }
 
   private loadIntoMemory(): void {
+    // Capture before reading: a concurrent commit after this point will force
+    // another refresh on the next search, never mark an old snapshot current.
+    this.indexDataVersion = (this.db.query('PRAGMA data_version').get() as { data_version: number }).data_version;
     const rows = this.db.query('SELECT * FROM memories').all() as any[];
+    this.searchEngine.clear();
     for (const row of rows) {
       this.searchEngine.add(this.rowToMemory(row));
     }
@@ -624,7 +626,45 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
   }
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
+    const version = (this.db.query('PRAGMA data_version').get() as { data_version: number }).data_version;
+    if (version !== this.indexDataVersion) this.loadIntoMemory();
     return this.searchEngine.search(query);
+  }
+
+  /** Explicit project relocation: preview by default, coherent SQLite backup before applying. */
+  async remapProjectRoot(from: string, to: string, options: { apply?: boolean; backupPath?: string } = {}) {
+    if (!/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(from) || !/^(?:[a-z]:[\\/]|\/|\\\\)/i.test(to)) {
+      throw new Error('Project roots must be absolute paths');
+    }
+    return this.enqueueWriteWithLock(async () => {
+      const changes: { table: string; id: string; before: string; after: string; column: string }[] = [];
+      for (const table of ['memories', 'intentions', 'scripts']) {
+        const rows = this.db.query(`SELECT id, directory FROM ${table}`).all() as { id: string; directory: string }[];
+        for (const row of rows) {
+          const after = remapPath(row.directory, from, to);
+          if (after !== row.directory) changes.push({ table, id: row.id, before: row.directory, after, column: 'directory' });
+        }
+      }
+      const cues = this.db.query('SELECT id, trigger_spec FROM cues').all() as { id: string; trigger_spec: string }[];
+      for (const cue of cues) {
+        const spec = JSON.parse(cue.trigger_spec) as TriggerSpec;
+        if (spec.kind !== 'event' || spec.type !== 'file_open') continue;
+        const path = remapPath(spec.path, from, to);
+        if (path !== spec.path) changes.push({ table: 'cues', id: cue.id, column: 'trigger_spec', before: cue.trigger_spec, after: JSON.stringify({ ...spec, path }) });
+      }
+      if (!options.apply || !changes.length) return { applied: false, changes };
+      if (!options.backupPath) throw new Error('Applying a remap requires a new backup path');
+      mkdirSync(dirname(resolve(options.backupPath)), { recursive: true });
+      // VACUUM INTO includes committed WAL contents and refuses an existing nonempty file.
+      this.db.query('VACUUM INTO $path').run({ $path: options.backupPath });
+      this.db.transaction(() => {
+        for (const change of changes) {
+          this.db.query(`UPDATE ${change.table} SET ${change.column} = $after WHERE id = $id`).run({ $after: change.after, $id: change.id });
+        }
+      })();
+      this.loadIntoMemory();
+      return { applied: true, backupPath: options.backupPath, changes };
+    });
   }
 
   async recall(id: string, agent?: string, options: RecallOptions = {}): Promise<Memory> {
@@ -1625,6 +1665,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
 
   async listCues(
     options: {
+      afterId?: string;
       intentionId?: string;
       targetKind?: CueTargetKind;
       targetId?: string;
@@ -1633,7 +1674,7 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       limit?: number;
     } = {}
   ): Promise<Cue[]> {
-    const { intentionId, targetKind, targetId, status, kind, limit = 50 } = options;
+    const { intentionId, targetKind, targetId, status, kind, limit = 50, afterId } = options;
     const conditions: string[] = [];
     const params: any = {};
 
@@ -1666,9 +1707,13 @@ export class SQLiteStore implements MemoryStore, IntentionStore, ScriptStore {
       params.$kind = kind;
     }
 
+    if (afterId !== undefined) {
+      conditions.push('id > $after_id');
+      params.$after_id = afterId;
+    }
     let sql = 'SELECT * FROM cues';
     if (conditions.length) sql += ` WHERE ${conditions.join(' AND ')}`;
-    sql += ' ORDER BY armed_at ASC LIMIT $limit';
+    sql += afterId === undefined ? ' ORDER BY armed_at ASC, id ASC LIMIT $limit' : ' ORDER BY id ASC LIMIT $limit';
     params.$limit = limit;
 
     const rows = this.db.query(sql).all(params) as any[];

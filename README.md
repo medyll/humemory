@@ -84,7 +84,7 @@ The non-exhaustive catalog currently recognizes:
 | Codex | OpenAI | `codex`, `~/.codex` |
 | Kimi Code / Kimi Desktop | Moonshot AI | `kimi`, `~/.kimi-code`, desktop data roots |
 | Mistral Vibe | **Mistral AI** | `vibe`, `$VIBE_HOME`, `~/.vibe` |
-| OpenCode | SST | `opencode`, `~/.opencode` |
+| OpenCode | SST | `opencode`, `~/.opencode`, `~/.local/share/opencode` |
 | Qwen Code | Alibaba Cloud | `qwen`, `$QWEN_RUNTIME_DIR`, `$QWEN_HOME`, `~/.qwen` |
 | Gemini CLI | Google | `gemini`, `$GEMINI_CLI_HOME`, `~/.gemini` |
 | GitHub Copilot CLI | GitHub | `copilot`, `~/.copilot` |
@@ -92,18 +92,29 @@ The non-exhaustive catalog currently recognizes:
 | Cursor | Anysphere | `cursor`, desktop data roots |
 | Windsurf | Cognition | `windsurf`, desktop data roots |
 
-An entry means **ready to be discovered**, not that its evolving private session
-format is already parsed. Run `pnpm cli sources discover --installed-only` for a
-local inventory without exposing conversation content.
+An entry means **ready to be discovered**, not automatically importable. The
+three parsed historical sources are named explicitly below; every other entry is
+detection-only. Run `pnpm cli sources discover --installed-only` for a local
+inventory without exposing conversation content.
 
-**Codex is parsed.** Its rollouts (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`,
-`$CODEX_HOME` honoured) import into the same queue the agent hooks write to:
+**Codex, Kimi Code and OpenCode are parsed.** They all import into the same queue
+the live hooks write to. Kimi uses its documented session index and wire under
+`$KIMI_CODE_HOME`; OpenCode is read through its public `db` and `export` CLI
+commands rather than coupling humemory to the SQLite schema:
 
 ```bash
 pnpm cli sources import-codex --dry-run     # what would be queued, writes nothing
 pnpm cli sources import-codex --since 7     # the last week (default)
 pnpm cli sources import-codex --all         # every rollout ever recorded
+pnpm cli sources import-kimi --all
+pnpm cli sources import-opencode --all
+pnpm cli sources setup                      # register MCP in both installed clients
 ```
+
+The resident maintenance loop sweeps new sessions from all three producers every
+15 minutes. `sources setup` merge-adds a `humemory` MCP entry without removing
+existing servers and pins each client identity (`kimi` or `opencode`) plus the
+absolute shared database path.
 
 Importing only *queues*; the worker still decides what becomes a trace. Jobs are
 keyed on session, so re-importing is idempotent and a thread that grew since the
@@ -322,9 +333,10 @@ in sits outside the cognitive core.
   scripts begin as drafts, and contradictions stay inspectable. A model doesn't
   silently turn a guess into permanent memory.
 
-Historical absorption stays opt-in. `sources discover` checks commands and known
-paths without reading conversations. Each runtime still needs a parser before
-humemory can import its sessions, and discovery never pretends otherwise.
+Historical bulk absorption stays opt-in. `sources discover` checks commands and
+known paths without reading conversations. Codex, Kimi Code and OpenCode have
+explicit import adapters; every other catalog entry remains detection-only, and
+discovery never pretends otherwise.
 
 ## Stack
 
@@ -626,7 +638,7 @@ keywords >5. `photographic: true` disables decay entirely.
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
-- OpenCode / other-agent integration; export/import memories between projects
+- Other-agent import adapters; export/import memories between projects
 
 ---
 

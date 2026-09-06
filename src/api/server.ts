@@ -1,3 +1,4 @@
+import { databasePath, queueDirectory } from '../core/paths.js';
 /**
  * API HTTP pour humemory
  * 
@@ -72,10 +73,10 @@ function safeJoin(baseDir: string, ...segments: string[]): string | null {
 
 // HUMEMORY_DB: same convention as the CLI and the hooks. Without it, the API
 // cannot be pointed at a demo database without writing to production.
-const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
+const DB_PATH = databasePath();
 const store = new SQLiteStore(DB_PATH);
 const PUBLIC_DIR = join(__dirname, '../../public');
-const QUEUE_DIR = process.env.HUMEMORY_QUEUE ?? join(__dirname, '../../data/maintenance-queue');
+const QUEUE_DIR = queueDirectory();
 const MAINTENANCE_STATE_PATH = defaultStatePath(QUEUE_DIR);
 
 // Assigned only when this process hosts the loop; the routes read it to report

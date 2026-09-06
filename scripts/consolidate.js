@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * humemory automatic consolidation script.
  * Meant to run from cron, nightly.
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -21,7 +21,7 @@ console.log();
 try {
   // Run the decay sweep
   console.log('Updating consolidation...');
-  const decayOutput = execSync('pnpm cli decay', {
+  const decayOutput = execFileSync(process.execPath, [join(HUMEMORY_DIR, 'bin/humemory.js'), 'decay'], {
     cwd: HUMEMORY_DIR,
     encoding: 'utf-8',
   });
@@ -29,7 +29,7 @@ try {
 
   // State of the memory palace
   console.log('humemory state:');
-  const statusOutput = execSync('pnpm cli status', {
+  const statusOutput = execFileSync(process.execPath, [join(HUMEMORY_DIR, 'bin/humemory.js'), 'status'], {
     cwd: HUMEMORY_DIR,
     encoding: 'utf-8',
   });

@@ -1,0 +1,31 @@
+bun test v1.3.14 (0d9b296a)
+
+tests\web-traces.test.tsx:
+(pass) Temporal zones > a fresh trace is in encoding [1.13ms]
+(pass) Temporal zones > level 4 wins over age [0.04ms]
+(pass) Temporal zones > a drained trace lands in fragile, however recent [0.02ms]
+(pass) Temporal zones > age slides a trace from zone to zone [0.08ms]
+(pass) Temporal zones > countByZone covers every zone [0.12ms]
+(pass) Temporal zones > consolidation labels [0.05ms]
+(pass) Temporal zones > relative time [0.12ms]
+(pass) ImperativeView > mounts the view inside its container [32.92ms]
+(pass) ImperativeView > calls the teardown when the component goes away [724.18ms]
+(pass) ImperativeView > tears down even when the component leaves mid-load [73.68ms]
+(pass) ImperativeView > shows the error instead of an empty frame [14.47ms]
+(pass) TracesTab > lists traces and counts the zones [32.82ms]
+(pass) TracesTab > filtering by zone narrows the list [32.80ms]
+(pass) TracesTab > the search waits for a pause in typing [421.20ms]
+(pass) TracesTab > opening a trace shows its detail and its curve [65.35ms]
+(pass) TracesTab > Escape closes the detail [44.53ms]
+(pass) TracesTab > deletion asks for confirmation [41.87ms]
+(pass) Encoding and advanced filters > the encoding form is collapsed by default [22.29ms]
+(pass) Encoding and advanced filters > encoding a trace sends content, type and keywords [31.80ms]
+(pass) Encoding and advanced filters > empty content is refused [32.74ms]
+(pass) Encoding and advanced filters > advanced filters are collapsed, and counted once active [25.13ms]
+(pass) Encoding and advanced filters > an active filter switches the query to /search [32.09ms]
+(pass) Encoding and advanced filters > clearing the filters returns to the plain list [43.49ms]
+
+ 23 pass
+ 0 fail
+ 60 expect() calls
+Ran 23 tests across 1 file. [2.00s]

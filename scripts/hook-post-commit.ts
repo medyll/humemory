@@ -17,12 +17,13 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { SQLiteStore } from '../src/store/sqlite.js';
+import { databasePath } from '../src/core/paths.js';
 import { applyCommitToLoops, renderCommitReport, type CommitInfo } from '../src/agent/commit-closer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../data/humemory.db');
+const DB_PATH = databasePath();
 
 /** Runs a git command, returning stdout or null when it fails. */
 async function git(args: string[]): Promise<string | null> {

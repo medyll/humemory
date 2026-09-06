@@ -19,9 +19,16 @@ import { fileURLToPath } from 'url';
 import type { LLMClient } from '../core/llm-generator.js';
 import type { Clock } from '../core/clock.js';
 import { systemClock } from '../core/clock.js';
+import { databasePath, queueDirectory } from '../core/paths.js';
 import { createCodexClient } from '../core/llm-cli-client.js';
 import { processMaintenanceQueue, type WorkerResult } from './maintenance-queue.js';
 import { importCodexRollouts, defaultCodexSessionsDir, type CodexImportResult } from './codex-import.js';
+import { importKimiSessions, defaultKimiHome, type KimiImportResult } from './kimi-import.js';
+import {
+  importOpenCodeSessions,
+  type OpenCodeCommandRunner,
+  type OpenCodeImportResult,
+} from './opencode-import.js';
 import { defaultStatePath, recordMaintenanceRun } from './maintenance-state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +43,15 @@ export interface MaintenancePassOptions {
   codexSinceDays?: number | false;
   /** Overrides `$CODEX_HOME/sessions`; mainly a test seam. */
   codexSessionsDir?: string;
+  /** Days of Kimi Code sessions to sweep in. `false` skips Kimi. */
+  kimiSinceDays?: number | false;
+  /** Overrides `$KIMI_CODE_HOME`; mainly a test seam. */
+  kimiHome?: string;
+  /** Days of OpenCode sessions to sweep in. `false` skips OpenCode. */
+  opencodeSinceDays?: number | false;
+  /** Test seam for the otherwise local, logged-in OpenCode CLI. */
+  opencodeRun?: OpenCodeCommandRunner;
+  opencodeCommand?: string;
   client?: LLMClient;
   llmTimeoutMs?: number;
   maxJobs?: number;
@@ -46,17 +62,20 @@ export interface MaintenancePassOptions {
 
 export interface MaintenancePassResult {
   codex?: CodexImportResult;
-  /** Set when the codex import failed; the queue is still drained regardless. */
   codexError?: string;
+  kimi?: KimiImportResult;
+  kimiError?: string;
+  opencode?: OpenCodeImportResult;
+  opencodeError?: string;
   worker: WorkerResult;
 }
 
 export function defaultQueueDir(): string {
-  return process.env.HUMEMORY_QUEUE ?? join(__dirname, '../../data/maintenance-queue');
+  return queueDirectory();
 }
 
 export function defaultDbPath(): string {
-  return process.env.HUMEMORY_DB ?? join(__dirname, '../../data/humemory.db');
+  return databasePath();
 }
 
 export function defaultLlmTimeoutMs(): number {
@@ -91,9 +110,8 @@ export async function resolveMaintenanceClient(
 }
 
 /**
- * Import, then drain, then record. A failing codex import is contained: a
- * missing or unreadable codex must never stall the queue, which holds sessions
- * from every other source.
+ * Import, then drain, then record. Every producer is isolated: a missing or
+ * unreadable runtime must never stall the queue or another producer.
  *
  * Throws only if the queue itself could not be drained — the caller records
  * that failure and stays alive.
@@ -106,21 +124,54 @@ export async function runMaintenancePass(
   const dbPath = options.dbPath ?? defaultDbPath();
   const statePath = options.statePath ?? defaultStatePath(queueDir);
   const llmTimeoutMs = options.llmTimeoutMs ?? defaultLlmTimeoutMs();
-  const sinceDays = options.codexSinceDays ?? 1;
+  const codexSinceDays = options.codexSinceDays ?? 1;
+  const kimiSinceDays = options.kimiSinceDays ?? 1;
+  const opencodeSinceDays = options.opencodeSinceDays ?? 1;
   const startedAt = clock.now();
 
   let codex: CodexImportResult | undefined;
   let codexError: string | undefined;
-  if (sinceDays !== false) {
+  if (codexSinceDays !== false) {
     try {
       codex = await importCodexRollouts({
         queueDir,
         sessionsDir: options.codexSessionsDir ?? defaultCodexSessionsDir(),
-        since: new Date(startedAt.getTime() - sinceDays * 24 * 60 * 60 * 1000),
+        since: new Date(startedAt.getTime() - codexSinceDays * 24 * 60 * 60 * 1000),
       });
     } catch (error) {
       codexError = (error as Error).message;
       console.error('[humemory] maintenance: codex import failed —', codexError);
+    }
+  }
+
+  let kimi: KimiImportResult | undefined;
+  let kimiError: string | undefined;
+  if (kimiSinceDays !== false) {
+    try {
+      kimi = await importKimiSessions({
+        queueDir,
+        kimiHome: options.kimiHome ?? defaultKimiHome(),
+        since: new Date(startedAt.getTime() - kimiSinceDays * 24 * 60 * 60 * 1000),
+      });
+    } catch (error) {
+      kimiError = (error as Error).message;
+      console.error('[humemory] maintenance: Kimi import failed —', kimiError);
+    }
+  }
+
+  let opencode: OpenCodeImportResult | undefined;
+  let opencodeError: string | undefined;
+  if (opencodeSinceDays !== false) {
+    try {
+      opencode = await importOpenCodeSessions({
+        queueDir,
+        since: new Date(startedAt.getTime() - opencodeSinceDays * 24 * 60 * 60 * 1000),
+        run: options.opencodeRun,
+        command: options.opencodeCommand,
+      });
+    } catch (error) {
+      opencodeError = (error as Error).message;
+      console.error('[humemory] maintenance: OpenCode import failed —', opencodeError);
     }
   }
 
@@ -162,7 +213,7 @@ export async function runMaintenancePass(
       },
     });
 
-    return { codex, codexError, worker };
+    return { codex, codexError, kimi, kimiError, opencode, opencodeError, worker };
   } catch (error) {
     await recordMaintenanceRun({ path: statePath, startedAt, clock, runner: options.runner, error });
     throw error;

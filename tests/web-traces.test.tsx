@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, setSystemTime } from 'bun:test';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { ImperativeView } from '../web/components/ImperativeView.tsx';
 import { TracesTab } from '../web/components/TracesTab.tsx';
@@ -46,10 +46,11 @@ function stubFetch(routes: Record<string, unknown>) {
   return calls;
 }
 
-beforeEach(() => cleanup());
+beforeEach(() => { cleanup(); setSystemTime(NOW); });
 afterEach(() => {
   globalThis.fetch = realFetch;
   cleanup();
+  setSystemTime();
 });
 
 describe('Temporal zones', () => {

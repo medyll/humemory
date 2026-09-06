@@ -20,6 +20,25 @@ export interface ParsedSession {
   occurredAt?: Date;
 }
 
+/**
+ * Canonical acquisition envelope consumed by the maintenance queue.
+ *
+ * Source-specific importers normalize their private formats once, then reuse
+ * the same parser/checkpoint path as the live Claude hook. Keeping the envelope
+ * here prevents every importer from inventing a subtly different transcript.
+ */
+export function serializeAgentSession(session: ParsedSession): string {
+  return JSON.stringify({
+    session_id: session.sessionId,
+    cwd: session.directory,
+    transcript: session.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+    })),
+  });
+}
+
 /** The instant a transcript line carries, when it carries a usable one. */
 export function messageTime(message: SessionMessage | undefined): Date | undefined {
   if (!message?.timestamp) return undefined;

@@ -14,7 +14,15 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      NODE_ENV: test
+      ANTHROPIC_API_KEY: ''
+      HUMEMORY_DB: ':memory:'
 
     # Actions pinned by commit SHA rather than mutable tag (SECURITY_AUDIT.md M-03).
     steps:
@@ -41,6 +49,9 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+      - name: Typechecks and production build
+        run: pnpm build
 
       # SECURITY_AUDIT.md H-04: the audit was clean at 0 advisories when this
       # gate went in. Fails the build if a high/critical advisory reappears —

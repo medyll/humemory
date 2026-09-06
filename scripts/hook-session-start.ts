@@ -24,13 +24,14 @@
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { SQLiteStore } from '../src/store/sqlite.js';
+import { databasePath } from '../src/core/paths.js';
 import { SqliteCueResolver } from '../src/core/cues.js';
 import { buildSessionContext, DEFAULT_SESSION_BUDGET, DEFAULT_SAILLANCE_THRESHOLD } from '../src/agent/session-context.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = process.env.HUMEMORY_DB ?? join(__dirname, '../data/humemory.db');
+const DB_PATH = databasePath();
 const DIRECTORY = process.env.HUMEMORY_DIR ?? process.cwd();
 const VERBOSE = process.env.HUMEMORY_VERBOSE === '1';
 
