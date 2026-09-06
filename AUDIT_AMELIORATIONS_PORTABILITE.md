@@ -2,6 +2,27 @@
 
 Date de finalisation : 6 septembre 2026. Base examinée : commit `09f9f69`, **avec les modifications locales présentes au début de l’audit**, notamment les intégrations Kimi/OpenCode. Environnement d’exécution : Windows x64, Bun 1.3.14.
 
+> **Statut de remédiation — 7 septembre 2026 : les 12 constats A01–A12 sont traités.**
+>
+> | Constat | Correction | Preuve exécutable |
+> | --- | --- | --- |
+> | A01 | L'index se rafraîchit sur `PRAGMA data_version` : un commit externe force une reconstruction avant la recherche suivante | `tests/audit-regressions.test.ts` — « A01/A02 », « A01/A05 » |
+> | A02 | Le verrou applicatif est un verrou SQLite tenu par l'OS (`AdvisoryLock`), libéré à la mort du processus, sans expiration horloge | `tests/audit-regressions.test.ts`, `tests/advisory-lock-basic.test.ts` |
+> | A03 | Une intention récurrente déjà déclenchée mais non close redevient éligible ; une occurrence ne se déclenche pas deux fois | `tests/audit-regressions.test.ts` — « A03 » |
+> | A04 | `src` distribué, points d'entrée auxiliaires cohérents, et vérification d'archive installée hors du dépôt | `pnpm verify:package` (CI Linux/macOS/Windows), `humemory doctor` |
+> | A05 | `src/core/paths.ts` : résolution unique data/base/file/cache, profil utilisateur séparé de l'installation, parent créé au besoin | `tests/audit-regressions.test.ts` — « A01/A05 », `tests/doctor.test.ts` |
+> | A06 | Score non plafonné, tri de tous les candidats avant troncature, égalités déterministes, bonus favorisant réellement les niveaux dégradés | `tests/audit-regressions.test.ts` — « A06 » |
+> | A07 | Les cues au-delà des 500 premières restent atteignables en un nombre borné de passages | `tests/audit-regressions.test.ts` — « A07 » |
+> | A08 | Plus de bail à cinq minutes : propriété OS, aucun `mtime` interrogé, option morte `lockStaleMs` supprimée | `tests/maintenance-queue.test.ts` |
+> | A09 | Temporaire unique par écriture et remplacement laissant une version récupérable | `tests/audit-regressions.test.ts` — « A09 » |
+> | A10 | Typecheck backend **et** frontend verts, suite complète (555 tests, `.tsx` compris) verte, CI sur les trois OS avec typechecks, build et archive | `pnpm test`, `pnpm build`, `.github/workflows/ci.yml` |
+> | A11 | `humemory remap-project` avec aperçu, sauvegarde et transaction ; cache de modèles centralisé ; minimum bun relevé à la version réellement validée | `tests/audit-regressions.test.ts` — « A11 » |
+> | A12 | Fusion MCP écrite dans un temporaire unique, original sauvegardé, remplacement par renommage ; refus maintenu sur les formats non pris en charge | `tests/mcp-client-setup.test.ts` |
+>
+> Des améliorations listées plus bas, **#3 (migrations explicites)** et **#4 (diagnostic d'installation, `humemory doctor`)** sont faites. **#1 (mesure de la qualité cognitive)**, **#2 (mesure du coût à l'échelle)** et **#5 (clarification des garanties produit)** restent ouvertes : ce sont des travaux de mesure et de documentation, pas des correctifs.
+>
+> La matrice de portabilité plus bas reste la référence : ce que la CI démontre maintenant, ce sont les colonnes « archive seule », « profil neuf » et « chemins avec espaces et accents » sur Linux, macOS et Windows. Le mode hors ligne et les modèles ONNX réels ne sont toujours pas certifiés.
+
 ## Verdict
 
 Le projet possède une base sérieuse : horloge injectable, SQLite isolé dans les tests, protection des contenus réinjectés, attribution des agents et file de maintenance avec reprise. Les **478 tests backend exécutés passent**. Cela ne couvre toutefois pas plusieurs défauts qui touchent directement sa promesse : partager une mémoire entre agents et faire revenir les intentions au bon moment.
