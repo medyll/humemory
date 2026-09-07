@@ -1,10 +1,14 @@
 /**
  * Hybrid search — Phase 7.4.
  *
- * Reciprocal Rank Fusion of the BM25 lane (exact identifiers: loop-ab12, file
- * paths) and the vector lane (paraphrases). Additive by design: with no
+ * Reciprocal Rank Fusion of the lexical lane (exact identifiers: loop-ab12,
+ * file paths) and the vector lane (paraphrases). Additive by design: with no
  * embeddings in the store, the vector lane contributes nothing and the result
- * is exactly the BM25 ranking — no regression on bare installs.
+ * is exactly the lexical ranking — no regression on bare installs.
+ *
+ * The `bm25` identifiers below name that lexical lane for historical reasons:
+ * it is a FlexSearch index with the heuristic ranking in `search.ts`, not an
+ * Okapi BM25 implementation (audit A06).
  *
  * Exclusion filters are inherited from the lanes themselves: the vector lane
  * reads `memory_embeddings`, whose rows are deleted on merge (A4), so merged

@@ -28,7 +28,7 @@ export interface Memory {
   content: string;           // Level 0 (full detail)
   level1Summary?: string;    // Level 1 (summary)
   level2Essential?: string;  // Level 2 (gist)
-  level3Keywords?: string;   // Level 3 (keywords for BM25)
+  level3Keywords?: string;   // Level 3 (keywords for the lexical index)
   
   // Lightweight metadata
   directory: string;         // Project / source

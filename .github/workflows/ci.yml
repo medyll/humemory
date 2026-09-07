@@ -53,6 +53,17 @@ jobs:
       - name: Typechecks and production build
         run: pnpm build
 
+      # Audit A04/A05 acceptance: packs the archive, installs it outside the
+      # checkout under a path with a space and an accent, and drives the CLI,
+      # hooks, maintenance, MCP and API from there on a virgin profile. A
+      # `files` list that forgets a source an auxiliary entry imports is green
+      # in every unit test and red here — which is the whole point of running
+      # it on all three platforms rather than only where it was written.
+      - name: Packaged install (outside the checkout)
+        env:
+          HUMEMORY_SKIP_BUILD: '1'
+        run: pnpm verify:package
+
       # SECURITY_AUDIT.md H-04: the audit was clean at 0 advisories when this
       # gate went in. Fails the build if a high/critical advisory reappears —
       # moderate and below are reported but do not block.

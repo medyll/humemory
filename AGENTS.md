@@ -24,7 +24,7 @@ On top of both: a **trust layer** (Phase 6) so several agents can write to one
 store without a wrong lesson becoming indestructible, a **dreamer** (6.1) that
 proposes cross-session/cross-agent patterns for human review, an **MCP server**
 (6.2) so Claude/Codex/Kimi/OpenCode share one memory, and **vector search**
-(Phase 7) as an opt-in second retrieval lane alongside BM25.
+(Phase 7) as an opt-in second retrieval lane alongside the lexical one.
 
 The conceptual source for the prospective half is `SCRATCHPAD.md` (memoire
 prospective, scripts cognitifs, effet Zeigarnik).
@@ -61,7 +61,7 @@ src/
 ├── core/
 │   ├── types.ts          # Memory, DecayLevel, SearchQuery, MemoryStore iface
 │   ├── decay.ts          # degradation curve + thresholds
-│   ├── search.ts         # inverse search (BM25, degraded-first)
+│   ├── search.ts         # inverse search (lexical, degraded-first)
 │   └── llm-generator.ts  # deterministic L1/L2/L3; optional injected LLM
 ├── store/
 │   └── sqlite.ts         # bun:sqlite store (WAL), findSimilar/merge/setPhotographic
@@ -81,6 +81,8 @@ src/
 │   ├── clock.ts              # Clock seam (systemClock / FakeClock)
 │   ├── event-bus.ts          # AppEvent + InMemoryEventBus
 │   ├── cue-arg.ts            # cue syntax, shared by the CLI and the React form
+│   ├── paths.ts              # single resolver for data/db/queue/model-cache/install root
+│   ├── doctor.ts             # install diagnostic behind `humemory doctor` (no content read)
 │   └── cues.ts               # cue resolver, cron matcher, loop ids
 ├── api/server.ts         # Hono HTTP API + serves public/ dashboard
 ├── cli/index.ts          # commander CLI
@@ -89,8 +91,9 @@ web/                      # React front (bun bundler → public/app, served at /
 scripts/hook-session.ts        # Claude Code Stop hook → queue raw session only
 scripts/hook-session-start.ts  # Claude Code SessionStart hook → inject context
 scripts/maintenance-worker.ts  # async extraction/storage; deterministic by default
+scripts/verify-package.ts      # packs, installs outside the checkout, drives every entry point
 tests/                    # bun test (hermetic; helpers/ + fixtures/)
-data/humemory.db          # shared DB (created on first run)
+data/humemory.db          # legacy in-checkout DB; new installs use the OS data dir (core/paths.ts)
 ```
 
 ---

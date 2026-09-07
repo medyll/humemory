@@ -28,7 +28,7 @@ Past learnings are **encoded**, then **degraded** over time on a human curve:
 | L0 | full detail | fresh (<24h) | complete content |
 | L1 | summary | days | LLM-generated résumé |
 | L2 | essential | weeks | the gist |
-| L3 | keywords | months | BM25 retrieval tokens |
+| L3 | keywords | months | lexical retrieval tokens |
 | L4 | lost / merged | beyond | folded into a sibling trace |
 
 Recall resists decay. Saillance (mnemonic strength, 0–100) and recall count slow
@@ -340,7 +340,8 @@ discovery never pretends otherwise.
 
 ## Stack
 
-TypeScript · `bun:sqlite` (WAL) · `flexsearch` (BM25) · `hono` (API) ·
+TypeScript · `bun:sqlite` (WAL) · `flexsearch` (lexical index, heuristic
+ranking — not a BM25 implementation) · `hono` (API) ·
 `commander` (CLI) · `@anthropic-ai/sdk` (optional maintenance adapter).
 
 ---
@@ -445,6 +446,18 @@ The CLI provides several commands to interact with humemory:
   Options:
   - `-d, --directory <dir>`: Project mental space
   - `-n, --max <n>`: Max learnings to extract
+
+- **Diagnose the installation**:
+  ```bash
+  pnpm cli doctor
+  ```
+  Prints the runtime, the resolved data/queue/model paths and whether they are
+  writable, the schema and journal mode, the state of both advisory locks, the
+  cached embedding models, and every auxiliary entry point (hooks, MCP server,
+  API, dashboard). Environment overrides are listed **by name only** — no value
+  is printed, and no memory content is read, so the output is safe to paste into
+  a bug report. `--json` for a machine-readable report; exit code 1 on a real
+  fault, 0 when everything that failed is merely "not set up yet".
 
 ### API
 
@@ -581,6 +594,19 @@ pnpm cli <command>
 ```bash
 pnpm consolidate
 ```
+
+### Verifying the published package
+
+```bash
+pnpm verify:package
+```
+
+Builds the archive, installs it into a temporary directory **outside** the
+checkout — under a path containing a space and an accent — and drives the CLI,
+the Stop hook, maintenance, the MCP server and the API from there against a
+virgin profile. Nothing may reach back into the source tree, so a `files` list
+that forgets a source an auxiliary entry point imports fails here rather than
+days later on a user's machine. Runs on Linux, macOS and Windows in CI.
 
 ---
 

@@ -26,3 +26,13 @@ export function queueDirectory(): string {
 export function modelCacheDirectory(): string {
   return process.env.HUMEMORY_MODEL_CACHE ?? join(dataDirectory(), 'models');
 }
+
+/**
+ * Root of the installed package — the anchor auxiliary entry points (hooks,
+ * MCP server, bundled dashboard) are resolved against. `humemory doctor`
+ * checks them from here so a package that ships the wrong `files` list fails
+ * loudly instead of at the first hook invocation.
+ */
+export function installationDirectory(): string {
+  return installationRoot;
+}

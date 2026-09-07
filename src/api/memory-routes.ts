@@ -48,7 +48,7 @@ export function createMemoryRoutes(store: SQLiteStore) {
       maxItemLength: MAX_KEYWORD_LENGTH,
       name: 'keywords',
     });
-    // level3Keywords is the flat BM25 keyword line, not an array (core/types.ts).
+    // level3Keywords is the flat lexical keyword line, not an array (core/types.ts).
     const level3Keywords = boundedOptionalString(body.level3Keywords, MAX_CONTENT_LENGTH, 'level3Keywords');
     const directory = boundedOptionalString(body.directory, MAX_SHORT_FIELD_LENGTH, 'directory');
     const day = boundedOptionalString(body.day, MAX_SHORT_FIELD_LENGTH, 'day');

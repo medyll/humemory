@@ -10,6 +10,7 @@ import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 import { discoverLocalAgentSources } from '../agent/source-registry.js';
+import { runDoctor, renderDoctorReport } from '../core/doctor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,9 +32,13 @@ function getStore(): SQLiteStore {
 const program = new Command();
 
 // Version read from the package: hard-coded, it drifted at every release.
-const { version } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as {
+const { version, engines } = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8')) as {
   version: string;
+  engines?: { bun?: string };
 };
+// Declared minimum, not a hard-coded one: `humemory doctor` must fail when the
+// runtime is below what the package claims to support, whatever that becomes.
+const minimumBunVersion = engines?.bun;
 
 program
   .name('humemory')
@@ -103,7 +108,7 @@ program
   .option('--to <date>', 'End date YYYY-MM-DD')
   .option('--min-saillance <n>', 'Minimum mnemonic strength (0-100)')
   .option('--min-recalls <n>', 'Minimum recall count')
-  .option('--semantic', 'Hybrid search: fuse BM25 with vector similarity (Phase 7.4, needs the model)')
+  .option('--semantic', 'Hybrid search: fuse the lexical lane with vector similarity (Phase 7.4, needs the model)')
   .action(async (query, options) => {
     const s = getStore();
 
@@ -1164,6 +1169,21 @@ program.command('remap-project <from> <to>')
   .option('--backup <path>', 'New SQLite backup destination (required with --apply)')
   .action(async (from, to, options) => {
     console.log(JSON.stringify(await getStore().remapProjectRoot(from, to, { apply: options.apply, backupPath: options.backup }), null, 2));
+  });
+
+// === DOCTOR ===
+// Deliberately does not go through getStore(): the point is to diagnose an
+// installation that may not have a usable store yet.
+program
+  .command('doctor')
+  .description('Diagnose the installation: runtime, paths, rights, schema, locks, models, entry points')
+  .option('--json', 'Machine-readable report')
+  .action(async (options) => {
+    const report = await runDoctor({ minimumBun: minimumBunVersion });
+    console.log(options.json ? JSON.stringify(report, null, 2) : renderDoctorReport(report));
+    // Non-zero only on a real fault: warnings are states an install can sit in
+    // (no model cached yet, a maintenance worker currently running).
+    if (report.status === 'fail') process.exitCode = 1;
   });
 
 // Parse and run
