@@ -26,14 +26,26 @@ import {
  * committing. Lowering one is a regression that needs a sentence saying why,
  * in the commit that lowers it.
  *
- * Known gap at the time of writing, visible in the report as two zero-recall
- * queries: FlexSearch matches all query terms within a SINGLE field, so a query
- * whose terms are spread across the L3 keyword line and the full content
- * returns nothing at all. "sqlite lock" finds the trace; "sqlite concurrent
- * write lock" finds nothing. The floors encode that gap rather than hiding it.
+ * The gap this first measured — FlexSearch requiring every query term inside a
+ * SINGLE field, so a query straddling the L3 keyword line and the content
+ * returned nothing (A13) — is fixed by the near-miss pass in `search.ts`.
+ * Recall went 0.846 → 1.000.
+ *
+ * One false positive is accepted, and it is a trade-off rather than a defect.
+ * The index uses `charset: 'latin:advanced'`, a phonetic encoder that collapses
+ * lock/log/local — so "sqlite concurrent write lock" genuinely matches three of
+ * its four terms against the auth token race, which contains "logging". That
+ * same encoder is the only thing that answers a one-word misspelling
+ * (`q-typo-single-term`, `q-typo-single-rare`): the near-miss pass needs two
+ * terms, so it cannot help there. Switching to `latin:default` measured 0 false
+ * positives and 0 recall on both typo queries. Precision on one multi-term
+ * query is the cheaper thing to give up in a memory that people query from
+ * half-remembered fragments.
  */
-const MEAN_RECALL_FLOOR = 0.84; // measured 0.846 — 11 of 13 answerable queries
-const MRR_FLOOR = 0.84; // measured 0.846 — every match lands at rank 1
+const MEAN_RECALL_FLOOR = 1; // measured 1.000 — all 18 answerable queries
+const MRR_FLOOR = 1; // measured 1.000 — every match lands at rank 1
+/** See the note above: the encoder's phonetic collapsing, kept on purpose. */
+const FALSE_POSITIVE_CEILING = 1;
 const K = 5;
 
 describe('cognitive quality', () => {
@@ -73,15 +85,26 @@ describe('cognitive quality', () => {
     expect(score.mrr).toBeGreaterThanOrEqual(MRR_FLOOR);
   });
 
-  test('no query surfaces a trace the case forbids', async () => {
+  test('false positives stay within the measured ceiling', async () => {
     const score = await measureRetrieval(store, seeded, corpus, { k: K });
     const offenders = score.perQuery
       .filter((row) => row.falsePositives.length > 0)
       .map((row) => `${row.id}: ${row.falsePositives.join(', ')}`);
 
     // Precision is the half a keyword engine fails quietly: it answers
-    // confidently with the wrong neighbour rather than admitting a miss.
-    expect(offenders).toEqual([]);
+    // confidently with the wrong neighbour rather than admitting a miss. The
+    // ceiling is 1, not 0, and the header explains which one and why.
+    expect(offenders.length).toBeLessThanOrEqual(FALSE_POSITIVE_CEILING);
+  });
+
+  test('the phonetic encoder still answers a one-word misspelling', async () => {
+    // Guards the trade-off from being silently undone: swapping the charset to
+    // latin:default takes the false-positive count to zero and takes these to
+    // zero recall as well. Whoever changes it should have to change this test.
+    for (const query of ['sqlyte', 'checkpont']) {
+      const results = await store.search({ query, limit: 5 });
+      expect(results.length).toBeGreaterThan(0);
+    }
   });
 
   test('a query with no answer in the corpus returns no confident answer', async () => {

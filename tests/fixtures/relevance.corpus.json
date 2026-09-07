@@ -334,6 +334,41 @@
       "absent": ["auth-refresh-race"]
     },
     {
+      "id": "q-typo-sqlite",
+      "$why": "A misspelling. This and the two below are what a phonetic encoder is FOR — without them, comparing encoders would only measure the half that favours the strict one.",
+      "query": "sqlyte wal busy timeout",
+      "relevant": ["store-wal-busy-timeout"],
+      "absent": ["store-backup-wal"]
+    },
+    {
+      "id": "q-typo-advisory",
+      "$why": "A misspelling on the discriminating term rather than an incidental one.",
+      "query": "advisery lock crash",
+      "relevant": ["store-advisory-lock"],
+      "absent": ["auth-logout-cache"]
+    },
+    {
+      "id": "q-variant-concurrency",
+      "$why": "Morphological variant: the trace says 'concurrency', the user types 'concurrent'.",
+      "query": "sqlite concurrency",
+      "relevant": ["store-wal-busy-timeout"],
+      "absent": ["auth-refresh-race"]
+    },
+    {
+      "id": "q-typo-single-term",
+      "$why": "A one-word misspelling. The near-miss fallback cannot help here — it needs at least two terms — so this measures the phonetic encoder alone. It is the reason `latin:advanced` is kept despite the precision it costs on q-sqlite-concurrency; swapping to latin:default scores zero here.",
+      "query": "sqlyte",
+      "relevant": ["store-wal-busy-timeout", "store-advisory-lock", "store-backup-wal"],
+      "absent": ["auth-refresh-race"]
+    },
+    {
+      "id": "q-typo-single-rare",
+      "$why": "Same property on a rarer word, so the result is not an artefact of 'sqlite' being everywhere.",
+      "query": "checkpont",
+      "relevant": ["store-backup-wal"],
+      "absent": ["store-wal-busy-timeout"]
+    },
+    {
       "id": "q-no-answer",
       "$why": "Nothing in the corpus is about this. Returning something confidently is the failure mode being measured.",
       "query": "kubernetes ingress certificate rotation",
