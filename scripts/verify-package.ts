@@ -41,25 +41,49 @@ function record(name: string, ok: boolean, detail: string): boolean {
   return ok;
 }
 
+/**
+ * `pnpm` and `npm` are `.cmd` shims on Windows, and since the CVE-2024-27980
+ * fix node refuses to spawn a batch file without a shell (EINVAL). Node does
+ * not quote arguments for `shell: true` either, so the command line is built
+ * and quoted here — the paths in play contain a space and an accent by design.
+ */
+function needsWindowsShell(command: string): boolean {
+  return process.platform === 'win32' && (command === 'pnpm' || command === 'npm');
+}
+
+function quoteForCmd(argument: string): string {
+  return `"${argument.replace(/"/g, '\\"')}"`;
+}
+
 function run(
   command: string,
   args: string[],
   options: { cwd?: string; env?: Record<string, string>; input?: string; timeoutMs?: number } = {}
 ) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd ?? repoRoot,
-    // A clean-ish env: the point is to prove the install stands alone, so the
-    // caller's HUMEMORY_* overrides must not leak into the child.
-    env: { ...strippedEnv(), ...(options.env ?? {}) },
-    input: options.input,
-    encoding: 'utf8',
-    timeout: options.timeoutMs ?? 180_000,
-    shell: false,
-  });
+  const viaShell = needsWindowsShell(command);
+  const result = spawnSync(
+    viaShell ? `${command} ${args.map(quoteForCmd).join(' ')}` : command,
+    viaShell ? [] : args,
+    {
+      cwd: options.cwd ?? repoRoot,
+      // A clean-ish env: the point is to prove the install stands alone, so the
+      // caller's HUMEMORY_* overrides must not leak into the child.
+      env: { ...strippedEnv(), ...(options.env ?? {}) },
+      input: options.input,
+      encoding: 'utf8',
+      timeout: options.timeoutMs ?? 180_000,
+      shell: viaShell,
+    }
+  );
+  // A spawn that never started reports no status and no output: without this,
+  // the failure row reads as an empty string and says nothing at all.
+  const spawnError = result.error
+    ? `${(result.error as NodeJS.ErrnoException).code ?? 'spawn failed'}: ${result.error.message}`
+    : '';
   return {
     code: result.status ?? -1,
     stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    stderr: [result.stderr ?? '', spawnError].filter(Boolean).join('\n'),
   };
 }
 
