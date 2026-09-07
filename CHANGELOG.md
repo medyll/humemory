@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.9] - 2026-09-07
+**Features:**
+- diagnose an installation, and prove the packaged one
+
+**Bug Fixes:**
+- make audit validation deterministic and isolated
+- spawn the pnpm/npm shims through a shell on Windows
+- pull fast-uri onto a patched 3.x
+
+**Documentation:**
+- record the remediation status in the portability audit
+
+**Chores:**
+- drop the dead lockStaleMs knob
+
+
+
 ## [0.2.8] - 2026-09-06
 **Other:**
 - Add comprehensive tests for audit, maintenance, and import functionalities
