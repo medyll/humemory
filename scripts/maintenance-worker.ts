@@ -13,11 +13,16 @@ const llmTimeoutMs = defaultLlmTimeoutMs();
 const client = await resolveMaintenanceClient(llmTimeoutMs);
 
 // --skip-codex for a machine where the rollouts are imported some other way.
-const codexSinceDays = process.argv.includes('--skip-codex')
+const skipImports = process.argv.includes('--skip-imports');
+const codexSinceDays = skipImports || process.argv.includes('--skip-codex')
   ? false as const
   : Number(process.env.HUMEMORY_MAINTENANCE_CODEX_DAYS ?? 1);
 
-const { worker: result } = await runMaintenancePass({ client, llmTimeoutMs, codexSinceDays });
+const { worker: result } = await runMaintenancePass({
+  client, llmTimeoutMs, codexSinceDays,
+  kimiSinceDays: skipImports ? false : undefined,
+  opencodeSinceDays: skipImports ? false : undefined,
+});
 
 if (result.busy) {
   if (process.env.HUMEMORY_VERBOSE === '1') console.error('[humemory] maintenance: another worker is active');

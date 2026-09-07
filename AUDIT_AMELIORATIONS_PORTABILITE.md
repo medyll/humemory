@@ -19,9 +19,38 @@ Date de finalisation : 6 septembre 2026. Base examinée : commit `09f9f69`, **av
 > | A11 | `humemory remap-project` avec aperçu, sauvegarde et transaction ; cache de modèles centralisé ; minimum bun relevé à la version réellement validée | `tests/audit-regressions.test.ts` — « A11 » |
 > | A12 | Fusion MCP écrite dans un temporaire unique, original sauvegardé, remplacement par renommage ; refus maintenu sur les formats non pris en charge | `tests/mcp-client-setup.test.ts` |
 >
-> Des améliorations listées plus bas, **#3 (migrations explicites)** et **#4 (diagnostic d'installation, `humemory doctor`)** sont faites. **#1 (mesure de la qualité cognitive)**, **#2 (mesure du coût à l'échelle)** et **#5 (clarification des garanties produit)** restent ouvertes : ce sont des travaux de mesure et de documentation, pas des correctifs.
+> Des améliorations listées plus bas, **#3 (migrations explicites)**, **#4 (diagnostic d'installation, `humemory doctor`)** et **#5 (garanties produit, `docs/PORTABILITY.md`)** sont faites. **#1 (mesure de la qualité cognitive)** et **#2 (mesure du coût à l'échelle)** restent ouvertes : ce sont des travaux de mesure, pas des correctifs.
 >
-> La matrice de portabilité plus bas reste la référence : ce que la CI démontre maintenant, ce sont les colonnes « archive seule », « profil neuf » et « chemins avec espaces et accents » sur Linux, macOS et Windows. Le mode hors ligne et les modèles ONNX réels ne sont toujours pas certifiés.
+> La CI configure les contrôles « archive seule », « profil neuf » et « chemins avec espaces et accents » sur Linux, macOS et Windows. Sa configuration ne prouve pas à elle seule la réussite des trois plateformes. Le mode hors ligne et les modèles ONNX réels ne sont toujours pas certifiés.
+
+## Vérification complémentaire — 8 septembre 2026
+
+Reprise sur `74a380e`, après intégration des corrections précédentes dans `main`.
+La suite courante a d'abord révélé un test dépendant de l'heure réelle : les
+traces du 8 août sortaient désormais de la fenêtre de 30 jours du dreamer.
+Les deux scénarios de corroboration vectorielle passent maintenant la même
+horloge fixe au store et au dreamer. Aucun seuil de confiance n'a été modifié.
+
+- **555 tests réussis, 0 échec, 1 884 assertions**, sur les 47 fichiers backend
+  et frontend, sous Windows avec Bun 1.3.14.
+- Typechecks backend/frontend et bundle de production réussis ; les deux
+  scripts de vérification et de maintenance ont aussi été contrôlés par TypeScript.
+- Le paquet 0.2.8 a été construit puis installé hors du dépôt dans un chemin
+  contenant espace et accent, avec un profil de données neuf : **17 contrôles
+  réussis sur 17**. Le contrôle couvre
+  désormais le traitement effectif d'un job synthétique, les hooks SessionStart
+  et post-commit (chargement hors dépôt Git), ainsi que la consolidation.
+- `maintenance-worker.ts --skip-imports` désactive les trois importeurs pour
+  traiter uniquement la file existante. Le contrôle du paquet désactive également
+  la maintenance périodique de l'API, utilise un autre répertoire courant et attend
+  la sortie de ses processus avant de nettoyer son répertoire temporaire.
+
+Les tests utilisent des données synthétiques et aucune clé LLM. L'installation
+des dépendances du paquet utilise le réseau ; elle est distincte des tests
+hermétiques. Les requêtes HTTP du contrôle runtime visent le serveur de test local.
+Cette reprise ne certifie pas Linux/macOS, les modèles ONNX natifs, les permissions
+d'installation forcées en lecture seule, ni une restauration complète base + file.
+Les garanties et limites de reprise sont décrites dans [docs/PORTABILITY.md](docs/PORTABILITY.md).
 
 ## Verdict
 

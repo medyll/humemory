@@ -82,7 +82,8 @@ describe('VectorClusterer (HashEmbedder)', () => {
 
 describe('A1 — two thresholds on corroboration', () => {
   test('a cluster below the corroborate threshold groups but does NOT verify', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     // 3 agents × 3 sessions × 3 dirs → metadata corroborates…
     const mems = await seedSimilar(
       store,
@@ -91,7 +92,7 @@ describe('A1 — two thresholds on corroboration', () => {
     );
     // …but the weakest link is below vectorCorroborateThreshold
     const c = new VectorClusterer(new HashEmbedder(), store, 0.3);
-    const report = await runDreamer({ store, clusterer: c });
+    const report = await runDreamer({ store, clusterer: c, clock });
 
     expect(report.filed).toBeGreaterThanOrEqual(0);
     const verified = (await Promise.all(mems.map((m) => store.getById(m.id)))).filter((m) => m!.verified);
@@ -102,14 +103,15 @@ describe('A1 — two thresholds on corroboration', () => {
   });
 
   test('identical texts across agents clear the strict threshold and corroborate', async () => {
-    const store = freshStore({ clock: fakeClock(T0) });
+    const clock = fakeClock(T0);
+    const store = freshStore({ clock });
     const same = 'identical lesson encoded independently by three agents';
     const mems = await seedSimilar(store, [same, same, same], {
       agents: ['claude', 'codex', 'kimi'],
       dirs: ['/a', '/b', '/c'],
     });
     const c = new VectorClusterer(new HashEmbedder(), store, 0.5);
-    const report = await runDreamer({ store, clusterer: c });
+    const report = await runDreamer({ store, clusterer: c, clock });
 
     expect(report.corroborated).toBe(3);
     for (const m of mems) {

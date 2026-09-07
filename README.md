@@ -354,6 +354,22 @@ ranking — not a BM25 implementation) · `hono` (API) ·
 pnpm install
 ```
 
+New installations keep writable state in the user profile. Existing checkouts
+with `data/humemory.db` keep that location; nothing is moved automatically.
+`HUMEMORY_DATA_DIR` selects another data root, while `HUMEMORY_DB`,
+`HUMEMORY_QUEUE` and `HUMEMORY_MODEL_CACHE` override individual locations.
+
+To relocate a project's memory, preview the mapping before applying it:
+
+```bash
+pnpm cli remap-project /old/project /new/project
+pnpm cli remap-project /old/project /new/project --apply --backup /backups/before-remap.db
+```
+
+The backup includes committed SQLite WAL contents. See
+[portability and recovery guarantees](docs/PORTABILITY.md) for cron time zones,
+model downloads, queue recovery and the limits of the platform checks.
+
 ### CLI Commands
 
 The CLI provides several commands to interact with humemory:
