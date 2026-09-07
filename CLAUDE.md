@@ -17,6 +17,7 @@ pnpm test:watch     # bun test --watch
 pnpm consolidate    # manual decay pass (cron-friendly)
 pnpm cli doctor     # diagnose an installation (paths, rights, schema, locks, entry points)
 pnpm verify:package # pack + install outside the checkout, then drive every entry point
+pnpm measure:recall # cognitive-quality report (frozen corpus; gate in tests/relevance.test.ts)
 ```
 
 Single test file: `bun test tests/humemory.test.ts` (other suites: `tests/agent.test.ts`, `tests/llm-generator.test.ts`)

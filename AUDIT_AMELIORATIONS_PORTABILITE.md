@@ -19,7 +19,13 @@ Date de finalisation : 6 septembre 2026. Base examinée : commit `09f9f69`, **av
 > | A11 | `humemory remap-project` avec aperçu, sauvegarde et transaction ; cache de modèles centralisé ; minimum bun relevé à la version réellement validée | `tests/audit-regressions.test.ts` — « A11 » |
 > | A12 | Fusion MCP écrite dans un temporaire unique, original sauvegardé, remplacement par renommage ; refus maintenu sur les formats non pris en charge | `tests/mcp-client-setup.test.ts` |
 >
-> Des améliorations listées plus bas, **#3 (migrations explicites)**, **#4 (diagnostic d'installation, `humemory doctor`)** et **#5 (garanties produit, `docs/PORTABILITY.md`)** sont faites. **#1 (mesure de la qualité cognitive)** et **#2 (mesure du coût à l'échelle)** restent ouvertes : ce sont des travaux de mesure, pas des correctifs.
+> Des améliorations listées plus bas, **#1 (mesure de la qualité cognitive, `pnpm measure:recall`)**, **#3 (migrations explicites)**, **#4 (diagnostic d'installation, `humemory doctor`)** et **#5 (garanties produit, `docs/PORTABILITY.md`)** sont faites. **#2 (mesure du coût à l'échelle)** reste ouverte.
+>
+> **A13 — P1, découvert par la mesure #1, 8 septembre 2026.** FlexSearch exige que **tous** les termes d'une requête se trouvent dans **un même champ**. Les niveaux de dégradation étant indexés en champs séparés (`level3Keywords`, `level2Essential`, `level1Summary`, `content`), une requête dont les termes se répartissent entre la ligne de mots-clés L3 et le contenu ne renvoie **rien du tout**.
+>
+> Reproduit : `sqlite lock` → 1 résultat, `sqlite concurrent write lock` → **0** ; `decay thresholds` → 1, `decay thresholds levels hours` → **0**. Le mode d'échec est contre-intuitif et frappe l'usage réel de plein fouet : plus l'utilisateur précise sa requête, plus il risque le vide. Il touche d'abord les traces dégradées, dont le texte interrogeable est justement éclaté entre les champs de niveau. Mesuré à 2 requêtes sur 13 à 0 % de rappel.
+>
+> **Correction proposée :** en l'absence de résultat pour la requête complète sur un niveau, retenter terme à terme et unir les candidats, en classant par nombre de termes satisfaits — la conjonction exacte garde la priorité, la falaise disparaît. **Acceptation :** les deux requêtes ci-dessus reviennent non vides, le rappel moyen dépasse son plancher actuel de 0,846, et aucun faux positif n'apparaît dans le corpus figé.
 >
 > La CI configure les contrôles « archive seule », « profil neuf » et « chemins avec espaces et accents » sur Linux, macOS et Windows. Sa configuration ne prouve pas à elle seule la réussite des trois plateformes. Le mode hors ligne et les modèles ONNX réels ne sont toujours pas certifiés.
 

@@ -611,6 +611,22 @@ pnpm cli <command>
 pnpm consolidate
 ```
 
+### Measuring recall quality
+
+```bash
+pnpm measure:recall
+```
+
+Runs a frozen corpus of 26 traces at controlled ages against 14 queries and
+prints, per query, what came back and what was missed — plus which open loops
+come due at a given instant, and what a session actually opens with. The suite
+proves the machinery works; this asks the question the machinery exists for:
+does the *right* memory come back. `tests/relevance.test.ts` turns the same
+measurement into a regression floor.
+
+Thresholds there are floors recording current behaviour, not targets. Raising
+one is a result; lowering one needs a reason in the commit that lowers it.
+
 ### Verifying the published package
 
 ```bash

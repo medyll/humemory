@@ -1,0 +1,431 @@
+{
+  "$comment": "Frozen relevance corpus — audit improvement #1. Ages are hours before T0 (2026-01-01T00:00:00Z), resolved by seedRelevanceCorpus against a FakeClock, so the level spread is reproduced rather than asserted per trace. Distractors are deliberate: several traces share 'timeout', 'lock', 'cache' and 'token' in unrelated senses, because a corpus with no near-misses measures nothing. Do not tune this file to make a threshold pass — move the threshold and say why.",
+  "memories": [
+    {
+      "key": "auth-expiry-off-by-one",
+      "content": "The auth middleware rejected valid tokens: the expiry check used < instead of <=, so a token expiring on the exact second read as already expired.",
+      "directory": "/src/auth",
+      "keywords": ["auth", "middleware", "token", "expiry", "off-by-one"],
+      "sessionId": "s-auth-1",
+      "memoryType": "episodic",
+      "ageHours": 6
+    },
+    {
+      "key": "auth-refresh-race",
+      "content": "Two concurrent requests both refreshed the session token and the second write clobbered the first, logging the user out. Serialising refresh per session fixed it.",
+      "directory": "/src/auth",
+      "keywords": ["auth", "refresh", "race", "token", "session"],
+      "sessionId": "s-auth-1",
+      "memoryType": "episodic",
+      "ageHours": 40
+    },
+    {
+      "key": "auth-constant-time",
+      "content": "Comparing API tokens with === leaks length and prefix through timing. The comparison must be constant-time over a fixed-length digest.",
+      "directory": "/src/auth",
+      "keywords": ["auth", "token", "timing", "constant-time", "comparison"],
+      "sessionId": "s-auth-2",
+      "memoryType": "semantic",
+      "ageHours": 200
+    },
+    {
+      "key": "auth-token-in-url",
+      "content": "Never put the API token in a query string: it lands in proxy logs and browser history. It belongs in a header.",
+      "directory": "/src/auth",
+      "keywords": ["auth", "token", "url", "logs", "header"],
+      "sessionId": "s-auth-2",
+      "memoryType": "semantic",
+      "ageHours": 800
+    },
+    {
+      "key": "auth-cors-origin",
+      "content": "CORS origin checks must compare whole origins parsed with new URL(), never substrings: evil-example.com passes a substring test against example.com.",
+      "directory": "/src/auth",
+      "keywords": ["cors", "origin", "substring", "url", "security"],
+      "sessionId": "s-auth-3",
+      "memoryType": "semantic",
+      "ageHours": 300
+    },
+    {
+      "key": "auth-logout-cache",
+      "content": "Logout left the rendered page in the browser back-forward cache, so the previous user's dashboard reappeared on the back button. Cache-Control: no-store on the document fixed it.",
+      "directory": "/src/auth",
+      "keywords": ["logout", "cache", "bfcache", "no-store", "browser"],
+      "sessionId": "s-auth-3",
+      "memoryType": "episodic",
+      "ageHours": 1000
+    },
+
+    {
+      "key": "store-wal-busy-timeout",
+      "content": "SQLite in WAL mode with busy_timeout at 5000ms removes the SQLITE_BUSY errors seen on concurrent intra-process writes.",
+      "directory": "/src/store",
+      "keywords": ["sqlite", "wal", "busy_timeout", "concurrency"],
+      "sessionId": "s-store-1",
+      "memoryType": "semantic",
+      "ageHours": 12
+    },
+    {
+      "key": "store-advisory-lock",
+      "content": "The cross-process write lock is a separate SQLite database held in a transaction: the OS releases it when the process dies, including on SIGKILL, so a crash cannot strand the lock.",
+      "directory": "/src/store",
+      "keywords": ["lock", "advisory", "sqlite", "crash", "process"],
+      "sessionId": "s-store-1",
+      "memoryType": "semantic",
+      "ageHours": 60
+    },
+    {
+      "key": "store-data-version",
+      "content": "An in-process search index goes stale when another connection commits. PRAGMA data_version changes on every external commit, which is the cheapest way to know the index must be rebuilt.",
+      "directory": "/src/store",
+      "keywords": ["index", "stale", "data_version", "pragma", "connection"],
+      "sessionId": "s-store-2",
+      "memoryType": "semantic",
+      "ageHours": 100
+    },
+    {
+      "key": "store-migration-catch",
+      "content": "A migration that catches every error from ALTER TABLE and calls it 'column already exists' will swallow a disk-full or permission error too. Match the duplicate-column message and rethrow the rest.",
+      "directory": "/src/store",
+      "keywords": ["migration", "alter", "column", "error", "rethrow"],
+      "sessionId": "s-store-2",
+      "memoryType": "procedural",
+      "ageHours": 400
+    },
+    {
+      "key": "store-atomic-write",
+      "content": "Naming the temporary file after the destination plus the PID is not unique: two writes for the same target in one process share it. Use a random suffix per write.",
+      "directory": "/src/store",
+      "keywords": ["atomic", "temporary", "pid", "rename", "write"],
+      "sessionId": "s-store-3",
+      "memoryType": "semantic",
+      "ageHours": 900
+    },
+    {
+      "key": "store-backup-wal",
+      "content": "Copying the .db file while writes are in flight is not a backup: the WAL holds committed pages the copy misses. Use the online backup API or a checkpoint under a lock.",
+      "directory": "/src/store",
+      "keywords": ["backup", "wal", "checkpoint", "sqlite", "restore"],
+      "sessionId": "s-store-3",
+      "memoryType": "procedural",
+      "ageHours": 1500
+    },
+    {
+      "key": "store-memory-db-guard",
+      "content": "Tests that open the production database corrupt real data. The store refuses to open its resolved production path when NODE_ENV is test.",
+      "directory": "/src/store",
+      "keywords": ["tests", "guard", "production", "database", "node_env"],
+      "sessionId": "s-store-4",
+      "memoryType": "procedural",
+      "ageHours": 2600
+    },
+
+    {
+      "key": "core-decay-thresholds",
+      "content": "The forgetting curve is driven by levelThresholds in hours: 24 for L1, 168 for L2, 720 for L3, 2160 for L4.",
+      "directory": "/src/core",
+      "keywords": ["decay", "curve", "thresholds", "levels", "forgetting"],
+      "sessionId": "s-core-1",
+      "memoryType": "semantic",
+      "ageHours": 3
+    },
+    {
+      "key": "core-slowdown-cap",
+      "content": "Recall, salience and verification each slow decay, and their product is capped: without the cap a verified, salient, often-recalled trace never fades, which is not forgetting.",
+      "directory": "/src/core",
+      "keywords": ["decay", "slowdown", "cap", "salience", "recall"],
+      "sessionId": "s-core-1",
+      "memoryType": "semantic",
+      "ageHours": 30
+    },
+    {
+      "key": "core-cron-rearm",
+      "content": "A recurring cue rearmed itself but the intention stayed fired, and resolution only considers armed intentions — so the second occurrence never woke anything.",
+      "directory": "/src/core",
+      "keywords": ["cron", "cue", "rearm", "intention", "recurring"],
+      "sessionId": "s-core-2",
+      "memoryType": "episodic",
+      "ageHours": 80
+    },
+    {
+      "key": "core-cue-pagination",
+      "content": "Reading only the first 500 armed cues starves the tail: if the first 500 never match, the rest are invisible on every pass. Page with a cursor instead.",
+      "directory": "/src/core",
+      "keywords": ["cue", "pagination", "cursor", "starvation", "limit"],
+      "sessionId": "s-core-2",
+      "memoryType": "semantic",
+      "ageHours": 250
+    },
+    {
+      "key": "core-score-cap",
+      "content": "Clamping the relevance score to 100 flattened every bonus: an old trace with no recalls ranked exactly like a fresh, heavily recalled one.",
+      "directory": "/src/core",
+      "keywords": ["score", "ranking", "clamp", "bonus", "relevance"],
+      "sessionId": "s-core-3",
+      "memoryType": "episodic",
+      "ageHours": 600
+    },
+    {
+      "key": "core-cron-utc",
+      "content": "Cron expressions are matched in UTC. A user writing 0 9 * * * in Paris gets a wake at 10:00 or 11:00 local depending on the season.",
+      "directory": "/src/core",
+      "keywords": ["cron", "utc", "timezone", "schedule", "dst"],
+      "sessionId": "s-core-3",
+      "memoryType": "semantic",
+      "ageHours": 1200
+    },
+    {
+      "key": "core-redos-guard",
+      "content": "A user-supplied pattern with nested quantifiers can hang the resolver for minutes. Reject nested quantifiers and fall back to a literal search.",
+      "directory": "/src/core",
+      "keywords": ["redos", "regex", "quantifier", "pattern", "literal"],
+      "sessionId": "s-core-4",
+      "memoryType": "semantic",
+      "ageHours": 2400
+    },
+
+    {
+      "key": "api-bind-loopback",
+      "content": "Passing no hostname to serve() binds every interface. The API binds 127.0.0.1 by default and refuses to start on a non-loopback host without a token.",
+      "directory": "/src/api",
+      "keywords": ["bind", "loopback", "hostname", "serve", "interface"],
+      "sessionId": "s-api-1",
+      "memoryType": "semantic",
+      "ageHours": 18
+    },
+    {
+      "key": "api-error-disclosure",
+      "content": "A 500 that echoes the internal error hands the caller stack frames and paths. Log the detail under a correlation id and return only that id.",
+      "directory": "/src/api",
+      "keywords": ["error", "500", "disclosure", "correlation", "logging"],
+      "sessionId": "s-api-1",
+      "memoryType": "semantic",
+      "ageHours": 150
+    },
+    {
+      "key": "api-bounded-input",
+      "content": "Every numeric query parameter goes through a bounded integer parser. A bare parseInt accepts NaN and unbounded values straight into a query.",
+      "directory": "/src/api",
+      "keywords": ["input", "bounds", "parseint", "validation", "limits"],
+      "sessionId": "s-api-2",
+      "memoryType": "procedural",
+      "ageHours": 500
+    },
+    {
+      "key": "api-untrusted-fence",
+      "content": "Content that is not human-verified renders inside an untrusted fence after sanitising. The boundary is per content type, so a new type needs its own wrapping and its own test.",
+      "directory": "/src/api",
+      "keywords": ["untrusted", "fence", "sanitize", "injection", "boundary"],
+      "sessionId": "s-api-2",
+      "memoryType": "procedural",
+      "ageHours": 700
+    },
+    {
+      "key": "api-innerhtml-tooltip",
+      "content": "A tooltip built with innerHTML from trace content executed the content. Tooltips and labels are built with createElement and textContent instead.",
+      "directory": "/src/api",
+      "keywords": ["innerhtml", "tooltip", "xss", "createelement", "textcontent"],
+      "sessionId": "s-api-3",
+      "memoryType": "episodic",
+      "ageHours": 1800
+    },
+    {
+      "key": "api-request-timeout",
+      "content": "The dashboard hung forever on a slow upstream because fetch has no default timeout. An AbortController with a deadline turns it into a visible error.",
+      "directory": "/src/api",
+      "keywords": ["timeout", "fetch", "abortcontroller", "hang", "upstream"],
+      "sessionId": "s-api-3",
+      "memoryType": "episodic",
+      "ageHours": 2200
+    }
+  ],
+
+  "queries": [
+    {
+      "id": "q-token-expiry",
+      "$why": "Exact vocabulary of one incident, in a directory full of other token traces.",
+      "query": "token expiry off by one",
+      "relevant": ["auth-expiry-off-by-one"],
+      "absent": ["auth-token-in-url", "api-request-timeout"]
+    },
+    {
+      "id": "q-constant-time",
+      "$why": "A security lesson recalled by its mechanism, not its incident.",
+      "query": "constant-time token comparison timing",
+      "relevant": ["auth-constant-time"],
+      "absent": ["auth-expiry-off-by-one"]
+    },
+    {
+      "id": "q-sqlite-concurrency",
+      "$why": "Two genuinely relevant traces, both about concurrent SQLite access.",
+      "query": "sqlite concurrent write lock",
+      "relevant": ["store-advisory-lock", "store-wal-busy-timeout"],
+      "absent": ["auth-refresh-race"]
+    },
+    {
+      "id": "q-stale-index",
+      "$why": "The recall that matters most in practice: 'why did my search miss it'.",
+      "query": "search index stale another connection",
+      "relevant": ["store-data-version"],
+      "absent": ["core-score-cap"]
+    },
+    {
+      "id": "q-backup",
+      "$why": "Degraded trace (aged past L2) still reachable by its keywords.",
+      "query": "sqlite backup wal checkpoint",
+      "relevant": ["store-backup-wal"],
+      "absent": ["store-wal-busy-timeout"]
+    },
+    {
+      "id": "q-decay-levels",
+      "$why": "Fresh trace, exact terms.",
+      "query": "decay thresholds levels hours",
+      "relevant": ["core-decay-thresholds"],
+      "absent": ["core-score-cap"]
+    },
+    {
+      "id": "q-cron-recurrence",
+      "$why": "Distinguishes two cron traces that share vocabulary but not subject.",
+      "query": "cron rearm recurring intention",
+      "relevant": ["core-cron-rearm"],
+      "absent": ["core-cron-utc"]
+    },
+    {
+      "id": "q-cron-timezone",
+      "$why": "The mirror of the previous query — same trap in reverse.",
+      "query": "cron utc timezone",
+      "relevant": ["core-cron-utc"],
+      "absent": ["core-cron-rearm"]
+    },
+    {
+      "id": "q-ranking-flat",
+      "$why": "Aged well past L2; the incident is remembered by its symptom.",
+      "query": "relevance score clamp bonus",
+      "relevant": ["core-score-cap"],
+      "absent": ["core-decay-thresholds"]
+    },
+    {
+      "id": "q-bind",
+      "$why": "Operational recall with an exact identifier in the content.",
+      "query": "bind loopback hostname",
+      "relevant": ["api-bind-loopback"],
+      "absent": ["api-request-timeout"]
+    },
+    {
+      "id": "q-untrusted",
+      "$why": "Procedural rule, recalled by concept rather than by incident.",
+      "query": "untrusted content fence sanitize",
+      "relevant": ["api-untrusted-fence"],
+      "absent": ["api-innerhtml-tooltip"]
+    },
+    {
+      "id": "q-timeout-ambiguous",
+      "$why": "'timeout' appears in three unrelated senses. Both busy_timeout and the fetch deadline are defensible answers; the auth traces are not.",
+      "query": "timeout",
+      "relevant": ["api-request-timeout", "store-wal-busy-timeout"],
+      "absent": ["auth-expiry-off-by-one", "auth-refresh-race"]
+    },
+    {
+      "id": "q-directory-scoped",
+      "$why": "Same query, narrowed to one mental place: the store's lock, not the auth race.",
+      "query": "lock",
+      "directory": "/src/store",
+      "relevant": ["store-advisory-lock"],
+      "absent": ["auth-refresh-race"]
+    },
+    {
+      "id": "q-no-answer",
+      "$why": "Nothing in the corpus is about this. Returning something confidently is the failure mode being measured.",
+      "query": "kubernetes ingress certificate rotation",
+      "relevant": [],
+      "absent": ["auth-constant-time", "api-bind-loopback", "store-backup-wal"]
+    }
+  ],
+
+  "intentions": [
+    {
+      "key": "loop-review-lock",
+      "content": "Review the advisory lock takeover path before the next release.",
+      "directory": "/src/store",
+      "expiresInHours": 720,
+      "cues": [{ "kind": "time", "at": "2026-01-02T09:00:00.000Z" }]
+    },
+    {
+      "key": "loop-bench-decay",
+      "content": "Benchmark updateDecay over 10k traces.",
+      "directory": "/src/core",
+      "expiresInHours": 720,
+      "cues": [{ "kind": "time", "at": "2026-01-05T09:00:00.000Z" }]
+    },
+    {
+      "key": "loop-cors-audit",
+      "content": "Re-audit the CORS origin comparison after the router upgrade.",
+      "directory": "/src/auth",
+      "expiresInHours": 48,
+      "cues": [{ "kind": "time", "at": "2026-01-10T09:00:00.000Z" }]
+    },
+    {
+      "key": "loop-doc-fence",
+      "content": "Document the untrusted fence boundary per content type.",
+      "directory": "/src/api",
+      "cues": [{ "kind": "event", "type": "file_open", "path": "src/api/server.ts" }]
+    },
+    {
+      "key": "loop-open-nocue",
+      "content": "Decide whether the model cache belongs in the user profile.",
+      "directory": "/src/core",
+      "cues": []
+    }
+  ],
+
+  "dueCases": [
+    {
+      "id": "d-none-yet",
+      "$why": "Before any cue time: waking anything here is a false positive.",
+      "at": "2026-01-01T12:00:00.000Z",
+      "due": []
+    },
+    {
+      "id": "d-first-only",
+      "$why": "Past the first cue only. The later ones must stay asleep.",
+      "at": "2026-01-02T09:30:00.000Z",
+      "due": ["loop-review-lock"]
+    },
+    {
+      "id": "d-two-due",
+      "$why": "Two cues elapsed, the third is still in the future.",
+      "at": "2026-01-06T00:00:00.000Z",
+      "due": ["loop-review-lock", "loop-bench-decay"]
+    },
+    {
+      "id": "d-expired-not-due",
+      "$why": "loop-cors-audit expires at +48h, well before its cue fires: an expired loop must not wake.",
+      "at": "2026-01-11T09:30:00.000Z",
+      "due": ["loop-review-lock", "loop-bench-decay"]
+    }
+  ],
+
+  "contextCases": [
+    {
+      "id": "c-store",
+      "$why": "Opening in /src/store: the store's open loop belongs in the block, the core one does not.",
+      "directory": "/src/store",
+      "expectLoops": ["loop-review-lock"],
+      "rejectLoops": ["loop-bench-decay", "loop-doc-fence"]
+    },
+    {
+      "id": "c-core",
+      "$why": "A loop with no cue at all still belongs in its own directory's block.",
+      "directory": "/src/core",
+      "expectLoops": ["loop-bench-decay", "loop-open-nocue"],
+      "rejectLoops": ["loop-review-lock"]
+    },
+    {
+      "id": "c-elsewhere",
+      "$why": "A directory with no loops must produce no loops — not the nearest ones.",
+      "directory": "/src/nowhere",
+      "expectLoops": [],
+      "rejectLoops": ["loop-review-lock", "loop-bench-decay", "loop-open-nocue", "loop-doc-fence"]
+    }
+  ]
+}
