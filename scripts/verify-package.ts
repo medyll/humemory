@@ -14,10 +14,10 @@
  *
  * Run: `pnpm verify:package` (needs network for the dependency install).
  */
-import { spawn, spawnSync } from 'child_process';
+import { spawn, spawnSync, type ChildProcess } from 'child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { dirname, join, resolve } from 'path';
+import { basename, dirname, join, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -65,7 +65,7 @@ function run(
     viaShell ? `${command} ${args.map(quoteForCmd).join(' ')}` : command,
     viaShell ? [] : args,
     {
-      cwd: options.cwd ?? repoRoot,
+      cwd: options.cwd ?? (installedRoot ? workspace : repoRoot),
       // A clean-ish env: the point is to prove the install stands alone, so the
       // caller's HUMEMORY_* overrides must not leak into the child.
       env: { ...strippedEnv(), ...(options.env ?? {}) },
@@ -185,7 +185,11 @@ function virginProfile(): Profile {
   return {
     data,
     queue,
-    env: { HUMEMORY_DATA_DIR: data, HUMEMORY_AGENT: 'package-check' },
+    env: {
+      HUMEMORY_DATA_DIR: data, HUMEMORY_AGENT: 'package-check',
+      HUMEMORY_MAINTENANCE_INTERVAL_MS: '0', HUMEMORY_MAINTENANCE_LLM: 'none',
+      ANTHROPIC_API_KEY: '', OPENAI_API_KEY: '',
+    },
   };
 }
 
@@ -264,6 +268,7 @@ function checkHook(root: string, profile: Profile) {
 async function checkMcp(root: string, profile: Profile): Promise<void> {
   const server = join(root, 'src', 'mcp', 'server.ts');
   const child = spawn('bun', [server], {
+    cwd: workspace,
     env: { ...strippedEnv(), ...profile.env },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -283,7 +288,6 @@ async function checkMcp(root: string, profile: Profile): Promise<void> {
     let buffer = '';
     const finish = (ok: boolean) => {
       clearTimeout(timer);
-      child.kill();
       resolveDone(ok);
     };
     const timer = setTimeout(() => finish(false), 30_000);
@@ -298,7 +302,35 @@ async function checkMcp(root: string, profile: Profile): Promise<void> {
     child.stdin.write(request);
   });
 
+  await stopChild(child);
   record('mcp: stdio server answers initialize', answered, answered ? '' : 'no JSON-RPC result within 30s');
+}
+
+async function stopChild(child: ChildProcess): Promise<void> {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((done) => {
+    child.once('exit', () => done());
+    child.kill('SIGKILL');
+  });
+}
+
+function checkMaintenanceAndStartHook(root: string, profile: Profile) {
+  const worker = run('bun', [join(root, 'scripts', 'maintenance-worker.ts'), '--skip-imports'], {
+    env: { ...profile.env, HUMEMORY_VERBOSE: '1' },
+  });
+  const pending = existsSync(profile.queue)
+    ? readdirSync(profile.queue).filter(file => file.endsWith('.json') || file.endsWith('.processing')) : ['missing queue'];
+  const processed = /maintenance: 1\/1 jobs/.test(worker.stderr);
+  record('maintenance: drains synthetic queue without importing local histories', worker.code === 0 && pending.length === 0 && processed,
+    worker.code === 0 && pending.length === 0 && processed ? '' : firstLine(worker.stderr || worker.stdout));
+  const start = run('bun', [join(root, 'scripts', 'hook-session-start.ts')], {
+    env: { ...profile.env, HUMEMORY_VERBOSE: '1', HUMEMORY_DIR: workspace },
+  });
+  record('hook: SessionStart loads from the installed copy', start.code === 0 && /open loop\(s\)/.test(start.stderr), firstLine(start.stderr));
+  const commit = run('bun', [join(root, 'scripts', 'hook-post-commit.ts')], { env: profile.env });
+  record('hook: post-commit loads outside a git checkout', commit.code === 0 && !/hook error/.test(commit.stderr), firstLine(commit.stderr));
+  const consolidate = run('bun', [join(root, 'scripts', 'consolidate.js')], { env: profile.env });
+  record('consolidation: distributed script runs', consolidate.code === 0, consolidate.code === 0 ? '' : firstLine(consolidate.stderr));
 }
 
 async function checkApi(root: string, profile: Profile): Promise<void> {
@@ -307,12 +339,14 @@ async function checkApi(root: string, profile: Profile): Promise<void> {
   // random port keeps parallel runs from colliding.
   const port = String(31_000 + Math.floor(Math.random() * 2000));
   const child = spawn('bun', [server], {
+    cwd: workspace,
     env: { ...strippedEnv(), ...profile.env, PORT: port, HUMEMORY_HOST: '127.0.0.1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   let healthy = false;
   let detail = 'server never answered /health';
+  child.on('error', (error) => { detail = error.message; });
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
@@ -327,7 +361,7 @@ async function checkApi(root: string, profile: Profile): Promise<void> {
       await new Promise((r) => setTimeout(r, 500));
     }
   }
-  child.kill();
+  await stopChild(child);
   record('api: serves /health from the installed copy', healthy, detail);
 }
 
@@ -344,6 +378,7 @@ async function main() {
       checkDoctor(installedRoot, profile);
       checkCli(installedRoot, profile);
       checkHook(installedRoot, profile);
+      checkMaintenanceAndStartHook(installedRoot, profile);
       await checkMcp(installedRoot, profile);
       await checkApi(installedRoot, profile);
     }
@@ -356,6 +391,9 @@ async function main() {
   for (const failure of failed) console.log(`   ✗ ${failure.name}: ${failure.detail}`);
 
   if (workspace && process.env.HUMEMORY_KEEP_WORKSPACE !== '1') {
+    if (!resolve(workspace).startsWith(resolve(tmpdir()) + sep) || !basename(workspace).startsWith('humemory-pack-')) {
+      throw new Error('Refusing to remove a workspace outside the package-check temporary root');
+    }
     rmSync(workspace, { recursive: true, force: true });
   } else if (workspace) {
     console.log(`\nWorkspace kept at ${workspace}`);
