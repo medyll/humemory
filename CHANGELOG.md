@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.10] - 2026-09-08
+**Features:**
+- measure whether the right memory comes back
+
+**Bug Fixes:**
+- answer a query whose terms straddle the decay levels
+
+
+
 ## [0.2.9] - 2026-09-07
 **Features:**
 - diagnose an installation, and prove the packaged one
