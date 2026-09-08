@@ -92,6 +92,7 @@ scripts/hook-session.ts        # Claude Code Stop hook → queue raw session onl
 scripts/hook-session-start.ts  # Claude Code SessionStart hook → inject context
 scripts/maintenance-worker.ts  # async extraction/storage; deterministic by default
 scripts/verify-package.ts      # packs, installs outside the checkout, drives every entry point
+scripts/measure-recall.ts      # cognitive-quality report over tests/fixtures/relevance.corpus.json
 tests/                    # bun test (hermetic; helpers/ + fixtures/)
 data/humemory.db          # legacy in-checkout DB; new installs use the OS data dir (core/paths.ts)
 ```

@@ -8,6 +8,23 @@ import { systemClock, type Clock } from './clock.js';
 import { projectPath } from './project-path.js';
 
 /**
+ * Cost of having matched only part of the query. Larger than the widest level
+ * bonus (3 * 10) so no partial match can outrank an exact one.
+ */
+const PARTIAL_MATCH_PENALTY = 35;
+
+/** FlexSearch answers as [{field, result: [ids]}] or, sometimes, bare ids. */
+function flattenIds(matches: any): string[] {
+  if (!Array.isArray(matches)) return [];
+  const ids: string[] = [];
+  for (const match of matches) {
+    if (typeof match === 'string') ids.push(match);
+    else if (Array.isArray(match?.result)) ids.push(...(match.result as string[]));
+  }
+  return ids;
+}
+
+/**
  * Inverse search engine, FlexSearch candidates with heuristic ranking.
  * Queries the degraded layers first (level 3), then escalates.
  */
@@ -64,10 +81,18 @@ export class InverseSearchEngine {
   }
 
   /**
-   * Inverse search: starts at level 3 and escalates when needed
+   * Inverse search: starts at level 3 and escalates when needed.
+   *
+   * Two passes. The first is strict, and answers almost every query. The second
+   * only runs when the first found nothing anywhere, and exists because of
+   * audit A13: FlexSearch requires EVERY query term inside a SINGLE field, and
+   * the decay levels are indexed as separate fields — so a query whose terms
+   * straddle the L3 keyword line and the full content matched neither and
+   * returned nothing at all. "sqlite lock" found the trace; "sqlite concurrent
+   * write lock" found silence, which is the worst possible answer to a user
+   * being more precise.
    */
   search(query: SearchQuery): SearchResult[] {
-    const results: SearchResult[] = [];
     const { query: searchQuery, maxLevel = 3, limit = 10 } = query;
 
     // Level-by-level strategy, from most degraded to most detailed
@@ -77,33 +102,32 @@ export class InverseSearchEngine {
       { field: 'level1Summary', level: 1 },
       { field: 'content', level: 0 },
     ];
+    const levels = searchOrder.filter(({ level }) => level <= maxLevel);
 
+    const strict = this.collect(query, levels, (field) => this.strictIds(searchQuery, field));
+    // Whole-query match found something: it is the better answer by definition,
+    // and relaxing further would only add neighbours below it.
+    const results = strict.length
+      ? strict
+      : this.collect(query, levels, (field) => this.nearMissIds(searchQuery, field), true);
+
+    return results
+      .sort((a, b) => b.score - a.score || a.memory.id.localeCompare(b.memory.id))
+      .slice(0, Math.max(0, limit));
+  }
+
+  /** Runs one pass over the levels, filtering and scoring what the ids yield. */
+  private collect(
+    query: SearchQuery,
+    levels: { field: string; level: DecayLevel }[],
+    idsFor: (field: string) => string[],
+    partial = false
+  ): SearchResult[] {
+    const results: SearchResult[] = [];
     const seenIds = new Set<string>();
 
-    for (const { field, level } of searchOrder) {
-      // Skip once past the caller's maximum level
-      if (level > maxLevel) continue;
-
-      // Recherche sur ce niveau
-      const matches = this.index.search({
-        query: searchQuery,
-        field,
-        limit: Math.max(1, this.memories.size), // rank all candidates after filtering
-      });
-
-      // FlexSearch retourne [{field, result: [ids]}]
-      // Collect ids from every matched field
-      const ids: string[] = [];
-      for (const match of matches) {
-        if (match && typeof match === 'object' && 'result' in match) {
-          ids.push(...(match.result as string[]));
-        } else if (typeof match === 'string') {
-          ids.push(match);
-        }
-      }
-
-      // Process the results
-      for (const id of ids) {
+    for (const { field, level } of levels) {
+      for (const id of idsFor(field)) {
         if (seenIds.has(id)) continue;
         seenIds.add(id);
 
@@ -122,24 +146,72 @@ export class InverseSearchEngine {
         results.push({
           memory,
           matchLevel: level,
-          score: this.calculateScore(memory, searchQuery, level),
+          score: this.calculateScore(memory, query.query, level, partial),
         });
-
       }
     }
 
-    return results.sort((a, b) => b.score - a.score || a.memory.id.localeCompare(b.memory.id)).slice(0, Math.max(0, limit));
+    return results;
+  }
+
+  /** Ids matching the whole query inside one field — FlexSearch's own AND. */
+  private strictIds(searchQuery: string, field: string): string[] {
+    return flattenIds(
+      this.index.search({
+        query: searchQuery,
+        field,
+        limit: Math.max(1, this.memories.size), // rank all candidates after filtering
+      })
+    );
+  }
+
+  /**
+   * Ids matching all but at most one term of the query inside one field.
+   *
+   * FlexSearch's own `suggest: true` would accept a single term out of five,
+   * which turns a missed recall into a confident wrong neighbour — measurably:
+   * it put an auth token race at the top of "sqlite concurrent write lock".
+   * Counting the terms ourselves keeps the near-misses and drops the strangers.
+   */
+  private nearMissIds(searchQuery: string, field: string): string[] {
+    const terms = searchQuery.split(/\s+/).filter(Boolean);
+    if (terms.length < 2) return [];
+
+    const hits = new Map<string, number>();
+    for (const term of terms) {
+      for (const id of this.strictIds(term, field)) {
+        hits.set(id, (hits.get(id) ?? 0) + 1);
+      }
+    }
+
+    const required = terms.length - 1;
+    return [...hits.entries()]
+      .filter(([, count]) => count >= required)
+      // More terms satisfied first: the pass keeps insertion order downstream.
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([id]) => id);
   }
 
   /**
    * Calcule un score de pertinence
    */
-  private calculateScore(memory: Memory, query: string, matchLevel: DecayLevel): number {
+  private calculateScore(
+    memory: Memory,
+    query: string,
+    matchLevel: DecayLevel,
+    partial = false
+  ): number {
     let score = 100;
 
     // Bonus for matching on a degraded level: cheaper to reach, more useful
     const levelBonus = matchLevel * 10;
     score += levelBonus;
+
+    // A partial match satisfied only some of the query terms (A13 fallback).
+    // The penalty exceeds the widest level bonus on purpose: an exact match at
+    // any level must outrank a partial one at every level, or a loose hit on
+    // the keyword line would bury an exact hit in the full content.
+    if (partial) score -= PARTIAL_MATCH_PENALTY;
 
     // Recency bonus
     const daysSinceCreation =
