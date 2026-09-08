@@ -70,6 +70,7 @@
     "typecheck:web": "tsc -p web/tsconfig.json",
     "verify:package": "bun run scripts/verify-package.ts",
     "measure:recall": "bun run scripts/measure-recall.ts",
+    "bench:scale": "bun run scripts/bench-scale.ts",
     "clean:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\""
   },
   "dependencies": {

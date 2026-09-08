@@ -627,6 +627,19 @@ measurement into a regression floor.
 Thresholds there are floors recording current behaviour, not targets. Raising
 one is a result; lowering one needs a reason in the commit that lowers it.
 
+### Measuring cost at scale
+
+```bash
+pnpm bench:scale
+```
+
+`loadIntoMemory()` reads every trace and rebuilds the whole search index. It
+runs in the store's constructor — so every CLI command, every SessionStart hook
+and every post-commit hook pays it — and again inside `search()` whenever
+another process has committed since the last load. This measures what that
+costs as the corpus grows. `--sizes=250,1000,5000` to choose the points,
+`--json` for the raw rows.
+
 ### Verifying the published package
 
 ```bash
