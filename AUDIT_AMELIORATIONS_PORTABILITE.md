@@ -19,7 +19,21 @@ Date de finalisation : 6 septembre 2026. Base examinée : commit `09f9f69`, **av
 > | A11 | `humemory remap-project` avec aperçu, sauvegarde et transaction ; cache de modèles centralisé ; minimum bun relevé à la version réellement validée | `tests/audit-regressions.test.ts` — « A11 » |
 > | A12 | Fusion MCP écrite dans un temporaire unique, original sauvegardé, remplacement par renommage ; refus maintenu sur les formats non pris en charge | `tests/mcp-client-setup.test.ts` |
 >
-> Des améliorations listées plus bas, **#1 (mesure de la qualité cognitive, `pnpm measure:recall`)**, **#3 (migrations explicites)**, **#4 (diagnostic d'installation, `humemory doctor`)** et **#5 (garanties produit, `docs/PORTABILITY.md`)** sont faites. **#2 (mesure du coût à l'échelle)** reste ouverte.
+> Les cinq améliorations listées plus bas sont faites : **#1** (qualité cognitive, `pnpm measure:recall`), **#2** (coût à l'échelle, `pnpm bench:scale`), **#3** (migrations explicites), **#4** (diagnostic d'installation, `humemory doctor`) et **#5** (garanties produit, `docs/PORTABILITY.md`).
+>
+> **A15 — P1, découvert par la mesure #2, 8 septembre 2026.** `loadIntoMemory()` lit toutes les traces et reconstruit l'index entier. Il s'exécute dans le constructeur du store — donc à chaque commande CLI, à chaque hook SessionStart, à chaque hook post-commit — et **une seconde fois dans `search()`** dès qu'un autre processus a commité depuis le dernier chargement (le correctif A01). Or la configuration documentée fait tourner l'API, le serveur MCP et le worker de maintenance sur la même base : cette reconstruction est le cas **courant**, pas le cas rare.
+>
+> Mesuré sur Windows x64, bun 1.3.14 (`pnpm bench:scale`) :
+>
+> | traces | ouverture à froid | tas | recherche à chaud | recherche après écriture externe | balayage decay |
+> |---|---|---|---|---|---|
+> | 250 | 13,8 ms | 0,7 Mo | 0,03 ms | 14,1 ms | 12,5 ms |
+> | 1 000 | 54,3 ms | 11,4 Mo | 0,06 ms | 54,6 ms | 50,3 ms |
+> | 5 000 | 257,9 ms | 36,1 Mo | 0,33 ms | 245,4 ms | 240,4 ms |
+>
+> Croissance de 250 à 5 000 traces (20× les données) : ouverture **18,7×**, reconstruction **17,4×** — linéaire en N. La recherche elle-même est bon marché (0,33 ms à 5 000) ; **une recherche qui déclenche une reconstruction coûte 750× une recherche à chaud**. La résolution des cues reste plate (1–2 ms), le plafond de 500 la borne.
+>
+> Le goulot n'est donc pas la recherche mais le rechargement. Deux coûts distincts, à traiter séparément : le démarrage par processus (~1 s attendu vers 20 000 traces avant que la moindre commande ne fasse quoi que ce soit) et la reconstruction par écriture concurrente. **Aucune correction n'est proposée ici** : l'audit demande explicitement que cette mesure précède le choix d'une autre architecture, et le chiffre qui manque encore est le coût d'une mise à jour incrémentale de l'index comparé à celui d'une reconstruction.
 >
 > **A13 — P1, découvert par la mesure #1 et corrigé le 8 septembre 2026.** FlexSearch exige que **tous** les termes d'une requête se trouvent dans **un même champ**. Les niveaux de dégradation étant indexés en champs séparés (`level3Keywords`, `level2Essential`, `level1Summary`, `content`), une requête dont les termes se répartissent entre la ligne de mots-clés L3 et le contenu ne renvoie **rien du tout**.
 >
