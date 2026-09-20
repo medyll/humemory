@@ -26,17 +26,24 @@ Past learnings are **encoded**, then **degraded** over time on a human curve:
 | Level | Name | Lifespan | Holds |
 |-------|------|----------|-------|
 | L0 | full detail | fresh (<24h) | complete content |
-| L1 | summary | days | LLM-generated résumé |
+| L1 | summary | days | deterministic summary; optional LLM enhancement |
 | L2 | essential | weeks | the gist |
 | L3 | keywords | months | lexical retrieval tokens |
-| L4 | lost / merged | beyond | folded into a sibling trace |
+| L4 | lost / merged | explicit merge | source linked to a sibling trace |
 
 Recall resists decay. Saillance (mnemonic strength, 0–100) and recall count slow
 the curve. A **photographic** flag pins critical traces so they never fade.
 
-**Inverse search** queries the *degraded* layers first (cheap, L3 keywords) and
-escalates toward full content only on a match — the human recall pattern, fast by
-construction.
+**Inverse search** visits indexed fields in order: L3 keywords → L2 essentials →
+L1 summary → full content. It collects matches across these fields, then ranks and
+limits the results. A relaxed pass runs only if the strict pass found nothing.
+Search does not itself reinforce a trace; use `recall` for that.
+
+The model has five states, but automatic aging currently stops at L3: the decay
+calculator does not visit the configured L4 threshold. Aging preserves the original
+content and derived fields in SQLite, so detailed content remains searchable.
+See the [interactive architecture guide](docs/architecture/architecture.html)
+for the overall system and the detailed rules.
 
 A Claude Code `Stop` hook can queue each completed session instantly; maintenance
 extracts and stores its learnings afterward, outside the agent's critical path.
@@ -396,7 +403,7 @@ The CLI provides several commands to interact with humemory:
   Options:
   - `-d, --directory <dir>`: Filter by mental space
   - `-s, --session <id>`: Filter by context
-  - `-l, --level <max>`: Max consolidation state (0-4)
+  - `-l, --level <max>`: Highest indexed field to search (0-4); not a filter on a trace's current state
   - `-n, --limit <n>`: Number of traces
   - `-t, --type <type>`: Filter by type (episodic/semantic/procedural)
   - `--from <date>`: Start date YYYY-MM-DD
@@ -443,7 +450,7 @@ The CLI provides several commands to interact with humemory:
   pnpm cli merge <sourceId> <targetId>
   ```
   Options:
-  - `--auto`: Merge content via LLM
+  - `--auto`: Regenerate merged derived levels locally; an injected LLM may enhance them
 
 - **Delete a memory trace**:
   ```bash
@@ -489,11 +496,11 @@ The API will be available at `http://localhost:3456`. You can interact with it u
 - `GET /memories`: List memories
 - `GET /memories/:id`: Fetch a specific memory
 - `POST /memories/:id/recall`: Bump recall and saillance
-- `POST /memories/:id/similar`: Find similar memories
+- `GET /memories/:id/similar`: Find similar memories
 - `POST /memories/:id/merge`: Merge memories
 - `POST /memories/:id/photo`: Toggle photographic mode
 - `DELETE /memories/:id`: Forget a memory
-- `GET /search?query=X`: Inverse search
+- `GET /search?q=X`: Inverse search
 - `POST /decay`: Run consolidation
 - `GET /status`: Pool stats
 
@@ -670,9 +677,12 @@ days later on a user's machine. Runs on Linux, macOS and Windows in CI.
 | `keywords` | Indices de récupération | retrieval cues |
 | `memoryType` | Type | episodic / semantic / procedural |
 
-**Decay thresholds:** L0→L1 ~24h · L1→L2 ~1 week · L2→L3 ~1 month · L3→L4 beyond.
-Slowing factors: `recallCount * 0.3`, saillance >70 → 1.5× slower, content >500 chars,
-keywords >5. `photographic: true` disables decay entirely.
+**Automatic decay thresholds:** L0→L1 24h · L1→L2 168h · L2→L3 720h,
+before slowdown. L4 is configured at 2160h but is not reached by automatic aging.
+Age is measured from the more recent creation or recall. Slowdown is
+`min((1 + recallCount * 0.3) × (saillance >= 70 ? 1.5 : 1) × (verified ? 1.5 : 1), 2.5)`.
+Content length and keyword count affect the stored `decayRate`, which the level
+calculator currently does not use. `photographic: true` returns L0.
 
 **Memory types:** `episodic` (events), `semantic` (facts), `procedural` (skills).
 
@@ -683,7 +693,8 @@ keywords >5. `photographic: true` disables decay entirely.
 ### ✅ Done — Sprints 1–4
 - Core decay + inverse search; `bun:sqlite` store (WAL, write-queue serialization)
 - CLI + Hono API + web dashboard ("palais de mémoire")
-- Nightly cron consolidation (`0 3 * * *`)
+- Consolidation entry point for an external scheduler (example: `0 3 * * *`);
+  the API's 15-minute maintenance loop imports and encodes sessions, not trace decay
 - Deterministic L1/L2/L3 generation; optional injected LLM enhancement
 - Similar-detection + merge (L4); enriched search (type/period/saillance/recalls)
 - Photographic mode; Claude Code `Stop` hook → durable async maintenance queue
@@ -698,14 +709,17 @@ keywords >5. `photographic: true` disables decay entirely.
       typed `trigger_spec`. One intention → N cues.
 - [x] **5.2 Cue resolver** — time cues (ISO/cron) and event cues (file_open,
       branch_switch, error_pattern). Decay rule: `armed` → saillance pinned at 100;
-      `fired` not `closed` → normal decay (Zeigarnik fades); `closed` → archived.
+      `fired` not `closed` → −10 saillance points/day from `firedAt`;
+      `closed` → archived. This is separate from retrospective trace aging.
 - [x] **5.3 Hooks** — `SessionStart` injects context (`scripts/hook-session-start.ts`,
       budget via `HUMEMORY_SESSION_BUDGET`); git `post-commit` closes loops via the
       explicit `Closes loop-<id>` marker, and only *suggests* on file-overlap.
 - [x] **5.4 CLI/API** — `pnpm cli intent {add,list,close,fire,resolve}`,
       `POST /intentions`, `POST /cues`, `POST /events`, `POST /cues/resolve`.
 
-**Deferred to Phase 6** — Cognitive scripts (spec needed before code).
+**Phases 6–8 shipped** — trust and contradictions, reviewed dream proposals, MCP,
+optional vector search, and cognitive scripts. See the detailed shipped status in
+[AGENTS.md](AGENTS.md). Cognitive scripts are Phase 8, not deferred work.
 
 ### 🛣️ Beyond
 - Shared multi-project DB with concurrency lock (WAL + advisory) — done (Sprint 5 / S5-00a)
@@ -721,7 +735,8 @@ keywords >5. `photographic: true` disables decay entirely.
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## Notes
-- Shared DB: `data/humemory.db` · API port `3456` (`PORT` env)
+- Shared DB: resolved by `src/core/paths.ts` (legacy checkout `data/humemory.db`,
+  otherwise the OS user data directory, with environment overrides) · API port `3456` (`PORT` env)
 - Stack: TypeScript · `bun:sqlite` · `flexsearch` · `hono` · `commander` · `@anthropic-ai/sdk`
 - `CLAUDE.md` is a thin Claude-Code-specific quick-start that delegates to
   `AGENTS.md`; `AGENTS.md` remains the canonical source of truth.

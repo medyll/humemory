@@ -24,11 +24,12 @@ LLM. Every run must be:
 
 ### 1. Isolated database — done
 
-Today `tests/humemory.test.ts` uses a temp file `test-humemory.db` with
-`beforeEach`/`afterEach` cleanup. Good enough but file-bound and serial.
+`tests/humemory.test.ts` uses `freshStore()` with a frozen `FakeClock` and a
+fresh `:memory:` database in `beforeEach`, closed in `afterEach`. Suites testing
+cross-process persistence use isolated temporary files.
 
-**Target:** every suite gets its own `bun:sqlite` instance. `SQLiteStore`'s
-constructor already accepts a path → pass `':memory:'`.
+Every suite gets its own `bun:sqlite` instance; pass `':memory:'` unless the
+scenario specifically needs on-disk persistence.
 
 ```ts
 import { freshStore } from './helpers/store.js';
@@ -57,7 +58,8 @@ Threaded through `SQLiteStore` (`add`, `recall`, `updateDecay`) and
 took `now` as a parameter. Anything still calling `new Date()` in a hot path is a
 regression.
 
-Then decay tests assert the full curve without waiting:
+Decay tests assert the automatic L0→L3 curve without waiting; L4 is covered
+as an explicit merge state, because automatic aging currently stops at L3:
 
 ```ts
 const clock = new FakeClock(new Date('2026-01-01'));
@@ -68,9 +70,9 @@ await store.updateDecay();
 expect((await store.getById(m.id)).currentLevel).toBe(1); // L0→L1
 ```
 
-Remaining: `scripts/consolidate.js` and the CLI/API still stamp `day` with
-`new Date()` at the edges. Harmless for decay assertions, worth threading when the
-prospective hooks land (S5-03a/b).
+`scripts/consolidate.js` and some CLI/API entry points still stamp `day` with
+`new Date()` at the edges. Behavioral tests exercise the injected store clock;
+SessionStart and the prospective resolver also accept an injected clock.
 
 ### 3. Mocked LLM — seam already exists
 
@@ -82,8 +84,14 @@ prospective hooks land (S5-03a/b).
 import { setLLMClient } from '../src/core/llm-generator.js';
 
 setLLMClient({
-  async generate() {
-    return { level1: 'fixed summary', level2: 'fixed gist', level3: 'k1 k2 k3' };
+  messages: {
+    async create() {
+      return { content: [{ type: 'text', text: JSON.stringify({
+        level1Summary: 'fixed summary',
+        level2Essential: 'fixed gist',
+        level3Keywords: 'keyword-one keyword-two keyword-three',
+      }) }] };
+    },
   },
 });
 ```
@@ -116,9 +124,10 @@ handler unsubscribing mid-broadcast cannot corrupt the iteration. `published()` 
 `publishedOf(type)` expose the log for assertions without subscribing; `reset()`
 clears both handlers and log.
 
-`FileSystemEventBus` (fs.watch / chokidar + git hooks) is deliberately **not**
-implemented yet — there is nothing to feed until the `intentions`/`cues` tables and
-the resolver exist. It lands with Phase 5.2 (S5-02).
+`FileSystemEventBus` (fs.watch / chokidar) is **not implemented**. The shipped
+resolver accepts events through the injected bus or `POST /events`; callers must
+supply file-open, branch-switch and error events. SessionStart additionally
+resolves branch cues for scripts, not for intentions.
 
 ### 5. React components — same runner, no second stack
 

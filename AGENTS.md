@@ -12,9 +12,10 @@ For the project's identity and "why", read [README.md](./README.md) first.
 humemory has two halves, both built as of Phase 8 (2026-08-08). The direction
 was **Direction 1**, chosen 2026-06-17; everything below is the shipped result.
 
-1. **Retrospective** ✅ — past learnings **decay** through 5 levels (detail → summary
-   → essential → keywords → lost/merged); recall reinforces; inverse search hits the
-   degraded layers first.
+1. **Retrospective** ✅ — a five-state model (detail → summary → essential →
+   keywords → lost/merged). Automatic aging currently stops at L3; explicit merge
+   sets L4. Original content stays in SQLite. Recall reinforces; inverse search
+   visits the degraded fields first, then ranks matches across fields.
 2. **Prospective** ✅ — intentions that fire on a **cue** (time/event), **Zeigarnik**
    open loops that stay salient until a `commit` closes them, and context-triggered
    **scripts** that fade on disuse rather than time. A memory that resurfaces
@@ -35,7 +36,7 @@ prospective, scripts cognitifs, effet Zeigarnik).
 
 ```bash
 pnpm install
-pnpm build          # tsc -p tsconfig.json → dist/
+pnpm build          # backend tsc → dist/ + web typecheck + web bundle → public/app/
 pnpm dev            # watch src/cli/index.ts (bun)
 pnpm start:api      # HTTP API + dashboard on :3456
 pnpm cli <cmd>      # run CLI directly
@@ -62,12 +63,23 @@ src/
 │   ├── types.ts          # Memory, DecayLevel, SearchQuery, MemoryStore iface
 │   ├── decay.ts          # degradation curve + thresholds
 │   ├── search.ts         # inverse search (lexical, degraded-first)
-│   └── llm-generator.ts  # deterministic L1/L2/L3; optional injected LLM
+│   ├── llm-generator.ts  # deterministic L1/L2/L3; optional injected LLM
+│   ├── clock.ts          # Clock seam (systemClock / FakeClock)
+│   ├── event-bus.ts      # AppEvent + InMemoryEventBus
+│   ├── cue-arg.ts        # cue syntax shared by CLI and React form
+│   ├── cues.ts           # cue resolver, cron matcher, loop ids
+│   ├── scripts.ts        # script disuse calculation + archival sweep
+│   ├── trust.ts / sanitize.ts # authority scoring + context hardening
+│   ├── dreamer.ts        # clusters, corroboration metadata, reviewed proposals
+│   ├── embeddings.ts / hybrid.ts / vector-clusterer.ts # optional semantic lane
+│   ├── paths.ts          # data/db/queue/model-cache/install root resolver
+│   └── doctor.ts         # install diagnostic (no memory content read)
 ├── store/
 │   └── sqlite.ts         # bun:sqlite store (WAL), findSimilar/merge/setPhotographic
 ├── agent/
 │   ├── session-parser.ts     # parse Claude Code session transcripts
 │   ├── source-registry.ts    # discover local AI runtimes without reading sessions
+│   ├── codex-rollout-parser.ts / codex-import.ts        # Codex rollout → queue
 │   ├── kimi-session-parser.ts / kimi-import.ts          # Kimi wire → maintenance queue
 │   ├── opencode-session-parser.ts / opencode-import.ts  # public OpenCode export → queue
 │   ├── mcp-client-setup.ts   # merge humemory into Kimi/OpenCode MCP configs
@@ -77,15 +89,9 @@ src/
 │   ├── maintenance-state.ts  # durable health record of the loop (data/maintenance-state.json)
 │   ├── claude-hook.ts        # worker-side session learning encoder
 │   └── session-context.ts    # SessionStart → markdown block (open loops + traces)
-├── core/
-│   ├── clock.ts              # Clock seam (systemClock / FakeClock)
-│   ├── event-bus.ts          # AppEvent + InMemoryEventBus
-│   ├── cue-arg.ts            # cue syntax, shared by the CLI and the React form
-│   ├── paths.ts              # single resolver for data/db/queue/model-cache/install root
-│   ├── doctor.ts             # install diagnostic behind `humemory doctor` (no content read)
-│   └── cues.ts               # cue resolver, cron matcher, loop ids
 ├── api/server.ts         # Hono HTTP API + serves public/ dashboard
 ├── cli/index.ts          # commander CLI
+├── mcp/server.ts         # shared-store tools over stdio, process agent identity
 └── index.ts              # library exports
 web/                      # React front (bun bundler → public/app, served at /app)
 scripts/hook-session.ts        # Claude Code Stop hook → queue raw session only
@@ -115,9 +121,13 @@ data/humemory.db          # legacy in-checkout DB; new installs use the OS data 
 | `keywords` | Indices de récupération | retrieval cues |
 | `memoryType` | Type | episodic / semantic / procedural |
 
-**Decay thresholds:** L0→L1 ~24h · L1→L2 ~1 week · L2→L3 ~1 month · L3→L4 beyond.
-Slowing factors: `recallCount * 0.3`, saillance >70 → 1.5× slower, content >500 chars,
-keywords >5. `photographic: true` disables decay entirely.
+**Automatic decay thresholds:** L0→L1 24h · L1→L2 168h · L2→L3 720h,
+before slowdown. The configured L4 threshold (2160h) is not visited by the
+calculator. Slowdown is the product of `(1 + recallCount * 0.3)`, 1.5 when
+saillance >=70, and 1.5 when verified, capped at 2.5×. The more recent creation
+or recall determines age. Content length and keyword count affect stored
+`decayRate`, which does not currently affect the calculated level.
+`photographic: true` returns L0. See the [architecture guide](docs/architecture/architecture.html).
 
 **Memory types:** `episodic` (events), `semantic` (facts), `procedural` (skills).
 
@@ -131,11 +141,11 @@ keywords >5. `photographic: true` disables decay entirely.
 | GET | `/memories` | list (limit, level, type) |
 | GET | `/memories/:id` | fetch one |
 | POST | `/memories/:id/recall` | bump recall + saillance |
-| POST | `/memories/:id/similar` | find similar |
+| GET | `/memories/:id/similar` | find similar |
 | POST | `/memories/:id/merge` | merge (L4) |
 | POST | `/memories/:id/photo` | toggle photographic |
 | DELETE | `/memories/:id` | forget |
-| GET | `/search?query=X` | inverse search |
+| GET | `/search?q=X` | inverse search |
 | POST | `/decay` | run consolidation |
 | GET | `/status` | pool stats |
 
@@ -184,7 +194,8 @@ Core rules:
 - **Isolated DB per run** — never touch `data/humemory.db`; use an in-memory or
   temp-file `bun:sqlite` instance, torn down after each suite.
 - **Injectable clock** — decay is time-driven, so time must be a parameter, not
-  `Date.now()`. Tests fast-forward a fake clock to assert L0→L4 transitions.
+  `Date.now()`. Tests fast-forward a fake clock through automatic L0→L3;
+  L4 is tested as an explicit merge state.
 - **Mocked LLM** — no calls to Anthropic in tests; `LLMClient` is stubbed with
   deterministic fixtures. CI runs with no `ANTHROPIC_API_KEY`.
 - **Fixtures, not live data** — seed memories from `tests/fixtures/`.
@@ -201,7 +212,8 @@ clock- and event-driven and cannot be trusted without it.
 ### ✅ Done — Sprints 1–4
 - Core decay + inverse search; `bun:sqlite` store (WAL, write-queue serialization)
 - CLI + Hono API + web dashboard ("palais de mémoire")
-- Nightly cron consolidation (`0 3 * * *`)
+- Consolidation entry point for an external scheduler (`0 3 * * *` is an example,
+  not installed automatically); API maintenance imports/encodes sessions every 15 min
 - Deterministic L1/L2/L3 generation; optional injected LLM enhancement
 - Similar-detection + merge (L4); enriched search (type/period/saillance/recalls)
 - Photographic mode; Claude Code `Stop` hook → durable async maintenance queue
@@ -220,7 +232,8 @@ branch_switch / error_pattern). One intention → N cues.
 
 **Cue resolver (5.2): ✅ shipped (S5-02), `src/core/cues.ts`.** `resolveTimeCues(now)` + `resolveEventCues(event)` + expiry.
 Decay × intention rule: `armed` → saillance pinned at 100, no decay (open loop stays
-salient); `fired` not `closed` → normal decay (Zeigarnik fades over time); `closed`
+salient); `fired` not `closed` → intention-specific fade (−10 points/day from
+`firedAt`, not the retrospective L0→L3 curve); `closed`
 → archived.
 
 **Hooks (5.3): ✅ shipped (S5-03a, S5-03b).**
@@ -269,14 +282,18 @@ recurring traces across sessions/agents (KeywordClusterer behind a `Clusterer`
 interface — vectors are Phase 7), scores clusters on `base(source)` only,
 writes **idempotent** `dream_proposals` (14-day expiry) reviewed via
 `pnpm cli dream review` / `approve` / `reject`; API `GET /dreams`,
-`POST /dreams/:id/approve|reject`. Nothing touches `memories` or `AGENTS.md`
-without approval. Dream kinds: `promote_semantic`, `merge_cluster`,
+`POST /dreams/:id/approve|reject`. Content-changing proposals require approval;
+keyword corroboration can automatically update verification metadata on existing
+memories. `update_agents_md` returns a suggestion and never edits the file.
+Dream kinds: `promote_semantic`, `merge_cluster`,
 `contradiction`, `close_stale_loop`, `update_agents_md` (suggestion only).
 
 **6.2 — MCP server: ✅ shipped** (`pnpm mcp`, `src/mcp/server.ts`, stdio).
 Tools `humemory_add / search / recall / intent_add / intent_close / dreams` —
 Claude, Codex, Kimi, OpenCode share one store with agent attribution on every
-write (`agent` arg or `$HUMEMORY_AGENT`; `HUMEMORY_DB` override for tests).
+write (identity from `$HUMEMORY_AGENT` in the server process, not a tool argument;
+`HUMEMORY_DB` override for tests). Cross-agent reuse earns verification only
+through a caller that supplies a trusted process identity, not an HTTP attribution header.
 
 **Client registration** — the repo ships `.mcp.json` (Claude Code project
 scope, `HUMEMORY_AGENT=claude`). `pnpm cli sources setup` merge-registers the
@@ -319,7 +336,7 @@ bundle (scripts are markdown any CLI agent reads, humemory stays agent-agnostic)
   human-authored renders bare, everything else wrapped in
   `<humemory-untrusted>`, escape-attempt telemetry on every render path.
 - **8.3 — authoring & trust.** Three paths: human (`script add` → active
-  directly), agent (`script propose` → draft, human activates), dreamer-mined
+  directly), agent (API/library authoring → draft, human activates), dreamer-mined
   (→ draft, see 8.5). Draft scripts never fire.
 - **8.4 — disuse decay, the inverse Zeigarnik.** Scripts fade on *disuse*, not
   time: active + unfired 60 days → −10 saillance/month past the grace period;
@@ -376,7 +393,8 @@ accepts a script id as the loser. API: `POST/GET /scripts`,
 - `tsc` global can shadow local — `pnpm build` is `tsc -p tsconfig.json`.
 
 ## 📝 Notes
-- Shared DB: `data/humemory.db` · API port `3456` (`PORT` env)
+- Shared DB: `src/core/paths.ts` resolves environment overrides, a legacy checkout
+  DB or the OS user data directory · API port `3456` (`PORT` env)
 - Stack: TypeScript · `bun:sqlite` · `flexsearch` · `hono` · `commander` · `@anthropic-ai/sdk`
 - `CLAUDE.md` is a thin quick-start companion that points back to this file; this
   AGENTS.md remains the canonical source of truth for project vision and concepts.
