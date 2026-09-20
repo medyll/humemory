@@ -16,11 +16,13 @@
 
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 import type { LLMClient } from '../core/llm-generator.js';
 import type { Clock } from '../core/clock.js';
 import { systemClock } from '../core/clock.js';
 import { databasePath, queueDirectory } from '../core/paths.js';
 import { createCodexClient } from '../core/llm-cli-client.js';
+import { createKimiClient } from '../core/kimi-llm-client.js';
 import { processMaintenanceQueue, type WorkerResult } from './maintenance-queue.js';
 import { importCodexRollouts, defaultCodexSessionsDir, type CodexImportResult } from './codex-import.js';
 import { importKimiSessions, defaultKimiHome, type KimiImportResult } from './kimi-import.js';
@@ -78,8 +80,13 @@ export function defaultDbPath(): string {
   return databasePath();
 }
 
-export function defaultLlmTimeoutMs(): number {
-  return Number(process.env.HUMEMORY_MAINTENANCE_TIMEOUT_MS ?? 8_000);
+function localLlmConfiguration(dbPath = defaultDbPath()): any {
+  try { return JSON.parse(readFileSync(join(dirname(dbPath), 'maintenance-llm.json'), 'utf8')); }
+  catch (e: any) { if (e.code === 'ENOENT') return {}; throw e; }
+}
+
+export function defaultLlmTimeoutMs(dbPath = defaultDbPath()): number {
+  return Number(process.env.HUMEMORY_MAINTENANCE_TIMEOUT_MS ?? localLlmConfiguration(dbPath).timeoutMs ?? 8_000);
 }
 
 export function configuredIntervalMs(): number {
@@ -90,12 +97,17 @@ export function configuredIntervalMs(): number {
 /**
  * The LLM the pass consolidates with. 'none' (the default) keeps consolidation
  * deterministic and network-free; there is no API key on the production machine
- * and none wanted, so 'codex' shells out to the logged-in CLI instead.
+ * and none wanted, so CLI providers use the logged-in subscription instead.
+ * Local provider settings require enabled=true; an environment override remains explicit.
  */
 export async function resolveMaintenanceClient(
-  timeoutMs = defaultLlmTimeoutMs()
+  timeoutMs: number | undefined = undefined,
+  dbPath = defaultDbPath(),
+  queueDir = defaultQueueDir(),
 ): Promise<LLMClient | undefined> {
-  const provider = process.env.HUMEMORY_MAINTENANCE_LLM ?? 'none';
+  const config = localLlmConfiguration(dbPath);
+  const timeout = timeoutMs ?? defaultLlmTimeoutMs(dbPath);
+  const provider = process.env.HUMEMORY_MAINTENANCE_LLM ?? (config.enabled === true ? config.provider : 'none') ?? 'none';
 
   if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
@@ -104,7 +116,12 @@ export async function resolveMaintenanceClient(
   if (provider === 'codex') {
     // No API key needed: the logged-in `codex` CLI answers instead. Slower than
     // an SDK call (agent start-up), so it gets its own, larger budget.
-    return createCodexClient({ timeoutMs });
+    return createCodexClient({ timeoutMs: timeout });
+  }
+  if (provider === 'kimi') {
+    return createKimiClient({ model: process.env.HUMEMORY_LLM_MODEL ?? config.model ?? 'kimi-code/k3-256k',
+      timeoutMs: Math.min(timeout, 60_000), statePath: join(dirname(dbPath), 'kimi-llm-budget.json'), queueDir,
+      maxCallsPerDay: config.maxCallsPerDay ?? 2, quotaStopPercent: config.quotaStopPercent ?? 24 });
   }
   return undefined;
 }
@@ -123,7 +140,7 @@ export async function runMaintenancePass(
   const queueDir = options.queueDir ?? defaultQueueDir();
   const dbPath = options.dbPath ?? defaultDbPath();
   const statePath = options.statePath ?? defaultStatePath(queueDir);
-  const llmTimeoutMs = options.llmTimeoutMs ?? defaultLlmTimeoutMs();
+  const llmTimeoutMs = options.llmTimeoutMs ?? defaultLlmTimeoutMs(dbPath);
   const codexSinceDays = options.codexSinceDays ?? 1;
   const kimiSinceDays = options.kimiSinceDays ?? 1;
   const opencodeSinceDays = options.opencodeSinceDays ?? 1;
@@ -288,7 +305,8 @@ export function startMaintenanceLoop(options: MaintenanceLoopOptions = {}): Main
     if (running || stopped) return;
     running = true;
     try {
-      const client = options.client ?? await resolveMaintenanceClient(options.llmTimeoutMs);
+      const client = options.client ?? await resolveMaintenanceClient(options.llmTimeoutMs,
+        options.dbPath ?? defaultDbPath(), options.queueDir ?? defaultQueueDir());
       const { worker } = await runMaintenancePass({ ...options, client, runner: options.runner ?? 'api-loop' });
       if (process.env.HUMEMORY_VERBOSE === '1' || worker.failed > 0) {
         console.error(
