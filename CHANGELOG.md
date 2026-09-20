@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.13] - 2026-09-20
+**Documentation:**
+- update project guidance and architecture
+
+
+
 ## [0.2.12] - 2026-09-20
 **Features:**
 - add Jev shadow qualification
