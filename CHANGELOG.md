@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.12] - 2026-09-20
+**Features:**
+- add Jev shadow qualification
+- guard Kimi subscription consolidation
+
+**Documentation:**
+- clarify Jev shadow invariants
+
+
+
 ## [0.2.11] - 2026-09-08
 **Features:**
 - measure what the index rebuild actually costs
