@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.11] - 2026-09-08
+**Features:**
+- measure what the index rebuild actually costs
+
+
+
 ## [0.2.10] - 2026-09-08
 **Features:**
 - measure whether the right memory comes back
