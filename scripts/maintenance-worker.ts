@@ -7,10 +7,16 @@
  * (`pnpm maintenance`) and for a machine that does not keep the API resident.
  */
 
-import { runMaintenancePass, resolveMaintenanceClient, defaultLlmTimeoutMs } from '../src/agent/maintenance-runner.js';
+import {
+  runMaintenancePass,
+  resolveMaintenanceClient,
+  resolveMaintenanceAdvisor,
+  defaultLlmTimeoutMs,
+} from '../src/agent/maintenance-runner.js';
 
 const llmTimeoutMs = defaultLlmTimeoutMs();
 const client = await resolveMaintenanceClient(llmTimeoutMs);
+const advisor = resolveMaintenanceAdvisor();
 
 // --skip-codex for a machine where the rollouts are imported some other way.
 const skipImports = process.argv.includes('--skip-imports');
@@ -19,7 +25,7 @@ const codexSinceDays = skipImports || process.argv.includes('--skip-codex')
   : Number(process.env.HUMEMORY_MAINTENANCE_CODEX_DAYS ?? 1);
 
 const { worker: result } = await runMaintenancePass({
-  client, llmTimeoutMs, codexSinceDays,
+  client, ...advisor, llmTimeoutMs, codexSinceDays,
   kimiSinceDays: skipImports ? false : undefined,
   opencodeSinceDays: skipImports ? false : undefined,
 });

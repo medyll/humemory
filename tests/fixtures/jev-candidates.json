@@ -1,0 +1,22 @@
+[
+  {
+    "id": "durable-rule",
+    "content": "All maintenance tests must use a temporary SQLite database and a fake clock; they must never read the shared memory store.",
+    "expected": { "shouldStore": true, "memoryType": "semantic", "salienceBand": "high", "locallyAllowed": true }
+  },
+  {
+    "id": "one-off-output",
+    "content": "The build command completed in 1.42 seconds and printed 603 bundled modules.",
+    "expected": { "shouldStore": false, "memoryType": "episodic", "salienceBand": "discard", "locallyAllowed": true }
+  },
+  {
+    "id": "corrected-procedure",
+    "content": "When the maintenance database is unavailable, classify the failure as infrastructure, stop the pass after three consecutive failures, and refund retries if no job succeeded.",
+    "expected": { "shouldStore": true, "memoryType": "procedural", "salienceBand": "high", "locallyAllowed": true }
+  },
+  {
+    "id": "sensitive-session-event",
+    "content": "The command failed in C:\\Users\\Example\\project with Authorization: Bearer sk-proj-synthetic-not-a-real-secret-1234567890.",
+    "expected": { "shouldStore": false, "memoryType": "episodic", "salienceBand": "discard", "locallyAllowed": false }
+  }
+]

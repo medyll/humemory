@@ -15,6 +15,8 @@ export { SqliteCueResolver, attachResolverToBus, intentionSaillance, parseCron, 
 export { parseCueArg, formatTriggerSpec, CueArgError } from './core/cue-arg.js';
 export { buildSessionContext, humanizeAge, DEFAULT_SESSION_BUDGET, DEFAULT_SAILLANCE_THRESHOLD } from './agent/session-context.js';
 export { processSession } from './agent/claude-hook.js';
+export { adviseInShadow, sanitizeMemoryCandidate, salienceForBand, jsonlShadowReporter } from './agent/memory-advisor.js';
+export { JevMemoryAdvisor, resolveConfiguredJevAdvisor } from './agent/jev-advisor.js';
 export { parseClaudeHookPayload } from './agent/session-parser.js';
 export { parseKimiSession } from './agent/kimi-session-parser.js';
 export { importKimiSessions, defaultKimiHome, KIMI_SOURCE } from './agent/kimi-import.js';
@@ -36,5 +38,10 @@ export type { GeneratedLevels, LLMClient } from './core/llm-generator.js';
 export type { ParsedSession, SessionMessage } from './agent/session-parser.js';
 export type { ExtractedLearning } from './agent/learning-extractor.js';
 export type { HookOptions, HookResult } from './agent/claude-hook.js';
+export type {
+  MemoryAdvisor, MemoryAdvice, SanitizedMemoryCandidate, AutomaticMemoryCandidate,
+  ShadowDecisionRecord, ShadowDecisionReporter, SalienceBand,
+} from './agent/memory-advisor.js';
+export type { JevAdvisorOptions, JevMode, ConfiguredJevAdvisor } from './agent/jev-advisor.js';
 export type { MaintenanceJob, EnqueueOptions, QueueResult, WorkerOptions, WorkerResult } from './agent/maintenance-queue.js';
 export type { AgentSourceDefinition, AgentSourceId, DiscoveredAgentSource, DiscoveryOptions } from './agent/source-registry.js';

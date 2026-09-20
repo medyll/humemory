@@ -930,10 +930,12 @@ maintenance
   .option('--skip-kimi', 'Do not import Kimi Code sessions first')
   .option('--skip-opencode', 'Do not import OpenCode sessions first')
   .action(async (options) => {
-    const { runMaintenancePass, resolveMaintenanceClient } = await import('../agent/maintenance-runner.js');
+    const { runMaintenancePass, resolveMaintenanceClient, resolveMaintenanceAdvisor } = await import('../agent/maintenance-runner.js');
     const client = await resolveMaintenanceClient();
+    const advisor = resolveMaintenanceAdvisor();
     const { worker } = await runMaintenancePass({
       client,
+      ...advisor,
       codexSinceDays: options.skipImports || options.skipCodex ? false : 1,
       kimiSinceDays: options.skipImports || options.skipKimi ? false : 1,
       opencodeSinceDays: options.skipImports || options.skipOpencode ? false : 1,

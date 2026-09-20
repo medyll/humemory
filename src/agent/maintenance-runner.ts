@@ -23,6 +23,12 @@ import { systemClock } from '../core/clock.js';
 import { databasePath, queueDirectory } from '../core/paths.js';
 import { createCodexClient } from '../core/llm-cli-client.js';
 import { createKimiClient } from '../core/kimi-llm-client.js';
+import { resolveConfiguredJevAdvisor } from './jev-advisor.js';
+import {
+  jsonlShadowReporter,
+  type MemoryAdvisor,
+  type ShadowDecisionReporter,
+} from './memory-advisor.js';
 import { processMaintenanceQueue, type WorkerResult } from './maintenance-queue.js';
 import { importCodexRollouts, defaultCodexSessionsDir, type CodexImportResult } from './codex-import.js';
 import { importKimiSessions, defaultKimiHome, type KimiImportResult } from './kimi-import.js';
@@ -55,6 +61,9 @@ export interface MaintenancePassOptions {
   opencodeRun?: OpenCodeCommandRunner;
   opencodeCommand?: string;
   client?: LLMClient;
+  /** `false` is an explicit test/operator override even when env selects shadow mode. */
+  memoryAdvisor?: MemoryAdvisor | false;
+  advisorReporter?: ShadowDecisionReporter;
   llmTimeoutMs?: number;
   maxJobs?: number;
   clock?: Clock;
@@ -126,6 +135,17 @@ export async function resolveMaintenanceClient(
   return undefined;
 }
 
+export function resolveMaintenanceAdvisor(
+  dbPath = defaultDbPath(),
+): { memoryAdvisor?: MemoryAdvisor; advisorReporter?: ShadowDecisionReporter } {
+  const configured = resolveConfiguredJevAdvisor();
+  if (!configured.advisor) return {};
+  return {
+    memoryAdvisor: configured.advisor,
+    advisorReporter: jsonlShadowReporter(join(dirname(dbPath), 'jev-shadow.jsonl')),
+  };
+}
+
 /**
  * Import, then drain, then record. Every producer is isolated: a missing or
  * unreadable runtime must never stall the queue or another producer.
@@ -145,6 +165,10 @@ export async function runMaintenancePass(
   const kimiSinceDays = options.kimiSinceDays ?? 1;
   const opencodeSinceDays = options.opencodeSinceDays ?? 1;
   const startedAt = clock.now();
+  // Deliberately no environment lookup here. Tests and library callers get a
+  // hermetic pass unless an advisor is explicitly injected by an entry point.
+  const memoryAdvisor = options.memoryAdvisor === false ? undefined : options.memoryAdvisor;
+  const advisorReporter = options.advisorReporter;
 
   let codex: CodexImportResult | undefined;
   let codexError: string | undefined;
@@ -197,6 +221,8 @@ export async function runMaintenancePass(
       queueDir,
       dbPath,
       client: options.client,
+      memoryAdvisor,
+      advisorReporter,
       llmTimeoutMs,
       maxJobs: options.maxJobs ?? Number(process.env.HUMEMORY_MAINTENANCE_BATCH ?? 20),
       now: () => clock.now(),
@@ -307,7 +333,17 @@ export function startMaintenanceLoop(options: MaintenanceLoopOptions = {}): Main
     try {
       const client = options.client ?? await resolveMaintenanceClient(options.llmTimeoutMs,
         options.dbPath ?? defaultDbPath(), options.queueDir ?? defaultQueueDir());
-      const { worker } = await runMaintenancePass({ ...options, client, runner: options.runner ?? 'api-loop' });
+      const advisor = options.memoryAdvisor === false
+        ? {}
+        : options.memoryAdvisor
+          ? { memoryAdvisor: options.memoryAdvisor, advisorReporter: options.advisorReporter }
+          : resolveMaintenanceAdvisor(options.dbPath ?? defaultDbPath());
+      const { worker } = await runMaintenancePass({
+        ...options,
+        ...advisor,
+        client,
+        runner: options.runner ?? 'api-loop',
+      });
       if (process.env.HUMEMORY_VERBOSE === '1' || worker.failed > 0) {
         console.error(
           `[humemory] maintenance: ${worker.processed}/${worker.discovered} jobs, ` +

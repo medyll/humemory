@@ -71,6 +71,7 @@
     "verify:package": "bun run scripts/verify-package.ts",
     "measure:recall": "bun run scripts/measure-recall.ts",
     "bench:scale": "bun run scripts/bench-scale.ts",
+    "probe:jev": "bun run scripts/probe-jev.ts --run",
     "clean:web": "node -e \"require('fs').rmSync('public/app',{recursive:true,force:true})\""
   },
   "dependencies": {

@@ -3,6 +3,11 @@ import { lastMessageTime, parseAgentSession, type ParsedSession } from './sessio
 import { extractLearnings, extractLearningsDeterministic } from './learning-extractor.js';
 import type { LLMClient } from '../core/llm-generator.js';
 import type { TraceSource } from '../core/types.js';
+import {
+  adviseInShadow,
+  type MemoryAdvisor,
+  type ShadowDecisionReporter,
+} from './memory-advisor.js';
 
 export interface HookOptions {
   dbPath: string;
@@ -12,6 +17,9 @@ export interface HookOptions {
   llmTimeoutMs?: number;
   source?: TraceSource;
   agent?: string;
+  /** Optional automatic-candidate advisor. It is observational in this release. */
+  memoryAdvisor?: MemoryAdvisor;
+  advisorReporter?: ShadowDecisionReporter;
   /**
    * Number of leading transcript messages already encoded for this session.
    * `Stop` fires once per turn and resends the whole transcript, so without a
@@ -27,6 +35,7 @@ export interface HookResult {
   memoriesStored: number;
   learnings: string[];
   extractionMode: 'llm' | 'deterministic';
+  advisorComparisons: number;
   /** Total messages in the transcript — the checkpoint to persist after success. */
   messagesSeen: number;
 }
@@ -60,7 +69,7 @@ export async function processSession(
   if (pending.length === 0) {
     return {
       sessionId: session.sessionId, directory: session.directory,
-      memoriesStored: 0, learnings: [], extractionMode: 'deterministic', messagesSeen,
+      memoriesStored: 0, learnings: [], extractionMode: 'deterministic', advisorComparisons: 0, messagesSeen,
     };
   }
   const scoped: ParsedSession = {
@@ -84,7 +93,23 @@ export async function processSession(
   }
 
   if (learnings.length === 0) {
-    return { sessionId: session.sessionId, directory: session.directory, memoriesStored: 0, learnings: [], extractionMode, messagesSeen };
+    return {
+      sessionId: session.sessionId, directory: session.directory, memoriesStored: 0,
+      learnings: [], extractionMode, advisorComparisons: 0, messagesSeen,
+    };
+  }
+
+  const source = options.source ?? 'agent';
+  let advisorComparisons = 0;
+  if (options.memoryAdvisor) {
+    for (const learning of learnings) {
+      await adviseInShadow({
+        content: learning.content,
+        currentMemoryType: learning.memoryType,
+        source,
+      }, options.memoryAdvisor, options.advisorReporter);
+      advisorComparisons += 1;
+    }
   }
 
   // What is encoded belongs to the day the session ran, not the day it was
@@ -106,7 +131,7 @@ export async function processSession(
         sessionId: session.sessionId,
         memoryType: learning.memoryType,
         level3Keywords: learning.level3Keywords,
-        source: options.source ?? 'agent',
+        source,
         agent: options.agent ?? 'unknown',
       });
       stored.push(learning.content.slice(0, 80));
@@ -121,6 +146,7 @@ export async function processSession(
     memoriesStored: stored.length,
     learnings: stored,
     extractionMode,
+    advisorComparisons,
     messagesSeen,
   };
 }

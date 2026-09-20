@@ -5,6 +5,7 @@ import type { LLMClient } from '../core/llm-generator.js';
 import { processSession } from './claude-hook.js';
 import { parseAgentSession } from './session-parser.js';
 import { AdvisoryLock } from '../store/sqlite.js';
+import type { MemoryAdvisor, ShadowDecisionReporter } from './memory-advisor.js';
 
 export interface MaintenanceJob {
   version: 1;
@@ -43,6 +44,8 @@ export interface WorkerOptions {
   queueDir: string;
   dbPath: string;
   client?: LLMClient;
+  memoryAdvisor?: MemoryAdvisor;
+  advisorReporter?: ShadowDecisionReporter;
   llmTimeoutMs?: number;
   maxJobs?: number;
   maxAttempts?: number;
@@ -318,6 +321,8 @@ export async function processMaintenanceQueue(options: WorkerOptions): Promise<W
           directory: job.directory,
           maxLearnings: job.maxLearnings,
           client: options.client,
+          memoryAdvisor: options.memoryAdvisor,
+          advisorReporter: options.advisorReporter,
           llmTimeoutMs: options.llmTimeoutMs,
           source: 'hook',
           agent: job.agent,
