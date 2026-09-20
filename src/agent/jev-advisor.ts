@@ -7,6 +7,11 @@ import {
 } from './memory-advisor.js';
 import type { MemoryType } from '../core/types.js';
 
+/**
+ * TypeSafe System One adapter for automatic-memory qualification.
+ * Acquisition rules and privacy checks stay in `memory-advisor.ts`; this file
+ * only translates a sanitized candidate to and from the provider schema.
+ */
 export type JevMode = 'off' | 'shadow' | 'advisory';
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -15,7 +20,9 @@ export interface JevAdvisorOptions {
   apiKey: string;
   endpoint?: string;
   model?: string;
+  /** Per-request deadline. Native fetch observes the AbortSignal below. */
   timeoutMs?: number;
+  /** Test seam; production uses the runtime's native fetch. */
   fetch?: FetchLike;
 }
 
@@ -45,6 +52,7 @@ function salienceBand(value: unknown): SalienceBand {
   return SALIENCE_BANDS[Math.round(value)];
 }
 
+/** HTTP implementation of the provider-neutral `MemoryAdvisor` seam. */
 export class JevMemoryAdvisor implements MemoryAdvisor {
   private readonly apiKey: string;
   private readonly endpoint: string;
@@ -118,6 +126,8 @@ export class JevMemoryAdvisor implements MemoryAdvisor {
       if (!response.ok) throw new Error(`Jev request failed with status ${response.status}`);
       const payload = await response.json() as { answers?: JevAnswerMap };
       const answers = payload.answers;
+      // Do not coerce partial provider output. Throwing here becomes a
+      // content-free `provider_failure` record at the shadow boundary.
       if (!answers || answers.should_store?.type !== 'noul' || answers.memory_type?.type !== 'choice'
         || answers.salience_band?.type !== 'score' || answers.contains_sensitive_material?.type !== 'noul') {
         throw new Error('Malformed Jev response');
@@ -140,6 +150,7 @@ export class JevMemoryAdvisor implements MemoryAdvisor {
   }
 }
 
+/** Requested mode and the narrower mode this release is allowed to execute. */
 export interface ConfiguredJevAdvisor {
   requestedMode: JevMode;
   effectiveMode: 'off' | 'shadow';

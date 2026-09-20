@@ -3,6 +3,13 @@ import { appendFile, mkdir } from 'fs/promises';
 import { dirname } from 'path';
 import type { MemoryType, TraceSource } from '../core/types.js';
 
+/**
+ * Acquisition-side advice contract.
+ *
+ * This module owns the local privacy gate and shadow reporting. It does not
+ * own storage policy: while shadow mode is active, callers keep the baseline
+ * learning even when the provider disagrees or fails.
+ */
 export const SALIENCE_BANDS = ['discard', 'low', 'normal', 'high', 'exceptional'] as const;
 export type SalienceBand = typeof SALIENCE_BANDS[number];
 
@@ -24,6 +31,7 @@ export interface SanitizedMemoryCandidate {
   redactions: Array<'path' | 'identity' | 'command_output'>;
 }
 
+/** Provider-neutral seam. Implementations only receive locally approved text. */
 export interface MemoryAdvisor {
   advise(candidate: SanitizedMemoryCandidate): Promise<MemoryAdvice>;
 }
@@ -100,7 +108,13 @@ function redactCandidateContent(content: string): { content: string; redactions:
   };
 }
 
-/** Local privacy gate. It always runs before an advisor can see the candidate. */
+/**
+ * Apply the local privacy gate before provider code can run.
+ *
+ * Known credentials reject the whole candidate. Paths and machine identities
+ * can be removed safely, so they are replaced before the character cap is
+ * applied. Human-authored memories are outside this automatic path.
+ */
 export function sanitizeMemoryCandidate(
   input: AutomaticMemoryCandidate,
   options: SanitizeCandidateOptions = {},
@@ -130,10 +144,12 @@ export function sanitizeMemoryCandidate(
   };
 }
 
+/** Keep provider output on a fixed local scale; Jev never writes a raw salience value. */
 export function salienceForBand(band: SalienceBand): number {
   return ({ discard: 0, low: 25, normal: 50, high: 75, exceptional: 100 })[band];
 }
 
+/** Safe-to-persist comparison metadata. Candidate text is absent by design. */
 export interface ShadowDecisionRecord {
   at: string;
   mode: 'shadow';
@@ -160,7 +176,8 @@ async function reportSafely(reporter: ShadowDecisionReporter | undefined, record
 
 /**
  * Compare one automatic candidate with the advisor without changing the
- * candidate or throwing into maintenance. This is the whole shadow boundary.
+ * candidate or throwing into maintenance. The return value is for tests and
+ * reporting; it never controls whether the baseline learning is stored.
  */
 export async function adviseInShadow(
   input: AutomaticMemoryCandidate,
@@ -211,6 +228,7 @@ export async function adviseInShadow(
   }
 }
 
+/** Append metadata only; `ShadowDecisionRecord` has no field for candidate text. */
 export function jsonlShadowReporter(path: string): ShadowDecisionReporter {
   return async (record) => {
     await mkdir(dirname(path), { recursive: true });

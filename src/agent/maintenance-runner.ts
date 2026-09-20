@@ -135,6 +135,7 @@ export async function resolveMaintenanceClient(
   return undefined;
 }
 
+/** Resolve Jev only at executable entry points, never inside the hermetic pass. */
 export function resolveMaintenanceAdvisor(
   dbPath = defaultDbPath(),
 ): { memoryAdvisor?: MemoryAdvisor; advisorReporter?: ShadowDecisionReporter } {
@@ -165,8 +166,8 @@ export async function runMaintenancePass(
   const kimiSinceDays = options.kimiSinceDays ?? 1;
   const opencodeSinceDays = options.opencodeSinceDays ?? 1;
   const startedAt = clock.now();
-  // Deliberately no environment lookup here. Tests and library callers get a
-  // hermetic pass unless an advisor is explicitly injected by an entry point.
+  // No environment lookup here. Tests and library callers get a hermetic pass
+  // unless an executable entry point injects an advisor.
   const memoryAdvisor = options.memoryAdvisor === false ? undefined : options.memoryAdvisor;
   const advisorReporter = options.advisorReporter;
 
@@ -333,6 +334,8 @@ export function startMaintenanceLoop(options: MaintenanceLoopOptions = {}): Main
     try {
       const client = options.client ?? await resolveMaintenanceClient(options.llmTimeoutMs,
         options.dbPath ?? defaultDbPath(), options.queueDir ?? defaultQueueDir());
+      // The resident API loop is an executable entry point, so it may resolve
+      // the opt-in provider. `runMaintenancePass` itself remains environment-free.
       const advisor = options.memoryAdvisor === false
         ? {}
         : options.memoryAdvisor

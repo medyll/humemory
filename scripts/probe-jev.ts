@@ -1,4 +1,7 @@
-/** Explicit live Jev probe over synthetic, human-labelled candidates. */
+/**
+ * Explicit live probe over synthetic, human-labelled candidates.
+ * It prints fixture ids, hashes and decisions, never the candidate text.
+ */
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import { JevMemoryAdvisor } from '../src/agent/jev-advisor.js';

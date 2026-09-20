@@ -19,6 +19,7 @@ export interface HookOptions {
   agent?: string;
   /** Optional automatic-candidate advisor. It is observational in this release. */
   memoryAdvisor?: MemoryAdvisor;
+  /** Receives content-free comparisons; reporter failures never block storage. */
   advisorReporter?: ShadowDecisionReporter;
   /**
    * Number of leading transcript messages already encoded for this session.
@@ -35,6 +36,7 @@ export interface HookResult {
   memoriesStored: number;
   learnings: string[];
   extractionMode: 'llm' | 'deterministic';
+  /** Candidates inspected in shadow mode, including local privacy rejections. */
   advisorComparisons: number;
   /** Total messages in the transcript — the checkpoint to persist after success. */
   messagesSeen: number;
@@ -102,6 +104,9 @@ export async function processSession(
   const source = options.source ?? 'agent';
   let advisorComparisons = 0;
   if (options.memoryAdvisor) {
+    // Advice is recorded before storage, but its value is intentionally ignored.
+    // `adviseInShadow` contains provider and reporter failures, so every learning
+    // below follows the same storage path it used before Jev existed.
     for (const learning of learnings) {
       await adviseInShadow({
         content: learning.content,
