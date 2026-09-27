@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.14] - 2026-09-27
+**Chores:**
+- update dependencies
+
+
+
 ## [0.2.13] - 2026-09-20
 **Documentation:**
 - update project guidance and architecture
