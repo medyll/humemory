@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.15] - 2026-09-29
+**Chores:**
+- update dependencies within semver ranges
+
+
+
 ## [0.2.14] - 2026-09-27
 **Chores:**
 - update dependencies
