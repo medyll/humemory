@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.17] - 2026-10-29
+**Chores:**
+- update compatible dependencies
+
+
+
 ## [0.2.16] - 2026-09-29
 **Chores:**
 - major dependency upgrades (.)
