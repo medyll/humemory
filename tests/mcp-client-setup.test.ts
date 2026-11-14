@@ -10,6 +10,46 @@ afterEach(async () => {
 });
 
 describe('MCP client setup', () => {
+  test('merges Claude user config without losing project state; supports preview, backup and repeated setup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'humemory-claude-mcp-'));
+    roots.push(root);
+    const claudeConfig = join(root, '.claude.json');
+    const original = JSON.stringify({
+      theme: 'dark', projects: { '/work': { hasTrustDialogAccepted: true, mcpServers: { local: { command: 'local' } } } },
+      mcpServers: { existing: { command: 'safe' } },
+    });
+    await writeFile(claudeConfig, original);
+    const options = { clients: ['claude'] as ('claude')[], projectRoot: join(root, 'humemory'),
+      claudeConfig, dbPath: join(root, 'memory.db'), bunPath: join(root, 'bun.exe') };
+    expect((await setupHumemoryMcpClients({ ...options, dryRun: true }))[0]).toEqual({ client: 'claude', path: claudeConfig, changed: true });
+    expect(await readFile(claudeConfig, 'utf8')).toBe(original);
+    expect(await readdir(root)).toEqual(['.claude.json']);
+    expect((await setupHumemoryMcpClients(options))[0].changed).toBe(true);
+    const parsed = JSON.parse(await readFile(claudeConfig, 'utf8'));
+    expect(parsed.theme).toBe('dark');
+    expect(parsed.projects).toEqual(JSON.parse(original).projects);
+    expect(parsed.mcpServers.existing.command).toBe('safe');
+    expect(parsed.mcpServers.humemory).toEqual({ type: 'stdio', command: options.bunPath,
+      args: ['run', join(options.projectRoot, 'src', 'mcp', 'server.ts')],
+      env: { HUMEMORY_AGENT: 'claude', HUMEMORY_DB: options.dbPath } });
+    const backup = (await readdir(root)).find(f => f.endsWith('.bak'))!;
+    expect(await readFile(join(root, backup), 'utf8')).toBe(original);
+    expect((await setupHumemoryMcpClients(options))[0].changed).toBe(false);
+  });
+
+  test('creates Claude config when missing and refuses malformed config without overwriting it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'humemory-claude-new-'));
+    roots.push(root);
+    const claudeConfig = join(root, 'profile', '.claude.json');
+    const options = { clients: ['claude'] as ('claude')[], projectRoot: root, claudeConfig, dbPath: ':memory:' };
+    await setupHumemoryMcpClients(options);
+    expect(JSON.parse(await readFile(claudeConfig, 'utf8')).mcpServers.humemory.env.HUMEMORY_AGENT).toBe('claude');
+    for (const raw of ['{broken', '[]', '{"mcpServers":null}']) {
+      await writeFile(claudeConfig, raw);
+      await expect(setupHumemoryMcpClients(options)).rejects.toThrow('Refusing');
+      expect(await readFile(claudeConfig, 'utf8')).toBe(raw);
+    }
+  });
   test('merges Codex TOML, preserves settings and comments, backs up and is idempotent', async () => {
     const root = await mkdtemp(join(tmpdir(), 'humemory-codex-mcp-'));
     roots.push(root);

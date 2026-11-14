@@ -1130,21 +1130,24 @@ sources
 
 sources
   .command('setup')
-  .description('Register humemory as a local MCP server in Codex, Kimi Code and OpenCode')
+  .description('Register humemory as a local MCP server in Claude Code, Codex, Kimi Code and OpenCode')
+  .option('--claude', 'Configure Claude Code only (user scope)')
+  .option('--claude-config <path>', 'Override the Claude Code user config file (default ~/.claude.json)')
   .option('--codex', 'Configure Codex only (combine client flags to select several)')
   .option('--kimi', 'Configure Kimi Code only')
   .option('--opencode', 'Configure OpenCode only')
   .option('--dry-run', 'Show which files would change, write nothing')
   .action(async (options) => {
     const { setupHumemoryMcpClients } = await import('../agent/mcp-client-setup.js');
-    const clients = options.codex || options.kimi || options.opencode
-      ? [...(options.codex ? ['codex'] as const : []), ...(options.kimi ? ['kimi'] as const : []), ...(options.opencode ? ['opencode'] as const : [])]
-      : ['codex', 'kimi', 'opencode'] as const;
+    const clients = options.claude || options.codex || options.kimi || options.opencode
+      ? [...(options.claude ? ['claude'] as const : []), ...(options.codex ? ['codex'] as const : []), ...(options.kimi ? ['kimi'] as const : []), ...(options.opencode ? ['opencode'] as const : [])]
+      : ['claude', 'codex', 'kimi', 'opencode'] as const;
     const projectRoot = resolve(__dirname, '../..');
     const result = await setupHumemoryMcpClients({
       clients: [...clients],
       projectRoot,
       dbPath: DB_PATH,
+      claudeConfig: options.claudeConfig,
       dryRun: options.dryRun,
     });
     for (const entry of result) {

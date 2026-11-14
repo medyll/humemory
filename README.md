@@ -115,17 +115,23 @@ pnpm cli sources import-codex --since 7     # the last week (default)
 pnpm cli sources import-codex --all         # every rollout ever recorded
 pnpm cli sources import-kimi --all
 pnpm cli sources import-opencode --all
-pnpm cli sources setup --dry-run            # preview MCP registration in all three clients
-pnpm cli sources setup                      # register MCP in Codex, Kimi Code and OpenCode
+pnpm cli sources setup --dry-run            # preview MCP registration in all four clients
+pnpm cli sources setup                      # register MCP in Claude Code, Codex, Kimi Code and OpenCode
+pnpm cli sources setup --claude             # configure Claude Code only (user scope)
 pnpm cli sources setup --codex              # configure Codex only
 ```
 
 The resident maintenance loop sweeps new sessions from all three producers every
 15 minutes. `sources setup` merge-adds a `humemory` MCP entry without removing
-existing servers and pins each client identity (`codex`, `kimi` or `opencode`) plus the
+existing servers and pins each client identity (`claude`, `codex`, `kimi` or `opencode`) plus the
 absolute shared database path.
 
 Client flags can be combined, for example `sources setup --codex --kimi`.
+Claude Code uses the user-scoped `~/.claude.json`; setup preserves its per-project
+state and other servers. Use `--claude-config <path>` for a different user config
+file. The repository's `.mcp.json` remains a project-scoped alternative; Claude
+Code gives local and project definitions priority over the user entry when they
+share the same server name. See [Claude Code's MCP scopes](https://code.claude.com/docs/en/mcp#mcp-installation-scopes).
 Codex uses `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`);
 setup preserves other settings and comments, backs up changed files to a sibling
 `.bak` file, and writes atomically. Running it again with the same settings changes

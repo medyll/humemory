@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from 'util';
 import { databasePath } from '../core/paths.js';
 import { AdvisoryLock } from '../store/sqlite.js';
 
-export type HumemoryMcpClient = 'kimi' | 'opencode' | 'codex';
+export type HumemoryMcpClient = 'kimi' | 'opencode' | 'codex' | 'claude';
 
 export interface McpClientSetupOptions {
   clients: HumemoryMcpClient[];
@@ -17,6 +17,7 @@ export interface McpClientSetupOptions {
   kimiHome?: string;
   openCodeConfig?: string;
   codexHome?: string;
+  claudeConfig?: string;
   dryRun?: boolean;
 }
 
@@ -157,16 +158,19 @@ export async function setupHumemoryMcpClients(options: McpClientSetupOptions): P
       entries.push({ client, path, changed });
       continue;
     }
-    if (client === 'kimi') {
-      const path = join(options.kimiHome ?? process.env.KIMI_CODE_HOME ?? join(homedir(), '.kimi-code'), 'mcp.json');
+    if (client === 'kimi' || client === 'claude') {
+      const path = client === 'claude'
+        ? resolve(options.claudeConfig ?? join(homedir(), '.claude.json'))
+        : join(options.kimiHome ?? process.env.KIMI_CODE_HOME ?? join(homedir(), '.kimi-code'), 'mcp.json');
       const changed = await mergeFile(path, (current) => ({
         ...current,
         mcpServers: {
           ...((current.mcpServers as Record<string, unknown> | undefined) ?? {}),
           humemory: {
+            ...(client === 'claude' ? { type: 'stdio' } : {}),
             command: bunPath,
             args: ['run', serverPath],
-            env: { HUMEMORY_AGENT: 'kimi', HUMEMORY_DB: dbPath },
+            env: { HUMEMORY_AGENT: client, HUMEMORY_DB: dbPath },
           },
         },
       }), dryRun);

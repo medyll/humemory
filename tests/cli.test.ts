@@ -14,7 +14,8 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'humemory-cli-'));
   roots.push(root);
   const db = join(root, 'test.db');
-  const run = (...args: string[]) => spawnSync(process.execPath, [resolve('src/cli/index.ts'), ...args], {
+  const run = (...args: string[]) => spawnSync(process.execPath, [resolve('src/cli/index.ts'), ...args,
+    ...(args[0] === 'sources' && args[1] === 'setup' ? ['--claude-config', join(root, '.claude.json')] : [])], {
     cwd: resolve('.'), encoding: 'utf8', timeout: 15_000,
     env: { ...process.env, NODE_ENV: 'test', HUMEMORY_DB: db, HUMEMORY_DATA_DIR: root,
       CODEX_HOME: join(root, 'codex'), KIMI_CODE_HOME: join(root, 'kimi'), OPENCODE_CONFIG: join(root, 'opencode.json') },
@@ -48,13 +49,20 @@ test('setup CLI selects Codex or combined clients and dry-run writes nothing', (
   expect(codex.stdout).toContain('codex: would update');
   expect(codex.stdout).not.toContain('kimi:');
   expect(codex.stdout).not.toContain('opencode:');
-  const combined = run('sources', 'setup', '--codex', '--kimi', '--dry-run');
+  expect(codex.stdout).not.toContain('claude:');
+  const claude = run('sources', 'setup', '--claude', '--dry-run');
+  expect(claude.status).toBe(0);
+  expect(claude.stdout).toContain('claude: would update');
+  expect(claude.stdout).not.toContain('codex:');
+  const combined = run('sources', 'setup', '--claude', '--codex', '--kimi', '--dry-run');
   expect(combined.status).toBe(0);
   expect(combined.stdout).toContain('kimi: would update');
+  expect(combined.stdout).toContain('claude: would update');
   expect(combined.stdout).not.toContain('opencode:');
   const all = run('sources', 'setup', '--dry-run');
   expect(all.status).toBe(0);
   expect(all.stdout).toContain('opencode: would update');
   expect(all.stdout).toContain('codex: would update');
+  expect(all.stdout).toContain('claude: would update');
   expect(readdirSync(root)).toEqual([]);
 });

@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+- Add Claude Code user-scoped MCP registration to `sources setup`, with `--claude` and `--claude-config`.
+
 - Reject malformed cron cues in the shared parser, CLI/dashboard form and HTTP API before storing them.
 - Add Codex MCP registration to `sources setup`, with `--codex`, TOML preservation, backups and dry-run support.
 - Restore CLI startup with Commander 15 while retaining the legacy `-l1`, `-l2` and `-l3` aliases.
