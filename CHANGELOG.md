@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.19] - 2026-11-14
+**Features:**
+- add Claude Code to sources setup
+
+
+
 ## [0.2.18] - 2026-11-14
 **Features:**
 - add Codex setup and validate cron cues
