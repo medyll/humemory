@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.18] - 2026-11-14
+**Features:**
+- add Codex setup and validate cron cues
+
+
+
 ## [Unreleased]
 
 - Reject malformed cron cues in the shared parser, CLI/dashboard form and HTTP API before storing them.
