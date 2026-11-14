@@ -1,10 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- Reject malformed cron cues in the shared parser, CLI/dashboard form and HTTP API before storing them.
+- Add Codex MCP registration to `sources setup`, with `--codex`, TOML preservation, backups and dry-run support.
+- Restore CLI startup with Commander 15 while retaining the legacy `-l1`, `-l2` and `-l3` aliases.
+
 ## [0.2.17] - 2026-10-29
 **Chores:**
 - update compatible dependencies
-
-
 
 ## [0.2.16] - 2026-09-29
 **Chores:**

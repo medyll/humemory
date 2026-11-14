@@ -13,6 +13,7 @@
  */
 
 import type { TriggerSpec } from '../core/types.js';
+import { parseCron } from './cues.js';
 
 export class CueArgError extends Error {}
 
@@ -35,6 +36,7 @@ export function parseCueArg(raw: string): TriggerSpec {
 
     case 'cron': {
       if (!tail.trim()) throw new CueArgError('cron: expects an expression — e.g. "cron:0 9 * * 1"');
+      if (!parseCron(tail)) throw new CueArgError('invalid cron expression: expected five fields (minute hour day month weekday), in UTC');
       return { kind: 'time', cron: tail.trim() };
     }
 

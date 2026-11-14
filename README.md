@@ -115,13 +115,24 @@ pnpm cli sources import-codex --since 7     # the last week (default)
 pnpm cli sources import-codex --all         # every rollout ever recorded
 pnpm cli sources import-kimi --all
 pnpm cli sources import-opencode --all
-pnpm cli sources setup                      # register MCP in both installed clients
+pnpm cli sources setup --dry-run            # preview MCP registration in all three clients
+pnpm cli sources setup                      # register MCP in Codex, Kimi Code and OpenCode
+pnpm cli sources setup --codex              # configure Codex only
 ```
 
 The resident maintenance loop sweeps new sessions from all three producers every
 15 minutes. `sources setup` merge-adds a `humemory` MCP entry without removing
-existing servers and pins each client identity (`kimi` or `opencode`) plus the
+existing servers and pins each client identity (`codex`, `kimi` or `opencode`) plus the
 absolute shared database path.
+
+Client flags can be combined, for example `sources setup --codex --kimi`.
+Codex uses `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`);
+setup preserves other settings and comments, backs up changed files to a sibling
+`.bak` file, and writes atomically. Running it again with the same settings changes
+nothing. Invalid files, remote `humemory` servers in Codex, and TOML layouts that
+cannot be safely edited (such as inline server definitions) are refused without
+rewriting the file. Codex's configuration format is documented in the
+[official MCP guide](https://developers.openai.com/codex/mcp).
 
 Importing only *queues*; the worker still decides what becomes a trace. Jobs are
 keyed on session, so re-importing is idempotent and a thread that grew since the
@@ -163,6 +174,13 @@ pnpm cli intent resolve           # expire overdue loops, fire due deadlines
 
 Cue formats: `time:<ISO>`, `cron:<5-field expr>`, `event:file_open:<path>`,
 `event:branch_switch:<branch>`, `event:error_pattern:<regex>`.
+
+Cron expressions use UTC and five numeric fields: minute (0–59), hour (0–23),
+day of month (1–31), month (1–12), weekday (0–6, Sunday = 0). Fields accept `*`,
+numbers, ranges, lists and positive steps, for example `*/15` or `1-9/2`.
+The CLI, dashboard cue form and HTTP API reject malformed expressions before
+storing them. For example, `0 9 * * 1` fires on Mondays at 09:00 UTC;
+`0 9 * * 1,` is an error.
 
 Directories are resolved to absolute paths on write — a loop armed on a relative
 path would never match the `SessionStart` hook, which looks the project up by

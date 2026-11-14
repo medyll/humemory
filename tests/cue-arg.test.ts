@@ -56,6 +56,11 @@ describe('parseCueArg — valid forms', () => {
 });
 
 describe('parseCueArg — rejected forms', () => {
+  test('rejects malformed and out-of-range cron expressions at creation', () => {
+    for (const expr of ['0/2/3 9 * * *', '0 9 1-5-9 * *', '0 9 * * 1,', '60 * * * *', 'not cron']) {
+      expect(() => parseCueArg(`cron:${expr}`)).toThrow(/invalid cron expression/);
+    }
+  });
   test('unknown prefix', () => {
     expect(() => parseCueArg('magie:demain')).toThrow(CueArgError);
   });

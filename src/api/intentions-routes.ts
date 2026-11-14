@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { SQLiteStore } from '../store/sqlite.js';
 import {
   SqliteCueResolver,
+  parseCron,
   loopId,
   isDangerousPattern,
   MAX_PATTERN_LENGTH,
@@ -84,6 +85,9 @@ export function validateTriggerSpec(raw: unknown): TriggerSpec {
     }
     if (cron !== undefined && typeof cron !== 'string') {
       throw new BadRequest('"cron" must be a string');
+    }
+    if (typeof cron === 'string' && !parseCron(cron)) {
+      throw new BadRequest('invalid cron expression: expected five fields (minute hour day month weekday), in UTC');
     }
     return { kind: 'time', ...(at ? { at: at as string } : {}), ...(cron ? { cron: cron as string } : {}) };
   }

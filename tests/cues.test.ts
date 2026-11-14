@@ -36,6 +36,10 @@ describe('Cron — parsing', () => {
   });
 
   test('rejects invalid expressions without throwing', () => {
+    for (const expr of ['0/2/3 9 * * *', '0 9 1-5-9 * *', '0 9 * * 1,', ',0 9 * * *', '0 9 * * 1,,2', '0 9 * * +1', '0 9 * * 1e0', '0 9 * * 0x1', '0 9 * * 1/']) {
+      expect(parseCron(expr)).toBeNull();
+      expect(cronDueSince(expr, T0, new Date('2026-01-12T09:00:00Z'))).toBe(false);
+    }
     expect(parseCron('0 9 * *')).toBeNull(); // 4 fields
     expect(parseCron('60 * * * *')).toBeNull(); // minute out of range
     expect(parseCron('0 9 * * 9')).toBeNull(); // day of week out of range

@@ -10,6 +10,70 @@ afterEach(async () => {
 });
 
 describe('MCP client setup', () => {
+  test('merges Codex TOML, preserves settings and comments, backs up and is idempotent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'humemory-codex-mcp-'));
+    roots.push(root);
+    const path = join(root, 'config.toml');
+    const original = '# keep this comment\r\nmodel = "local-test"\r\n[mcp_servers.existing]\r\ncommand = "safe"\r\n';
+    await writeFile(path, original);
+    const options = {
+      clients: ['codex'] as const, projectRoot: join(root, 'project with spaces'),
+      dbPath: join(root, 'memory.db'), bunPath: join(root, 'bun.exe'), codexHome: root,
+    };
+    const run = (dryRun = false) => setupHumemoryMcpClients({ ...options, clients: [...options.clients], dryRun });
+    expect((await run(true))[0]).toEqual({ client: 'codex', path, changed: true });
+    expect(await readFile(path, 'utf8')).toBe(original);
+    expect(await readdir(root)).toEqual(['config.toml']);
+    expect((await run())[0].changed).toBe(true);
+    const updated = await readFile(path, 'utf8');
+    expect(updated.startsWith(original)).toBe(true);
+    const parsed = Bun.TOML.parse(updated) as any;
+    expect(parsed.model).toBe('local-test');
+    expect(parsed.mcp_servers.existing.command).toBe('safe');
+    expect(parsed.mcp_servers.humemory).toEqual({
+      command: options.bunPath, args: ['run', join(options.projectRoot, 'src', 'mcp', 'server.ts')],
+      env: { HUMEMORY_AGENT: 'codex', HUMEMORY_DB: options.dbPath },
+    });
+    const backup = (await readdir(root)).find(f => f.endsWith('.bak'))!;
+    expect(await readFile(join(root, backup), 'utf8')).toBe(original);
+    expect((await run())[0].changed).toBe(false);
+    expect(await readFile(path, 'utf8')).toBe(updated);
+
+    // A later installation path update preserves per-server policy and env.
+    await writeFile(path, updated.replace('[mcp_servers.humemory]', '[mcp_servers.humemory]\nstartup_timeout_sec = 30\n')
+      .replace('"HUMEMORY_AGENT" = "codex"', '"EXTRA" = "keep", "HUMEMORY_AGENT" = "codex"'));
+    await setupHumemoryMcpClients({ ...options, clients: ['codex'], dbPath: join(root, 'new.db') });
+    const changed = Bun.TOML.parse(await readFile(path, 'utf8')) as any;
+    expect(changed.mcp_servers.humemory.startup_timeout_sec).toBe(30);
+    expect(changed.mcp_servers.humemory.env.EXTRA).toBe('keep');
+    expect(changed.mcp_servers.humemory.env.HUMEMORY_DB).toBe(join(root, 'new.db'));
+  });
+
+  test('creates a missing Codex config only when applying', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'humemory-codex-new-'));
+    roots.push(root);
+    const codexHome = join(root, 'codex');
+    const options = { clients: ['codex'] as ('codex')[], projectRoot: root, codexHome, dbPath: ':memory:' };
+    expect((await setupHumemoryMcpClients({ ...options, dryRun: true }))[0].changed).toBe(true);
+    expect(await readdir(root)).toEqual([]);
+    await setupHumemoryMcpClients(options);
+    const parsed = Bun.TOML.parse(await readFile(join(codexHome, 'config.toml'), 'utf8')) as any;
+    expect(parsed.mcp_servers.humemory.env.HUMEMORY_DB).toBe(':memory:');
+  });
+
+  test('refuses invalid, remote and unsupported Codex layouts without rewriting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'humemory-codex-invalid-'));
+    roots.push(root);
+    const path = join(root, 'config.toml');
+    for (const original of ['invalid = [', '[mcp_servers.humemory]\nurl = "https://example.test"\n',
+      'mcp_servers = { humemory = { command = "old" } }\n',
+      'note = """\n[mcp_servers.humemory]\nkeep me\n"""\n']) {
+      await writeFile(path, original);
+      await expect(setupHumemoryMcpClients({ clients: ['codex'], projectRoot: root, codexHome: root, dbPath: ':memory:' })).rejects.toThrow('Refusing');
+      expect(await readFile(path, 'utf8')).toBe(original);
+    }
+    expect((await readdir(root)).filter(f => f.endsWith('.bak'))).toEqual([]);
+  });
   test('rejects invalid object shapes without rewriting and backs up valid originals', async () => {
     const root = await mkdtemp(join(tmpdir(), 'humemory-mcp-shape-'));
     roots.push(root);

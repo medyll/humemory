@@ -297,14 +297,14 @@ through a caller that supplies a trusted process identity, not an HTTP attributi
 
 **Client registration** — the repo ships `.mcp.json` (Claude Code project
 scope, `HUMEMORY_AGENT=claude`). `pnpm cli sources setup` merge-registers the
-same server in installed Kimi Code and OpenCode configs without removing other
+same server in Codex, Kimi Code and OpenCode configs without removing other
 MCP servers, using the identities below:
 
 | Agent | Config | `HUMEMORY_AGENT` |
 |-------|--------|------------------|
 | Claude Code | `.mcp.json` at repo root (shipped) | `claude` |
 | Kimi Code | same shape in the Kimi MCP config | `kimi` |
-| Codex | same shape in the Codex MCP config | `codex` |
+| Codex | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) → `mcp_servers.humemory` | `codex` |
 | OpenCode | `opencode.json` → `mcp` section | `opencode` |
 
 Server entry: `bun run src/mcp/server.ts` (stdio). Every agent MUST set its

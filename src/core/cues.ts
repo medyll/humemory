@@ -56,6 +56,7 @@ function expandCronField(field: string, index: number): Set<number> | null {
   const values = new Set<number>();
 
   for (const part of field.split(',')) {
+    if (!/^(?:\*|[0-9]+(?:-[0-9]+)?)(?:\/[0-9]+)?$/.test(part)) return null;
     const [rangePart, stepPart] = part.split('/');
     const step = stepPart === undefined ? 1 : Number(stepPart);
     if (!Number.isInteger(step) || step < 1) return null;

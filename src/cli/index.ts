@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { databasePath, queueDirectory } from '../core/paths.js';
 import { SQLiteStore } from '../store/sqlite.js';
 import { calculateDecayLevel } from '../core/decay.js';
@@ -53,9 +53,11 @@ program
   .option('-d, --directory <dir>', 'Mental place (project)', process.cwd())
   .option('-s, --session <id>', 'Contexte d\'encodage', 'default')
   .option('-k, --keywords <tags>', 'Retrieval cues (comma-separated)', '')
-  .option('-l1, --level1 <summary>', 'Summary for consolidation level 1')
-  .option('-l2, --level2 <essential>', 'Gist for consolidation level 2')
-  .option('-l3, --level3 <keywords>', 'Keywords for fast level 3 retrieval')
+  // Commander 15 rejects multi-character short flags in the constructor.
+  // Keep the historical aliases through Option's public short property.
+  .addOption(Object.assign(new Option('--level1 <summary>', 'Summary for consolidation level 1'), { short: '-l1' }))
+  .addOption(Object.assign(new Option('--level2 <essential>', 'Gist for consolidation level 2'), { short: '-l2' }))
+  .addOption(Object.assign(new Option('--level3 <keywords>', 'Keywords for fast level 3 retrieval'), { short: '-l3' }))
   .option('-t, --type <type>', 'Memory type (episodic/semantic/procedural)', 'semantic')
   .option('--auto', 'Auto-generate levels 1-3 locally (an injected LLM may enhance them)')
   .option('--photographic', 'Photographic mode — disable decay')
@@ -1128,15 +1130,16 @@ sources
 
 sources
   .command('setup')
-  .description('Register humemory as a local MCP server in Kimi Code and OpenCode')
+  .description('Register humemory as a local MCP server in Codex, Kimi Code and OpenCode')
+  .option('--codex', 'Configure Codex only (combine client flags to select several)')
   .option('--kimi', 'Configure Kimi Code only')
   .option('--opencode', 'Configure OpenCode only')
   .option('--dry-run', 'Show which files would change, write nothing')
   .action(async (options) => {
     const { setupHumemoryMcpClients } = await import('../agent/mcp-client-setup.js');
-    const clients = options.kimi || options.opencode
-      ? [...(options.kimi ? ['kimi'] as const : []), ...(options.opencode ? ['opencode'] as const : [])]
-      : ['kimi', 'opencode'] as const;
+    const clients = options.codex || options.kimi || options.opencode
+      ? [...(options.codex ? ['codex'] as const : []), ...(options.kimi ? ['kimi'] as const : []), ...(options.opencode ? ['opencode'] as const : [])]
+      : ['codex', 'kimi', 'opencode'] as const;
     const projectRoot = resolve(__dirname, '../..');
     const result = await setupHumemoryMcpClients({
       clients: [...clients],

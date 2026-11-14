@@ -31,6 +31,21 @@ function setup() {
 }
 
 describe('Input validation', () => {
+  test('rejects malformed cron cues through HTTP without creating intentions', async () => {
+    const { store, post, call } = setup();
+    try {
+      for (const cron of ['', '   ', '0/2/3 9 * * *', '0 9 1-5-9 * *', '0 9 * * 1,', '60 * * * *']) {
+        expect(() => validateTriggerSpec({ kind: 'time', cron })).toThrow(/invalid cron/);
+        const response = await post('/intentions', {
+          content: 'Malformed reminder', directory: '/project',
+          cues: [{ kind: 'time', cron }],
+        });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toMatch(/invalid cron/);
+      }
+      expect((await call('/intentions')).body.intentions).toEqual([]);
+    } finally { store.close(); }
+  });
   test('a well-formed triggerSpec passes', () => {
     expect(validateTriggerSpec({ kind: 'time', at: '2026-12-01T00:00:00Z' })).toEqual({
       kind: 'time',
