@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.20] - 2026-11-15
+**Chores:**
+- update compatible dependencies
+
+
+
 ## [0.2.19] - 2026-11-14
 **Features:**
 - add Claude Code to sources setup
