@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.21] - 2026-11-17
+**Chores:**
+- update compatible dependencies
+
+
+
 ## [0.2.20] - 2026-11-15
 **Chores:**
 - update compatible dependencies
