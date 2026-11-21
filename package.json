@@ -76,7 +76,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
-    "@hono/node-server": "^2.1.9",
+    "@hono/node-server": "^2.1.11",
     "@huggingface/transformers": "^4.3.2",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "commander": "^15.1.0",
