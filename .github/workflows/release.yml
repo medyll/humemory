@@ -14,14 +14,15 @@ jobs:
   release:
     runs-on: ubuntu-latest
     # SECURITY_AUDIT.md M-03: `contents: write` is needed to push the release
-    # commit and tags. `id-token: write` was copied from the release tool's
-    # README template and is not used — the tool publishes through
-    # `pnpm publish`, never with `--provenance`, so no OIDC token is minted.
+    # commit and tags. `id-token: write` lets npm mint a short-lived OIDC token:
+    # publishing goes through npm trusted publishing (pnpm publish delegates to
+    # the npm CLI), so no long-lived NPM_TOKEN is held by this job any more.
     permissions:
       contents: write
+      id-token: write
 
     # Actions are pinned by commit SHA, not by mutable tag: a tag can be moved
-    # to new code at any time, and this job holds NPM_TOKEN.
+    # to new code at any time, and this job can publish to npm.
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -33,7 +34,8 @@ jobs:
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: 22
+          # Node 24 ships npm >= 11.5.1, required for trusted publishing.
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: pnpm
 
@@ -60,15 +62,13 @@ jobs:
       # it to publish. acp-team doesn't need this flag — it ships `src/`
       # directly, no compile step.
       # `pnpm exec`, not `npx`: npx would resolve the tool from the registry at
-      # release time, so the code running with NPM_TOKEN in scope would be
+      # release time, so the code running with publish rights would be
       # whatever was published most recently. The tool is an exact-pinned
       # devDependency installed from the lockfile above (M-03).
       - name: Release (version bump, changelog, npm publish)
         run: pnpm exec idae-pnpm-release --build --verbose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_REF: ${{ github.ref }}
 
       - name: Push release commit and tags
