@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.27] - 2026-11-26
+**CI/CD:**
+- dependency updates by Dependabot with verified auto-merge
+
+
+
 ## [0.2.26] - 2026-11-26
 **Bug Fixes:**
 - publish through npm trusted publishing
